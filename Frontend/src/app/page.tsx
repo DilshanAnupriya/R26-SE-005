@@ -11,7 +11,8 @@ import {
   LayoutDashboard,
   Cpu,
   ShieldCheck,
-  Bot
+  Bot,
+  Wand2
 } from "lucide-react";
 
 export default function Home() {
@@ -174,6 +175,14 @@ export default function Home() {
                 icon: BarChart3, 
                 color: "bg-purple-500",
                 stat: "Sprint 24"
+              },
+              { 
+                title: "What-If Simulator", 
+                desc: "Test different allocation scenarios to see impact on velocity and team health.", 
+                href: "/simulator", 
+                icon: Wand2, 
+                color: "bg-yellow-500",
+                stat: "Live Preview"
               },
               { 
                 title: "Risk Assessment", 
