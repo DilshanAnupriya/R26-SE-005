@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Award,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   CheckCircle2
 } from "lucide-react";
@@ -29,15 +30,24 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const allocRes = await fetch("http://localhost:8080/api/allocation/sprint/1");
-        const allocs = await allocRes.json();
-        const currentAlloc = allocs.find((a: any) => a.id === parseInt(taskId));
+        // 1. Fetch current allocation directly by ID
+        const allocRes = await fetch(`http://localhost:8080/api/allocation/${taskId}`);
+        if (!allocRes.ok) throw new Error("Allocation not found");
+        const currentAlloc = await allocRes.json();
         setAllocation(currentAlloc);
 
-        const taskAlts = allocs.filter((a: any) => a.task.id === currentAlloc.task.id && a.id !== currentAlloc.id);
-        taskAlts.sort((a: any, b: any) => b.finalScore - a.finalScore);
-        setAlternatives(taskAlts);
+        // 2. Fetch all other developers ranked for this specific task
+        const taskIdRaw = currentAlloc.task?.id;
+        if (taskIdRaw) {
+          const peersRes = await fetch(`http://localhost:8080/api/allocation/task/${taskIdRaw}`);
+          const peers = await peersRes.json();
+          
+          const taskAlts = peers.filter((a: any) => a.id !== currentAlloc.id);
+          taskAlts.sort((a: any, b: any) => b.finalScore - a.finalScore);
+          setAlternatives(taskAlts);
+        }
 
+        // 3. Fetch AI explanation breakdown
         const explRes = await fetch(`http://localhost:8080/api/rank/explain/${taskId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" }
@@ -87,6 +97,10 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
   const currentLoad = allocation.developer.current_workload;
   const devName = `${allocation.developer.dev_id}`;
   const avatar = `https://ui-avatars.com/api/?name=${allocation.developer.dev_id}&background=random`;
+
+  // Dynamic capacity calculation based on experience (matches Simulator logic)
+  const devCapacity = (allocation.developer.experience_level || 2) * 10;
+  const isOverloaded = currentLoad >= devCapacity;
 
   return (
     <div className="min-h-screen bg-background p-6 lg:p-10">
@@ -216,28 +230,39 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
               <div className="mb-4">
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-slate-400">Current Load vs. Capacity</span>
-                  <span className="font-mono text-blue-400">{Math.round((currentLoad / 8)*100)}%</span>
+                  <span className={`font-mono ${isOverloaded ? 'text-red-400' : 'text-blue-400'}`}>
+                    {Math.round((currentLoad / devCapacity)*100)}%
+                  </span>
                 </div>
                 <div className="h-4 bg-slate-800 rounded-full overflow-hidden flex">
-                  <div className="h-full bg-slate-600" style={{ width: `${(currentLoad / 8)*100}%` }} />
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${100 - (currentLoad / 8)*100}%` }}
-                    transition={{ duration: 1, delay: 0.5 }}
-                    className="h-full bg-blue-500"
+                  <div 
+                    className={`h-full ${isOverloaded ? 'bg-red-500' : 'bg-blue-500'}`} 
+                    style={{ width: `${Math.min((currentLoad / devCapacity)*100, 100)}%` }} 
                   />
                 </div>
                 <div className="flex justify-between text-xs mt-2 text-slate-500">
                   <span>0%</span>
-                  <span className="text-yellow-500">Optimal (80%)</span>
-                  <span>100%</span>
+                  <span className="text-yellow-500">Threshold ({devCapacity} SP)</span>
+                  <span>Max</span>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-                <AlertCircle className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+              <div className={`flex items-start gap-3 rounded-lg p-3 border ${
+                isOverloaded 
+                  ? 'bg-red-500/10 border-red-500/20' 
+                  : 'bg-blue-500/10 border-blue-500/20'
+              }`}>
+                {isOverloaded ? (
+                   <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                ) : (
+                   <AlertCircle className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                )}
                 <p className="text-sm text-slate-300">
-                  {devName} has {currentLoad} active tasks currently out of maximum capacity of 8. This task can be safely added.
+                  {devName} currently has **{currentLoad} Story Points** assigned. 
+                  {isOverloaded 
+                    ? ` This exceeds their calculated capacity of ${devCapacity} SP. The AI suggests caution as this may impact delivery quality.` 
+                    : ` This is within their calculated capacity of ${devCapacity} SP. This task can be safely added.`
+                  }
                 </p>
               </div>
             </motion.div>

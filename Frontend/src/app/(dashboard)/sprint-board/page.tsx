@@ -96,6 +96,23 @@ export default function SprintBoardPage() {
     }
   };
 
+  const handleCompleteAllTasks = async () => {
+    if (!selectedSprintId || !confirm("Mark all tasks in this sprint as completed?")) return;
+    
+    setIsCompleting(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/tasks/sprint/${selectedSprintId}/complete-all`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error("Failed to complete tasks");
+      await fetchTasks(selectedSprintId);
+    } catch (err) {
+      alert("Failed to complete all tasks");
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   const handleCompleteSprint = async () => {
     if (!selectedSprintId) return;
     
@@ -159,10 +176,23 @@ export default function SprintBoardPage() {
           </div>
 
           <button
+            onClick={handleCompleteAllTasks}
+            disabled={isCompleting || !selectedSprintId}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all border border-card-border ${
+              !isCompleting && selectedSprintId
+                ? "bg-slate-800 hover:bg-slate-700 text-white"
+                : "text-slate-500 opacity-50 cursor-not-allowed"
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>Complete All Tasks</span>
+          </button>
+
+          <button
             onClick={handleCompleteSprint}
-            disabled={!allTasksDone || selectedSprint?.status === "COMPLETED" || isCompleting}
+            disabled={isCompleting || !selectedSprintId}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${
-              allTasksDone && selectedSprint?.status !== "COMPLETED"
+              !isCompleting && selectedSprintId
                 ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20"
                 : "bg-slate-800 text-slate-500 cursor-not-allowed opacity-50"
             }`}
