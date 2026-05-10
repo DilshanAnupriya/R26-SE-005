@@ -10,7 +10,8 @@ import {
   ArrowRight,
   LayoutDashboard,
   Cpu,
-  ShieldCheck
+  ShieldCheck,
+  Bot
 } from "lucide-react";
 
 export default function Home() {
@@ -57,7 +58,7 @@ export default function Home() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link 
-                href="/allocation"
+                href="/ai-allocation"
                 className="px-8 py-3 rounded-lg bg-primary hover:bg-primary-dark text-white font-semibold transition-all flex items-center shadow-lg shadow-primary/25"
               >
                 Go to Dashboard
@@ -130,6 +131,79 @@ export default function Home() {
               </div>
             </div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* Module Hub Section */}
+      <section className="py-24 px-6 relative">
+        <div className="container mx-auto">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+            <div>
+              <h2 className="text-3xl font-bold mb-4 flex items-center gap-3">
+                <LayoutDashboard className="text-primary w-8 h-8" />
+                Management <span className="text-gradient">Hub</span>
+              </h2>
+              <p className="text-slate-400 max-w-xl">
+                Quickly access the core modules of the Agile Resource Optimizer to manage your team and projects.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { 
+                title: "AI Allocation", 
+                desc: "Review and approve AI-recommended developer assignments for the sprint.", 
+                href: "/ai-allocation", 
+                icon: Bot, 
+                color: "bg-blue-500",
+                stat: "85% Optimal" 
+              },
+              { 
+                title: "Developer Insights", 
+                desc: "Manage developer profiles, skills, and workload intelligence data.", 
+                href: "/developers", 
+                icon: Users, 
+                color: "bg-emerald-500",
+                stat: "24 Profiles"
+              },
+              { 
+                title: "Productivity Analytics", 
+                desc: "Deep-dive into team performance metrics and velocity trends.", 
+                href: "/analytics", 
+                icon: BarChart3, 
+                color: "bg-purple-500",
+                stat: "Sprint 24"
+              },
+              { 
+                title: "Risk Assessment", 
+                desc: "Identify and mitigate potential project bottlenecks and delivery risks.", 
+                href: "/risk", 
+                icon: ShieldCheck, 
+                color: "bg-red-500",
+                stat: "Low Risk"
+              },
+            ].map((module, i) => (
+              <Link key={i} href={module.href}>
+                <motion.div 
+                  whileHover={{ y: -5 }}
+                  className="glass p-6 rounded-2xl border border-card-border hover:border-primary/50 transition-all group h-full flex flex-col"
+                >
+                  <div className={`w-12 h-12 rounded-xl ${module.color}/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
+                    <module.icon className={`w-6 h-6 ${module.color.replace('bg-', 'text-')}`} />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2 text-foreground">{module.title}</h3>
+                  <p className="text-slate-400 text-sm mb-6 flex-grow">{module.desc}</p>
+                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-800/50">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">{module.stat}</span>
+                    <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center group-hover:bg-primary transition-colors">
+                      <ArrowRight className="w-4 h-4 text-white" />
+                    </div>
+                  </div>
+                </motion.div>
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 

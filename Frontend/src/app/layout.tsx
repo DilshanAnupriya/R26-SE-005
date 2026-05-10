@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Navbar from "@/components/Navbar";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,7 +21,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
-        <main className="flex-grow">
+        <Navbar />
+        <main className="flex-grow pt-24">
           {children}
         </main>
         <footer className="py-8 border-t border-card-border bg-background/50 backdrop-blur-md">
