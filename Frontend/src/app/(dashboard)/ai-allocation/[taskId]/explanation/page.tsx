@@ -9,43 +9,51 @@ import {
   History,
   TrendingUp,
   Award,
-  AlertCircle
+  AlertCircle,
+  Loader2,
+  CheckCircle2
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useState, useEffect, use } from "react";
 
-// Mock Data for the Explanation
-const explanationData = {
-  taskId: "T-1042",
-  title: "Implement OAuth2 Authentication",
-  developer: {
-    name: "Alex Chen",
-    role: "Senior Full Stack",
-    avatar: "https://i.pravatar.cc/150?img=11",
-  },
-  overallMatch: 94,
-  primaryReason: "Alex has a perfect skill match for Security and OAuth2, with a strong historical track record of delivering similar authentication modules ahead of schedule.",
-  skillMatch: [
-    { skill: "OAuth2", required: 90, actual: 95 },
-    { skill: "Security Concepts", required: 85, actual: 92 },
-    { skill: "Node.js", required: 70, actual: 88 },
-    { skill: "React", required: 60, actual: 85 },
-  ],
-  workload: {
-    currentLoad: 65,
-    taskImpact: 15, // Adds 15% to workload
-    projectedLoad: 80,
-    optimalThreshold: 85
-  },
-  historical: {
-    similarTasksCompleted: 12,
-    avgCompletionTime: "3.2 Days",
-    qualityScore: 98,
-    reworkRate: "1.2%"
-  }
-};
+export default function ExplanationPage({ params }: { params: Promise<{ taskId: string }> }) {
+  const unwrappedParams = use(params);
+  const taskId = unwrappedParams.taskId;
+  
+  const [allocation, setAllocation] = useState<any>(null);
+  const [explanation, setExplanation] = useState<any>(null);
+  const [alternatives, setAlternatives] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-export default function ExplanationPage({ params }: { params: { taskId: string } }) {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const allocRes = await fetch("http://localhost:8080/api/allocation/sprint/1");
+        const allocs = await allocRes.json();
+        const currentAlloc = allocs.find((a: any) => a.id === parseInt(taskId));
+        setAllocation(currentAlloc);
+
+        const taskAlts = allocs.filter((a: any) => a.task.id === currentAlloc.task.id && a.id !== currentAlloc.id);
+        taskAlts.sort((a: any, b: any) => b.finalScore - a.finalScore);
+        setAlternatives(taskAlts);
+
+        const explRes = await fetch(`http://localhost:8080/api/rank/explain/${taskId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        const explData = await explRes.json();
+        setExplanation(explData.explanation);
+
+      } catch (error) {
+        console.error("Error fetching explanation:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [taskId]);
+
   const container = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.1 } }
@@ -56,11 +64,34 @@ export default function ExplanationPage({ params }: { params: { taskId: string }
     show: { y: 0, opacity: 1 }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-6 lg:p-10 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!allocation || !explanation) {
+    return (
+      <div className="min-h-screen bg-background p-6 lg:p-10 flex items-center justify-center text-white">
+        Error loading explanation.
+      </div>
+    );
+  }
+
+  const mlPred = explanation.breakdown.ml_prediction;
+  const skillMatch = explanation.breakdown.skill_match;
+  const workloadBal = explanation.breakdown.workload_balance;
+
+  const currentLoad = allocation.developer.current_workload;
+  const devName = `${allocation.developer.dev_id}`;
+  const avatar = `https://ui-avatars.com/api/?name=${allocation.developer.dev_id}&background=random`;
+
   return (
     <div className="min-h-screen bg-background p-6 lg:p-10">
       <div className="max-w-5xl mx-auto space-y-8">
         
-        {/* Header Navigation */}
         <Link 
           href="/ai-allocation" 
           className="inline-flex items-center text-sm text-slate-400 hover:text-primary transition-colors mb-4"
@@ -73,33 +104,37 @@ export default function ExplanationPage({ params }: { params: { taskId: string }
           <div>
             <div className="flex items-center gap-3 mb-2">
               <span className="text-xs font-mono px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20">
-                {explanationData.taskId}
+                T-{allocation.task.id}
               </span>
               <span className="text-sm text-slate-400 flex items-center">
                 <BrainCircuit className="w-4 h-4 mr-1 text-emerald-400" />
-                AI Confidence: High
+                AI Confidence: {explanation.recommendation_confidence?.level || 'High'}
               </span>
             </div>
-            <h1 className="text-3xl font-bold text-foreground mb-1">{explanationData.title}</h1>
+            <h1 className="text-3xl font-bold text-foreground mb-1">{allocation.task.task_type}</h1>
             <p className="text-slate-400 text-lg">Allocation Reasoning Report</p>
           </div>
 
           <div className="flex items-center gap-4 bg-slate-900/50 p-4 rounded-xl border border-card-border">
             <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-emerald-500/50">
-              <Image src={explanationData.developer.avatar} alt={explanationData.developer.name} fill className="object-cover" />
+              <Image src={avatar} alt={devName} fill unoptimized className="object-cover" />
             </div>
             <div>
               <div className="text-sm text-slate-400">Allocated to</div>
-              <div className="text-lg font-semibold text-foreground">{explanationData.developer.name}</div>
+              <div className="text-lg font-semibold text-foreground flex items-center gap-2">
+                {devName}
+                <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Rank #{allocation.rankPosition}
+                </span>
+              </div>
             </div>
             <div className="ml-4 pl-4 border-l border-slate-700 text-right">
-              <div className="text-3xl font-bold text-emerald-400">{explanationData.overallMatch}%</div>
+              <div className="text-3xl font-bold text-emerald-400">{explanation.final_score}%</div>
               <div className="text-xs text-slate-500 uppercase font-semibold">Match Score</div>
             </div>
           </div>
         </div>
 
-        {/* Primary Reason */}
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -108,56 +143,70 @@ export default function ExplanationPage({ params }: { params: { taskId: string }
           <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
           <h2 className="text-lg font-semibold text-emerald-400 flex items-center mb-2">
             <Award className="w-5 h-5 mr-2" />
-            Why {explanationData.developer.name.split(' ')[0]} was selected
+            Why {devName} was selected
           </h2>
           <p className="text-slate-300 leading-relaxed text-lg">
-            {explanationData.primaryReason}
+            {explanation.summary}
           </p>
         </motion.div>
 
-        {/* Detailed Breakdown Grids */}
         <motion.div 
           variants={container}
           initial="hidden"
           animate="show"
           className="grid grid-cols-1 md:grid-cols-2 gap-6"
         >
-          {/* Skill Match Breakdown */}
           <motion.div variants={item} className="glass p-6 rounded-xl border border-card-border">
             <h3 className="text-lg font-semibold flex items-center mb-6">
               <Target className="w-5 h-5 mr-2 text-primary" />
-              Skill Match Breakdown
+              Breakdown Details
             </h3>
             <div className="space-y-5">
-              {explanationData.skillMatch.map((skill, idx) => (
+              {[
+                { label: "Skill Match", val: skillMatch.value * 100, weight: skillMatch.weight, expl: skillMatch.explanation },
+                { label: "Workload Balance", val: workloadBal.value * 100, weight: workloadBal.weight, expl: workloadBal.explanation },
+                { label: "ML Prediction", val: mlPred.value, weight: mlPred.weight, expl: mlPred.explanation },
+              ].map((metric, idx) => (
                 <div key={idx}>
                   <div className="flex justify-between text-sm mb-1.5">
-                    <span className="font-medium text-slate-300">{skill.skill}</span>
-                    <span className="text-slate-400 text-xs">Required: {skill.required}</span>
+                    <span className="font-medium text-slate-300">{metric.label} (Weight: {metric.weight})</span>
+                    <span className="text-slate-400 text-xs text-right max-w-[200px] truncate">{metric.expl}</span>
                   </div>
                   <div className="relative h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                    {/* Required Indicator Line */}
-                    <div className="absolute top-0 bottom-0 w-0.5 bg-slate-500 z-10" style={{ left: `${skill.required}%` }} />
-                    {/* Actual Skill Bar */}
                     <motion.div 
                       initial={{ width: 0 }}
-                      animate={{ width: `${skill.actual}%` }}
+                      animate={{ width: `${Math.min(metric.val, 100)}%` }}
                       transition={{ duration: 1, delay: 0.2 + (idx * 0.1) }}
-                      className={`absolute top-0 bottom-0 left-0 rounded-full ${
-                        skill.actual >= skill.required ? 'bg-emerald-500' : 'bg-yellow-500'
-                      }`}
+                      className="absolute top-0 bottom-0 left-0 rounded-full bg-emerald-500"
                     />
                   </div>
                   <div className="text-right text-xs mt-1 font-medium text-foreground">
-                    {skill.actual} / 100
+                    {metric.val.toFixed(1)} / 100
                   </div>
                 </div>
               ))}
             </div>
+            
+            {explanation.strengths && explanation.strengths.length > 0 && (
+              <div className="mt-8">
+                 <h4 className="text-sm font-semibold text-emerald-400 mb-3">Strengths</h4>
+                 <ul className="space-y-2">
+                    {explanation.strengths.map((s: any, idx: number) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-slate-300">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                        <div>
+                          <span className="font-medium text-white">{s.strength}: </span>
+                          <span className="text-slate-400">{s.detail}</span>
+                        </div>
+                      </li>
+                    ))}
+                 </ul>
+              </div>
+            )}
+            
           </motion.div>
 
           <div className="space-y-6">
-            {/* Workload Consideration */}
             <motion.div variants={item} className="glass p-6 rounded-xl border border-card-border">
               <h3 className="text-lg font-semibold flex items-center mb-6">
                 <Activity className="w-5 h-5 mr-2 text-blue-400" />
@@ -166,21 +215,21 @@ export default function ExplanationPage({ params }: { params: { taskId: string }
               
               <div className="mb-4">
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-400">Current Load vs. Projected</span>
-                  <span className="font-mono text-blue-400">{explanationData.workload.projectedLoad}%</span>
+                  <span className="text-slate-400">Current Load vs. Capacity</span>
+                  <span className="font-mono text-blue-400">{Math.round((currentLoad / 8)*100)}%</span>
                 </div>
                 <div className="h-4 bg-slate-800 rounded-full overflow-hidden flex">
-                  <div className="h-full bg-slate-600" style={{ width: `${explanationData.workload.currentLoad}%` }} />
+                  <div className="h-full bg-slate-600" style={{ width: `${(currentLoad / 8)*100}%` }} />
                   <motion.div 
                     initial={{ width: 0 }}
-                    animate={{ width: `${explanationData.workload.taskImpact}%` }}
+                    animate={{ width: `${100 - (currentLoad / 8)*100}%` }}
                     transition={{ duration: 1, delay: 0.5 }}
                     className="h-full bg-blue-500"
                   />
                 </div>
                 <div className="flex justify-between text-xs mt-2 text-slate-500">
                   <span>0%</span>
-                  <span className="text-yellow-500">Optimal ({explanationData.workload.optimalThreshold}%)</span>
+                  <span className="text-yellow-500">Optimal (80%)</span>
                   <span>100%</span>
                 </div>
               </div>
@@ -188,39 +237,86 @@ export default function ExplanationPage({ params }: { params: { taskId: string }
               <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
                 <AlertCircle className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
                 <p className="text-sm text-slate-300">
-                  Adding this task will increase {explanationData.developer.name.split(' ')[0]}&apos;s workload to {explanationData.workload.projectedLoad}%, keeping them just under the optimal threshold, preventing burnout while maximizing utilization.
+                  {devName} has {currentLoad} active tasks currently out of maximum capacity of 8. This task can be safely added.
                 </p>
               </div>
             </motion.div>
 
-            {/* Historical Performance Influence */}
             <motion.div variants={item} className="glass p-6 rounded-xl border border-card-border">
               <h3 className="text-lg font-semibold flex items-center mb-4">
-                <History className="w-5 h-5 mr-2 text-purple-400" />
-                Historical Performance Influence
+                <BrainCircuit className="w-5 h-5 mr-2 text-purple-400" />
+                AI Recommendation Confidence
               </h3>
               
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-900/50 p-4 rounded-lg">
-                  <div className="text-xs text-slate-400 mb-1">Similar Tasks</div>
-                  <div className="text-2xl font-bold text-foreground">{explanationData.historical.similarTasksCompleted}</div>
+                <div className="bg-slate-900/50 p-4 rounded-lg col-span-2">
+                  <div className="text-xs text-slate-400 mb-1">Confidence Detail</div>
+                  <div className="text-lg font-medium text-emerald-400">{explanation.recommendation_confidence?.explanation}</div>
                 </div>
                 <div className="bg-slate-900/50 p-4 rounded-lg">
-                  <div className="text-xs text-slate-400 mb-1">Avg Completion Time</div>
-                  <div className="text-2xl font-bold text-foreground">{explanationData.historical.avgCompletionTime}</div>
+                  <div className="text-xs text-slate-400 mb-1">Developer Availability</div>
+                  <div className="text-2xl font-bold text-foreground">{allocation.developer.availability?.toFixed(1)}%</div>
                 </div>
                 <div className="bg-slate-900/50 p-4 rounded-lg">
-                  <div className="text-xs text-slate-400 mb-1">Quality Score</div>
-                  <div className="text-2xl font-bold text-emerald-400">{explanationData.historical.qualityScore}/100</div>
-                </div>
-                <div className="bg-slate-900/50 p-4 rounded-lg">
-                  <div className="text-xs text-slate-400 mb-1">Rework Rate</div>
-                  <div className="text-2xl font-bold text-purple-400">{explanationData.historical.reworkRate}</div>
+                  <div className="text-xs text-slate-400 mb-1">Learning Rate</div>
+                  <div className="text-2xl font-bold text-purple-400">{allocation.developer.learning_rate?.toFixed(3)}</div>
                 </div>
               </div>
             </motion.div>
           </div>
         </motion.div>
+
+        {alternatives.length > 0 && (
+          <motion.div variants={item} className="mt-8 pt-8 border-t border-slate-800">
+            <h3 className="text-xl font-semibold text-foreground mb-4">Alternative Recommendations</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {alternatives.map((alt: any) => (
+                <div key={alt.id} className="bg-slate-900/40 p-4 rounded-xl border border-slate-800 hover:border-slate-700 transition-colors">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="relative w-10 h-10 rounded-full overflow-hidden border border-slate-700">
+                      <Image 
+                        src={`https://ui-avatars.com/api/?name=${alt.developer.dev_id}&background=random`} 
+                        alt={`Developer ${alt.developer.dev_id}`} 
+                        fill 
+                        unoptimized 
+                        className="object-cover" 
+                      />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-foreground flex items-center gap-2">
+                        Developer {alt.developer.dev_id}
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                          #{alt.rankPosition}
+                        </span>
+                      </div>
+                      <div className="text-xs text-emerald-400 font-semibold">{alt.finalScore}% Match Score</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-400 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Skill Match:</span>
+                      <span className="text-slate-300">{(alt.skillMatchScore * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Workload Bal:</span>
+                      <span className="text-slate-300">{(alt.workloadBalance * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>ML Pred:</span>
+                      <span className="text-slate-300">{alt.mlScore.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  <Link 
+                    href={`/ai-allocation/${alt.id}/explanation`}
+                    className="mt-4 block w-full text-center px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-medium transition-colors border border-slate-700"
+                  >
+                    View Details
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
       </div>
     </div>
