@@ -12,7 +12,8 @@ import {
   Zap,
   Menu,
   X,
-  Layout
+  Layout,
+  Wand2
 } from "lucide-react";
 import { useState } from "react";
 
@@ -21,6 +22,7 @@ const navItems = [
   { name: "Sprint Board", href: "/sprint-board", icon: Layout },
   { name: "AI Allocation", href: "/ai-allocation", icon: Bot },
   { name: "Developers", href: "/developers", icon: Users },
+  { name: "Simulator", href: "/simulator", icon: Wand2 },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Risk Analysis", href: "/risk", icon: ShieldAlert },
 ];
