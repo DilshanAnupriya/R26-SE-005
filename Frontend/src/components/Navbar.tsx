@@ -11,12 +11,14 @@ import {
   ShieldAlert, 
   Zap,
   Menu,
-  X
+  X,
+  Layout
 } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
   { name: "Overview", href: "/", icon: Home },
+  { name: "Sprint Board", href: "/sprint-board", icon: Layout },
   { name: "AI Allocation", href: "/ai-allocation", icon: Bot },
   { name: "Developers", href: "/developers", icon: Users },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
