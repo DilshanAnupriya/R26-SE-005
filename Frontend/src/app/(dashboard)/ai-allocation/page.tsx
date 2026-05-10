@@ -111,6 +111,110 @@ function buildGroups(data: any[]): TaskGroup[] {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
+function DeveloperWorkloadModal({
+  developerId,
+  devId,
+  onClose,
+}: {
+  developerId: number;
+  devId: string;
+  onClose: () => void;
+}) {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const res = await fetch(`http://localhost:8080/api/tasks/developer/${developerId}`);
+        const data = await res.json();
+        setTasks(data);
+      } catch (err) {
+        console.error("Error fetching dev tasks:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTasks();
+  }, [developerId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="glass w-full max-w-md rounded-2xl border border-card-border p-6 shadow-2xl"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="relative w-10 h-10 rounded-full overflow-hidden border border-slate-700">
+              <Image
+                src={`https://ui-avatars.com/api/?name=${devId}&background=random`}
+                alt={devId}
+                fill
+                unoptimized
+              />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-foreground">{devId}</h3>
+              <p className="text-xs text-slate-400">Current Assigned Tasks</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-800 rounded-full transition-colors"
+          >
+            <XCircle className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        ) : tasks.length === 0 ? (
+          <div className="text-center py-10 text-slate-500">
+            No tasks currently assigned to this developer.
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            {tasks.map((task) => (
+              <div key={task.id} className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                    T-{task.id}
+                  </span>
+                  <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
+                    {task.status || "Active"}
+                  </span>
+                </div>
+                <div className="text-sm font-medium text-slate-200">{task.task_type}</div>
+                <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {task.story_points} pts
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Briefcase className="w-3 h-3" />
+                    {task.task_complexity > 3 ? "High" : "Medium"} Complexity
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={onClose}
+          className="w-full mt-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          Close
+        </button>
+      </motion.div>
+    </div>
+  );
+}
+
 function ScorePill({ value, label, color }: { value: number; label: string; color: string }) {
   return (
     <div className="flex flex-col items-center">
@@ -155,6 +259,7 @@ function DevCard({
   approvedId?: number;           // which allocation was approved
   onApprove: () => void;
   onDecline: () => void;
+  onViewWorkload: (id: number, devId: string) => void;
   approving: boolean;
 }) {
   const isThisApproved = rec.status === "ALLOCATED";
@@ -201,7 +306,11 @@ function DevCard({
 
       {/* Dev info */}
       <div className="flex items-center gap-3 mb-3">
-        <div className="relative w-9 h-9 rounded-full overflow-hidden border border-slate-700 shrink-0">
+        <div 
+          className="relative w-9 h-9 rounded-full overflow-hidden border border-slate-700 shrink-0 hover:ring-2 ring-primary/40 transition-all"
+          onClick={(e) => { e.stopPropagation(); onViewWorkload(rec.developerId, rec.devId); }}
+          title="Click to view developer workload"
+        >
           <Image
             src={`https://ui-avatars.com/api/?name=${rec.devId}&background=random`}
             alt={`Developer ${rec.devId}`}
@@ -210,8 +319,8 @@ function DevCard({
             className="object-cover"
           />
         </div>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-foreground truncate">{rec.devId}</div>
+        <div className="min-w-0 flex-1" onClick={(e) => { e.stopPropagation(); onViewWorkload(rec.developerId, rec.devId); }}>
+          <div className="text-sm font-semibold text-foreground truncate hover:text-primary transition-colors">{rec.devId}</div>
           <div className="text-xs text-slate-400">
             Avail: {rec.availability.toFixed(0)}%
           </div>
@@ -277,10 +386,12 @@ function TaskRow({
   group,
   onApprove,
   onDecline,
+  onViewWorkload,
 }: {
   group: TaskGroup;
   onApprove: (allocationId: number, developerId: number) => Promise<void>;
   onDecline: (allocationId: number) => Promise<void>;
+  onViewWorkload: (id: number, devId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [selectedAllocId, setSelectedAllocId] = useState<number | null>(null);
@@ -421,6 +532,7 @@ function TaskRow({
                     approvedId={approvedRec?.id}
                     onApprove={() => handleApprove(rec)}
                     onDecline={() => handleDecline(rec)}
+                    onViewWorkload={onViewWorkload}
                     approving={approving}
                   />
                 ))}
@@ -443,13 +555,31 @@ function TaskRow({
 
 export default function AIAllocationPage() {
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
+  const [sprints, setSprints] = useState<any[]>([]);
+  const [selectedSprintId, setSelectedSprintId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [approvingAll, setApprovingAll] = useState(false);
+  const [workloadDev, setWorkloadDev] = useState<{ id: number; devId: string } | null>(null);
+
+  const fetchSprints = useCallback(async () => {
+    try {
+      const res = await fetch("http://localhost:8080/api/sprints");
+      const data = await res.json();
+      setSprints(data);
+      if (data.length > 0 && !selectedSprintId) {
+        setSelectedSprintId(data[0].id);
+      }
+    } catch (err) {
+      console.error("Error fetching sprints:", err);
+    }
+  }, [selectedSprintId]);
 
   const fetchAllocations = useCallback(async () => {
+    if (!selectedSprintId) return;
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8080/api/allocation/sprint/1");
+      const res = await fetch(`http://localhost:8080/api/allocation/sprint/${selectedSprintId}`);
       const data = await res.json();
       setTaskGroups(buildGroups(data));
     } catch (error) {
@@ -457,16 +587,23 @@ export default function AIAllocationPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedSprintId]);
 
   useEffect(() => {
-    fetchAllocations();
-  }, [fetchAllocations]);
+    fetchSprints();
+  }, [fetchSprints]);
+
+  useEffect(() => {
+    if (selectedSprintId) {
+      fetchAllocations();
+    }
+  }, [selectedSprintId, fetchAllocations]);
 
   const generateRecommendations = async () => {
+    if (!selectedSprintId) return;
     setGenerating(true);
     try {
-      await fetch("http://localhost:8080/api/rank/recommendations/sprint/1", {
+      await fetch(`http://localhost:8080/api/rank/recommendations/sprint/${selectedSprintId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -501,6 +638,21 @@ export default function AIAllocationPage() {
     }
   };
 
+  const handleApproveAll = async () => {
+    if (!selectedSprintId) return;
+    setApprovingAll(true);
+    try {
+      await fetch(`http://localhost:8080/api/allocation/approve-all/sprint/${selectedSprintId}`, {
+        method: "POST",
+      });
+      await fetchAllocations();
+    } catch (error) {
+      console.error("Error approving all recommendations:", error);
+    } finally {
+      setApprovingAll(false);
+    }
+  };
+
   const pendingCount = taskGroups.filter((g) => g.overallStatus !== "Approved").length;
   const approvedCount = taskGroups.filter((g) => g.overallStatus === "Approved").length;
 
@@ -521,14 +673,41 @@ export default function AIAllocationPage() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            {/* Sprint Selector */}
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
+              <Layers className="w-4 h-4 text-slate-400" />
+              <select
+                value={selectedSprintId || ""}
+                onChange={(e) => setSelectedSprintId(Number(e.target.value))}
+                className="bg-transparent text-sm font-medium text-slate-200 outline-none cursor-pointer"
+              >
+                {sprints.map((s) => (
+                  <option key={s.id} value={s.id} className="bg-slate-900">
+                    Sprint: {s.sprintId}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               onClick={generateRecommendations}
-              disabled={generating}
+              disabled={generating || !selectedSprintId}
               className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors border border-slate-700 flex items-center gap-2 disabled:opacity-50"
             >
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Generate Recommendations
             </button>
+
+            {pendingCount > 0 && (
+              <button
+                onClick={handleApproveAll}
+                disabled={approvingAll || !selectedSprintId}
+                className="px-5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm font-semibold transition-colors border border-emerald-500/30 flex items-center gap-2 disabled:opacity-50"
+              >
+                {approvingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Approve All
+              </button>
+            )}
           </div>
         </div>
 
@@ -578,11 +757,23 @@ export default function AIAllocationPage() {
                 group={group}
                 onApprove={handleApprove}
                 onDecline={handleDecline}
+                onViewWorkload={(id, devId) => setWorkloadDev({ id, devId })}
               />
             ))}
           </motion.div>
         )}
       </div>
+
+      {/* Developer Workload Modal */}
+      <AnimatePresence>
+        {workloadDev && (
+          <DeveloperWorkloadModal
+            developerId={workloadDev.id}
+            devId={workloadDev.devId}
+            onClose={() => setWorkloadDev(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
