@@ -15,6 +15,7 @@ import {
   MoreVertical
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 
 interface DeveloperData {
   id: number;
@@ -28,6 +29,10 @@ interface DeveloperData {
   current_tasks: number;
   consistency: number;
   learning_rate: number;
+  profile?: {
+    firstName: string;
+    lastName: string;
+  };
 }
 
 interface UIDeveloper {
@@ -67,25 +72,27 @@ export default function DevelopersPage() {
       .then((data: DeveloperData[]) => {
         const mapped = data.map(dev => {
           const skills = [];
-          if (dev.skill_frontend > 50) skills.push("Frontend");
-          if (dev.skill_backend > 50) skills.push("Backend");
-          if (dev.skill_db > 50) skills.push("Database");
+          if (dev.skill_frontend > 5) skills.push("Frontend");
+          if (dev.skill_backend > 5) skills.push("Backend");
+          if (dev.skill_db > 5) skills.push("Database");
           if (skills.length === 0) skills.push("General");
 
           let role = "Developer";
-          if (dev.experience_level > 80) role = "Senior Engineer";
-          else if (dev.experience_level > 50) role = "Mid-level Engineer";
+          if (dev.experience_level >= 5) role = "Senior Engineer";
+          else if (dev.experience_level >= 3) role = "Mid-level Engineer";
           else role = "Junior Engineer";
+
+          const fullName = dev.profile ? `${dev.profile.firstName} ${dev.profile.lastName}` : dev.dev_id;
 
           return {
             id: dev.id,
-            name: dev.dev_id,
+            name: fullName,
             role,
-            avatar: `https://ui-avatars.com/api/?name=${dev.dev_id}&background=random`,
+            avatar: `https://ui-avatars.com/api/?name=${fullName}&background=random`,
             skills,
             workload: dev.current_workload,
             performance: Math.round(dev.consistency * 100),
-            status: dev.availability > 0.5 ? "Available" : "Busy",
+            status: dev.availability > 40 ? "Available" : "Busy",
             projects: dev.current_tasks
           };
         });
@@ -134,9 +141,9 @@ export default function DevelopersPage() {
             <button className="p-2 bg-slate-900/50 border border-card-border rounded-lg hover:bg-slate-800 transition-colors text-slate-300">
               <Filter className="w-4 h-4" />
             </button>
-            <button className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-primary/20">
-              Add Developer
-            </button>
+            <Link href="/register" className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-primary/20">
+              Register Developer
+            </Link>
           </div>
         </div>
 
@@ -170,77 +177,79 @@ export default function DevelopersPage() {
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
           {developers.map((dev) => (
-            <motion.div key={dev.id} variants={item} className="glass rounded-xl border border-card-border overflow-hidden group hover:border-primary/50 transition-colors duration-300">
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-primary/20 group-hover:border-primary/60 transition-colors">
-                      <Image src={dev.avatar} alt={dev.name} fill className="object-cover" />
+            <Link key={dev.id} href={`/developers/${dev.id}`}>
+              <motion.div variants={item} className="glass rounded-xl border border-card-border overflow-hidden group hover:border-primary/50 transition-colors duration-300 h-full">
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-primary/20 group-hover:border-primary/60 transition-colors">
+                        <Image src={dev.avatar} alt={dev.name} fill className="object-cover" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground text-lg">{dev.name}</h3>
+                        <p className="text-xs text-slate-400">{dev.role}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground text-lg">{dev.name}</h3>
-                      <p className="text-xs text-slate-400">{dev.role}</p>
-                    </div>
-                  </div>
-                  <button className="text-slate-500 hover:text-slate-300">
-                    <MoreVertical className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {/* Skills */}
-                  <div>
-                    <div className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wider">Top Skills</div>
-                    <div className="flex flex-wrap gap-2">
-                      {dev.skills.map((skill, i) => (
-                        <span key={i} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                          {getSkillIcon(skill)}
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
+                    <button className="text-slate-500 hover:text-slate-300">
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
                   </div>
 
-                  {/* Metrics */}
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800/50">
+                  <div className="space-y-4">
+                    {/* Skills */}
                     <div>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-slate-400">Workload</span>
-                        <span className="font-medium text-foreground">{dev.workload}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${dev.workload > 80 ? 'bg-red-500' : dev.workload < 50 ? 'bg-green-500' : 'bg-blue-500'}`} 
-                          style={{ width: `${dev.workload}%` }}
-                        />
-                      </div>
-                      <div className={`mt-2 inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${getWorkloadColor(dev.workload)}`}>
-                        {dev.status}
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-slate-400">Performance</span>
-                        <span className="font-medium text-foreground">{dev.performance}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <Star 
-                            key={star} 
-                            className={`w-3.5 h-3.5 ${star <= Math.round(dev.performance / 20) ? 'text-yellow-500 fill-yellow-500' : 'text-slate-700'}`} 
-                          />
+                      <div className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wider">Top Skills</div>
+                      <div className="flex flex-wrap gap-2">
+                        {dev.skills.map((skill, i) => (
+                          <span key={i} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                            {getSkillIcon(skill)}
+                            {skill}
+                          </span>
                         ))}
                       </div>
-                      <div className="mt-2 text-[10px] text-slate-500 uppercase tracking-wide flex items-center">
-                        <Activity className="w-3 h-3 mr-1" />
-                        {dev.projects} Active Proj.
+                    </div>
+
+                    {/* Metrics */}
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800/50">
+                      <div>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-slate-400">Workload</span>
+                          <span className="font-medium text-foreground">{dev.workload}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full ${dev.workload > 80 ? 'bg-red-500' : dev.workload < 50 ? 'bg-green-500' : 'bg-blue-500'}`} 
+                            style={{ width: `${dev.workload}%` }}
+                          />
+                        </div>
+                        <div className={`mt-2 inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${getWorkloadColor(dev.workload)}`}>
+                          {dev.status}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-slate-400">Performance</span>
+                          <span className="font-medium text-foreground">{dev.performance}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star 
+                              key={star} 
+                              className={`w-3.5 h-3.5 ${star <= Math.round(dev.performance / 20) ? 'text-yellow-500 fill-yellow-500' : 'text-slate-700'}`} 
+                            />
+                          ))}
+                        </div>
+                        <div className="mt-2 text-[10px] text-slate-500 uppercase tracking-wide flex items-center">
+                          <Activity className="w-3 h-3 mr-1" />
+                          {dev.projects} Active Proj.
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </Link>
           ))}
         </motion.div>
         )}
