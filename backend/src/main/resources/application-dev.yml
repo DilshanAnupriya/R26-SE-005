@@ -1,0 +1,14 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+  devtools:
+    restart:
+      enabled: true
+app:
+  seed:
+    enabled: true
+logging:
+  level:
+    org.hibernate.SQL: DEBUG

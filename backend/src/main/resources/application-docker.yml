@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/sprintiq
+  data:
+    redis:
+      host: redis
+app:
+  seed:
+    enabled: true

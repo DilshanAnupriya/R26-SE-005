@@ -1,0 +1,11 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        generate_statistics: false
+app:
+  seed:
+    enabled: false
+logging:
+  level:
+    com.sprintiq.pms: INFO
