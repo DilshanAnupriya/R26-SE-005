@@ -22,9 +22,12 @@ public final class AuditAction {
     public static final String ROLE_CREATED = "ROLE_CREATED";
     public static final String ROLE_UPDATED = "ROLE_UPDATED";
     public static final String PROJECT_CREATED = "PROJECT_CREATED";
+    public static final String PROJECT_UPDATED = "PROJECT_UPDATED";
     public static final String PROJECT_DELETED = "PROJECT_DELETED";
+    public static final String PROJECT_RESTORED = "PROJECT_RESTORED";
     public static final String SPRINT_STARTED = "SPRINT_STARTED";
     public static final String SPRINT_COMPLETED = "SPRINT_COMPLETED";
+    public static final String SPRINT_CANCELLED = "SPRINT_CANCELLED";
     public static final String AI_PREDICTION_REQUESTED = "AI_PREDICTION_REQUESTED";
     public static final String AI_SUGGESTION_ACCEPTED = "AI_SUGGESTION_ACCEPTED";
     public static final String AI_SUGGESTION_OVERRIDDEN = "AI_SUGGESTION_OVERRIDDEN";

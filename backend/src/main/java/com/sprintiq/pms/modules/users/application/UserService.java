@@ -14,8 +14,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Directory and profile operations. Because {@code users} is a global table, every read
@@ -47,6 +51,42 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId)));
     }
 
+    /**
+     * Mini-profiles for a set of user ids, keyed by id. Published for the delivery
+     * modules: a project member list, a board column or a backlog page all need names
+     * and avatars for a handful of people at once, and calling {@link #getById} per row
+     * turns one screen into a dozen queries.
+     *
+     * <p>Ids the caller is not entitled to see are simply absent from the result rather
+     * than raising — a stale assignee reference should leave a blank avatar, not break
+     * the whole board.</p>
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, UserSummary> summariesFor(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        UUID organizationId = TenantContext.requireOrganizationId();
+        Set<UUID> distinct = userIds.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        if (distinct.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findMembersByIds(organizationId, distinct).stream()
+                .collect(Collectors.toMap(User::getId, UserService::toSummary));
+    }
+
+    /**
+     * Asserts that a user is an active member of the caller's organization. Used before
+     * assigning work or adding someone to a project, so an id from another tenant is
+     * rejected instead of being written into a row that would then render as a blank.
+     */
+    @Transactional(readOnly = true)
+    public void requireActiveMember(UUID userId) {
+        if (!userRepository.isActiveMemberOf(userId, TenantContext.requireOrganizationId())) {
+            throw new ResourceNotFoundException("User", userId);
+        }
+    }
+
     @Transactional
     public UserResponse updateProfile(UUID userId, UpdateProfileRequest request) {
         User user = userRepository.findById(userId)
@@ -71,6 +111,10 @@ public class UserService {
         User user = userRepository.findById(userId).orElseThrow();
         user.setStatus(status);
         return toResponse(userRepository.save(user));
+    }
+
+    private static UserSummary toSummary(User user) {
+        return new UserSummary(user.getId(), user.getFullName(), user.getEmail(), user.getAvatarUrl());
     }
 
     private UserResponse toResponse(User user) {
