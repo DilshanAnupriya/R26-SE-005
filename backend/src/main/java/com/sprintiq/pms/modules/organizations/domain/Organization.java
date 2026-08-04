@@ -4,6 +4,8 @@ import com.sprintiq.pms.common.domain.BaseEntity;
 import com.sprintiq.pms.common.domain.SoftDeletable;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,7 +40,13 @@ public class Organization extends BaseEntity implements SoftDeletable {
     @Column(name = "status", nullable = false, length = 24)
     private OrganizationStatus status = OrganizationStatus.ACTIVE;
 
+    /**
+     * ISO 4217 code. The column is {@code CHAR(3)}, so the JDBC type is pinned to CHAR —
+     * a plain {@code String} resolves to VARCHAR and Hibernate's schema validator refuses
+     * to start against the real table.
+     */
     @Builder.Default
+    @JdbcTypeCode(SqlTypes.CHAR)
     @Column(name = "currency", nullable = false, length = 3)
     private String currency = "USD";
 

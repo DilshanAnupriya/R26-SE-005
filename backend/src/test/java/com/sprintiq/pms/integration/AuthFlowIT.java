@@ -67,7 +67,11 @@ class AuthFlowIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("password"));
     }
 
-    private static org.hamcrest.Matcher<Iterable<?>> hasSizeGreaterThanZero() {
+    /**
+     * {@code iterableWithSize} is declared as {@code Matcher<Iterable<E>>}, which does not
+     * unify with {@code Iterable<?>} — hence the wildcard-free element type here.
+     */
+    private static org.hamcrest.Matcher<Iterable<Object>> hasSizeGreaterThanZero() {
         return org.hamcrest.Matchers.iterableWithSize(org.hamcrest.Matchers.greaterThan(0));
     }
 }

@@ -3,11 +3,12 @@
 Multi-tenant Agile delivery platform. Spring Boot 3 / Java 21 backend, Next.js 14 frontend,
 PostgreSQL + Redis, with four AI models integrated as first-class product capabilities.
 
-> **Delivery status — Phase 1 (Foundation) complete.**
-> Design specs, full database schema, tenancy engine, security, error contract, and the
-> auth / users / organizations / workspaces / audit modules are implemented.
-> Phases 2–5 (delivery core, AI layer, collaboration & analytics, hardening) follow the
-> plan in `docs/05-implementation-plan.md`.
+> **Delivery status — Phase 1 (Foundation) and the Phase 2 backend (Delivery core) complete.**
+> Design specs, full database schema, tenancy engine, security, error contract, the
+> auth / users / organizations / workspaces / audit modules, and the projects / backlog /
+> sprints / tasks / activity modules are implemented.
+> Phase 1b (Next.js shell) and Phases 3–5 (AI layer, collaboration & analytics, hardening)
+> follow the plan in `docs/05-implementation-plan.md`.
 
 ---
 
@@ -83,18 +84,41 @@ Seeded with 37 permissions, 5 system roles and the 7-entry AI model registry.
 **Modules** — auth (register, login, refresh, logout, password reset, email verification,
 org switching), users, organizations, workspaces, members, invitations, custom roles, audit.
 
+**Delivery core** — projects (lifecycle, membership, overview roll-up, explained health),
+milestones, a requirements register that counts post-approval churn as an M2 feature,
+per-project workflow states with WIP limits, labels, epics, stories, tasks and subtasks,
+watchers, time tracking with a persisted start/stop timer, sprint boards and a project
+kanban board, and a workload planner.
+
+**Backlog ranking** — LexoRank-style string ranks, so reordering rewrites only the rows
+that moved rather than every row below the drop point.
+
+**Dependency graph** — edges stored in one canonical direction (`BLOCKED_BY` is persisted
+inverted), with blocking cycles rejected at insert by a recursive CTE.
+
+**Sprints** — commitment freezes on start and never moves again; work added afterwards is
+recorded as scope creep, work removed as scope reduction. Completion measures delivery
+against the frozen commitment and routes unfinished items to the backlog, the next sprint,
+or a nominated one — never leaving them attached to a closed sprint. Burndown reads daily
+`sprint_metrics` snapshots rather than recomputing from timestamps, so scope changes stay
+visible.
+
+**Cross-module boundaries** — the delivery modules never touch each other's repositories.
+The project overview is assembled through a `ProjectStatisticsContributor` port that each
+module implements, board-column occupancy through `WorkflowStateUsageCounter`, and
+sprint↔story moves through the backlog module's published `SprintBacklogService`.
+
 **Quality gates** — ArchUnit rules that fail the build if a controller touches a repository,
 an entity escapes the service layer, or a tenant-scoped entity forgets to extend
 `TenantAwareEntity`. Testcontainers integration tests run against real Postgres.
 
 ---
 
-## Next: Phase 1b + Phase 2
+## Next: Phase 1b + Phase 3
 
-1. Next.js app shell: design system, auth pages, org switcher, API client with silent refresh.
-2. Delivery core: projects, epics, stories, tasks, backlog ranking, sprints, boards, capacity.
-
-Then Phase 3 wires the four AI models — `AiModelClient` port with a mock implementation, so
+1. Next.js app shell: design system, auth pages, org switcher, API client with silent refresh,
+   then the delivery-core feature slices against the endpoints above.
+2. Phase 3 wires the four AI models — `AiModelClient` port with a mock implementation, so
 the AI features are demonstrable before any Python service exists.
 
 ## AI models at a glance

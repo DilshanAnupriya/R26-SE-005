@@ -43,4 +43,17 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             WHERE u.id = :userId AND m.organizationId = :organizationId AND m.status = 'ACTIVE'
             """)
     boolean isActiveMemberOf(@Param("userId") UUID userId, @Param("organizationId") UUID organizationId);
+
+    /**
+     * Batch counterpart to {@link #isActiveMemberOf}: resolves many users at once while
+     * still filtering through {@code org_members}, so a caller cannot turn a list of
+     * guessed ids into a cross-tenant directory lookup.
+     */
+    @Query("""
+            SELECT u FROM User u
+            JOIN OrgMember m ON m.userId = u.id
+            WHERE m.organizationId = :organizationId AND u.id IN :userIds
+            """)
+    List<User> findMembersByIds(@Param("organizationId") UUID organizationId,
+                                @Param("userIds") Collection<UUID> userIds);
 }
