@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { Providers } from "@/components/providers";
 
 // One typeface. `shadcn init` also wired up Geist bound to --font-sans, which
 // silently shadowed Inter — removed, since two sans stacks fighting over the same
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // suppressHydrationWarning: the theme provider writes class="dark" onto <html>
     // before React hydrates, which would otherwise be reported as a mismatch.
     <html lang="en" className={cn("h-full", inter.variable)} suppressHydrationWarning>
-      <body className="flex min-h-full flex-col font-sans antialiased">{children}</body>
+      <body className="flex min-h-full flex-col font-sans antialiased">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

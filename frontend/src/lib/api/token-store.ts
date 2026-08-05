@@ -158,17 +158,21 @@ let instance: TokenStore | null = null;
 /**
  * The per-tab token store.
  *
- * <p>Lazily constructed and guarded against server use. A module-level instance
- * imported — even transitively — by a Server Component or Route Handler would be one
- * instance per server process, shared by every concurrent request: one user's access
- * token handed to another. Failing loudly on the server beats that silently.</p>
+ * <p>Memoised in the browser, where one instance per tab is exactly right. On the
+ * server it returns a fresh throwaway instance every call and memoises nothing —
+ * a shared module-level instance there would be one store per server process, held
+ * in common by every concurrent request, which is one user's access token handed to
+ * another.</p>
+ *
+ * <p>Returning an empty store rather than throwing, because client components render
+ * on the server too during SSR. That pass never populates a token (the effects that
+ * would do so run only in the browser), so an unshared empty store is both harmless
+ * and accurate — whereas throwing would break prerendering for a danger that is not
+ * actually present.</p>
  */
 export function getTokenStore(): TokenStore {
   if (typeof window === "undefined") {
-    throw new Error(
-      "getTokenStore() is browser-only. Server code must not share a token store across requests — " +
-        "route handlers read the refresh cookie via src/server/session.ts instead.",
-    );
+    return new TokenStore();
   }
   instance ??= new TokenStore();
   return instance;
