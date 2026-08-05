@@ -1,3 +1,8 @@
+# pnpm 11 requires every dependency with a postinstall script to be approved
+# explicitly rather than running arbitrary code on install.
 allowBuilds:
+  # msw's postinstall writes the browser service worker. Vitest only uses msw/node,
+  # but allowing it keeps browser mocking available and silences the install warning.
+  msw: true
   sharp: false
   unrs-resolver: false
