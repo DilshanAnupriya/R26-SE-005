@@ -53,9 +53,21 @@ export async function exchangeForSession(
   return response;
 }
 
-/** Ends the session: clears the cookie whatever the backend said. */
-export function endSession(status: number, body: unknown): NextResponse {
-  const response = NextResponse.json(body, { status });
+/**
+ * Ends the session: clears the cookie whatever the backend said.
+ *
+ * <p>204 is built with the bare `NextResponse` constructor rather than
+ * `NextResponse.json`. A 204 must carry no body at all, and `.json()` always writes
+ * one — which makes the `Response` constructor throw, turning logout into a 500 that
+ * leaves the cookie in place. The user then bounces between /login and /app forever,
+ * because the proxy still sees a session and the app still does not.</p>
+ */
+export function endSession(status: number, body?: unknown): NextResponse {
+  const response =
+    status === 204 || body === undefined || body === null
+      ? new NextResponse(null, { status })
+      : NextResponse.json(body, { status });
+
   clearRefreshCookie(response);
   return response;
 }

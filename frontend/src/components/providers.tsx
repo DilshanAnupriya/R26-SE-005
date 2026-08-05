@@ -18,10 +18,18 @@ function makeQueryClient() {
         gcTime: 5 * 60_000,
         refetchOnWindowFocus: true,
         retry: (failureCount, error) => {
-          // Retrying a 4xx repeats a request the server already answered definitively.
-          // 401 is handled by the client's refresh path, not by retrying here.
-          if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
-            return false;
+          if (error instanceof ApiError) {
+            // An unresolved tenant is recoverable: the org switch that fixes it is
+            // already in flight from the shell, so one retry lets the query succeed
+            // instead of showing an error the user cannot act on.
+            if (error.isTenantUnresolved) {
+              return failureCount < 1;
+            }
+            // Retrying any other 4xx repeats a request the server already answered
+            // definitively. 401 is handled by the refresh path, not by retrying here.
+            if (error.status >= 400 && error.status < 500) {
+              return false;
+            }
           }
           return failureCount < 2;
         },
