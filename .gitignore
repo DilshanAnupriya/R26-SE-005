@@ -27,3 +27,9 @@ node_modules/
 
 # Tooling scratch
 .claude/settings.local.json
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+frontend/.env*.local
