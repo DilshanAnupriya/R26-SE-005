@@ -27,7 +27,7 @@ stubbing the rest now would produce a dozen files whose only content is a `TODO`
 
 | # | Decision | Reasoning |
 |---|---|---|
-| D1 | Next.js 14, App Router, TypeScript | Fixed by `docs/02-architecture.md` and `docs/04-folder-structure.md`. Next 15 is available; staying on 14 keeps the docs honest. Revisit deliberately, not by drift. |
+| D1 | **Next.js 16, React 19, Tailwind 4**, App Router, TypeScript | `docs/02` and `docs/04` say Next 14, but that line predates this machine's Node 25 and the current shadcn CLI, which targets Tailwind 4 + React 19. Pinning 14 now would install an older generation of every component and pay the migration later; before any feature UI exists is the cheapest moment to be current. Tailwind 4's CSS-first `@theme` also suits §4's token layer — no `tailwind.config.ts`. **`docs/02` and `docs/04` are updated to match.** |
 | D2 | Refresh token in an httpOnly cookie, access token in memory | An XSS that can read `localStorage` can steal a 30-day refresh token and use it from anywhere. A cookie JavaScript cannot read reduces that to the lifetime of one 15-minute access token. |
 | D3 | Thin BFF: Next route handlers own `/auth/*` only | The cookie has to be read somewhere server-side, and only auth needs it. Proxying data through Next as well would add a hop to every board refresh and buy nothing — CORS is already configured for direct calls. |
 | D4 | shadcn/ui — Radix primitives, Tailwind styling, vendored | Accessible overlays, comboboxes and focus management are hard to get right and are exactly what this shell needs. Vendored rather than depended on, so restyling is editing our own files. |
