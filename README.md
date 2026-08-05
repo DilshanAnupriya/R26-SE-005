@@ -3,12 +3,13 @@
 Multi-tenant Agile delivery platform. Spring Boot 3 / Java 21 backend, Next.js 14 frontend,
 PostgreSQL + Redis, with four AI models integrated as first-class product capabilities.
 
-> **Delivery status — Phase 1 (Foundation) and the Phase 2 backend (Delivery core) complete.**
+> **Delivery status — Phases 1, 1b and the Phase 2 backend complete.**
 > Design specs, full database schema, tenancy engine, security, error contract, the
-> auth / users / organizations / workspaces / audit modules, and the projects / backlog /
-> sprints / tasks / activity modules are implemented.
-> Phase 1b (Next.js shell) and Phases 3–5 (AI layer, collaboration & analytics, hardening)
-> follow the plan in `docs/05-implementation-plan.md`.
+> auth / users / organizations / workspaces / audit modules, the projects / backlog /
+> sprints / tasks / activity modules, and the Next.js 16 frontend — marketing site,
+> auth pages, app shell and API client.
+> Phases 3–5 (AI layer, collaboration & analytics, hardening) follow the plan in
+> `docs/05-implementation-plan.md`.
 
 ---
 
@@ -114,12 +115,41 @@ an entity escapes the service layer, or a tenant-scoped entity forgets to extend
 
 ---
 
-## Next: Phase 1b + Phase 3
+## Frontend
 
-1. Next.js app shell: design system, auth pages, org switcher, API client with silent refresh,
-   then the delivery-core feature slices against the endpoints above.
-2. Phase 3 wires the four AI models — `AiModelClient` port with a mock implementation, so
-the AI features are demonstrable before any Python service exists.
+Next.js 16 (App Router) · React 19 · Tailwind 4 · shadcn/ui on Radix · TanStack Query ·
+Zustand · Zod.
+
+```bash
+make infra && make backend   # Postgres, Redis, Mailpit, then the API on :8080
+cd frontend && pnpm dev      # http://localhost:3000
+```
+
+**Auth is a thin BFF.** The refresh token lives in an httpOnly `SameSite=Lax` cookie
+that JavaScript cannot read; the access token is held in memory only and re-minted from
+the cookie on boot. Only `/api/auth/*` goes through Next — everything else calls
+`:8080` directly, so a board refresh does not pay for an extra hop.
+
+**Token refresh is single-flight.** The backend rotates refresh tokens and revokes the
+whole family on reuse, so six parallel 401s firing six refreshes would look like theft
+and sign the user out of every device. One refresh, queued replays, asserted by test.
+
+**Two motion budgets.** CSS on Radix `data-state` in the app (nothing over ~200ms — the
+user is working); GSAP + ScrollTrigger on the marketing page, dynamically imported so
+the signed-in bundle never carries it. `prefers-reduced-motion` is honoured and tested.
+
+```bash
+cd frontend
+pnpm test        # 106 unit tests
+pnpm typecheck
+pnpm e2e         # 14 Playwright tests — needs the backend running
+```
+
+## Next: Phase 3
+
+Wires the four AI models — an `AiModelClient` port with a mock implementation, so the AI
+features are demonstrable before any Python service exists — then the delivery-core
+feature slices on the frontend, against the endpoints already built.
 
 ## AI models at a glance
 
