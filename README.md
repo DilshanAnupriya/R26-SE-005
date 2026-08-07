@@ -3,13 +3,12 @@
 Multi-tenant Agile delivery platform. Spring Boot 3 / Java 21 backend, Next.js 14 frontend,
 PostgreSQL + Redis, with four AI models integrated as first-class product capabilities.
 
-> **Delivery status — Phases 1, 1b and the Phase 2 backend complete.**
-> Design specs, full database schema, tenancy engine, security, error contract, the
-> auth / users / organizations / workspaces / audit modules, the projects / backlog /
-> sprints / tasks / activity modules, and the Next.js 16 frontend — marketing site,
-> auth pages, app shell and API client.
-> Phases 3–5 (AI layer, collaboration & analytics, hardening) follow the plan in
-> `docs/05-implementation-plan.md`.
+> **Delivery status — Phases 1, 1b, 2, 3 and 4 backend complete; frontend partially.**
+> The full backend is built and tested: schema, tenancy, security, the delivery core,
+> the AI layer with all four models behind a swappable client, and the collaboration
+> and analytics modules. On the frontend, the marketing site, auth, app shell, and the
+> projects / backlog / AI-insights slices are wired to live endpoints.
+> What remains is listed under [Not built yet](#not-built-yet).
 
 ---
 
@@ -145,11 +144,44 @@ pnpm typecheck
 pnpm e2e         # 14 Playwright tests — needs the backend running
 ```
 
-## Next: Phase 3
+**AI layer** — an `AiModelClient` port with two implementations. The mock is
+deterministic and feature-driven rather than a stub: a story with four acceptance
+criteria and two dependencies really does come back bigger than a one-liner, and adding
+scope to a running sprint really does move its risk score — so every panel, explanation
+and Accept/Override interaction is demonstrable before any Python service exists.
+Switch to the real services with `AI_PROVIDER=http`; endpoints and versions live in the
+`ai_models` registry table, so swapping a model in is a configuration change.
 
-Wires the four AI models — an `AiModelClient` port with a mock implementation, so the AI
-features are demonstrable before any Python service exists — then the delivery-core
-feature slices on the frontend, against the endpoints already built.
+Predictions are cached on a hash of the *feature vector*, not the entity id, so editing
+a story invalidates its estimate automatically with no eviction logic to forget. Cache
+hits are written as their own rows, which keeps usage countable and lets feedback attach
+to the reader's own view of the suggestion.
+
+**Collaboration** — comments with id-based mentions (`@[Name](uuid)`, so a rename cannot
+misdirect a notification), a personal inbox with preference-aware delivery, attachments
+with an allow-list and forced `Content-Disposition: attachment`, and a STOMP channel
+interceptor that authenticates the CONNECT frame and refuses cross-tenant subscriptions —
+the Hibernate filter cannot help there, because the broker never touches the database.
+
+**Analytics** — velocity with its standard deviation, burndown, burn-up, CFD, cycle and
+lead time as percentiles rather than means, completion rate, workload balance, cost trend
+and risk summary. Assembled from the modules' published services, never their tables.
+
+---
+
+## Not built yet
+
+Stated plainly so the gap is visible rather than discovered:
+
+| Area | Status |
+|---|---|
+| Frontend: board, sprint planning/board/retro, team, reports, admin console | Endpoints exist; UI not built |
+| Frontend: comments, notification centre, WebSocket subscription | Endpoints exist; UI not built |
+| Report export (`POST /reports/export`) | Documented in the API map; not implemented |
+| Developer-profile metric recomputation job | Columns and API exist; the nightly derivation does not |
+| Malware scanning of attachments | `scan_status` is honestly `PENDING` on every row |
+| Seed/demo data, Dockerfiles, CI workflow | Phase 5 |
+| `pnpm lint` | 3 errors / 2 warnings, all pre-existing React Compiler findings in the Phase 1b auth code |
 
 ## AI models at a glance
 
