@@ -3,6 +3,8 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ListTodo, Sparkles } from "lucide-react";
+import { CommentThread } from "@/features/comments/components/comment-thread";
+import { useProjectMembers } from "@/features/projects/hooks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +32,7 @@ export default function ProjectPage({
   const project = useProject(projectId);
   const overview = useProjectOverview(projectId);
   const backlog = useBacklog(projectId, { size: 50 });
+  const members = useProjectMembers(projectId);
   const batch = useEstimateBatch();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -62,6 +65,29 @@ export default function ProjectPage({
             <Badge variant="secondary">{project.data?.status.toLowerCase()}</Badge>
           </div>
         )}
+
+        {/* Sub-navigation rather than more sidebar entries: these only exist inside a
+            project, and a global nav that changes shape per route is disorienting. */}
+        <nav aria-label="Project sections" className="mt-3 flex gap-1">
+          {[
+            ["", "Backlog"],
+            ["/board", "Board"],
+            ["/sprints", "Sprints"],
+          ].map(([suffix, label]) => (
+            <Link
+              key={label}
+              href={`/app/${orgSlug}/projects/${projectId}${suffix}`}
+              aria-current={suffix === "" ? "page" : undefined}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-sm transition-colors",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                suffix === "" ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/60",
+              )}
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -141,6 +167,20 @@ export default function ProjectPage({
                 ) : null}
               </div>
               <EstimatePanel story={selected} />
+
+              <div className="rounded-lg border p-3">
+                <CommentThread
+                  entityType="STORY"
+                  entityId={selected.id}
+                  people={(members.data ?? [])
+                    .filter((member) => member.fullName)
+                    .map((member) => ({
+                      id: member.userId,
+                      fullName: member.fullName!,
+                      avatarUrl: member.avatarUrl,
+                    }))}
+                />
+              </div>
             </>
           ) : (
             <div className="rounded-lg border border-dashed p-4 text-center">

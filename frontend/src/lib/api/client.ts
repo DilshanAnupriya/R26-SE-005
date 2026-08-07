@@ -114,6 +114,29 @@ export class ApiClient {
     return this.request(path, { ...options, method: "DELETE" });
   }
 
+  /**
+   * Fetches a binary response — an attachment, or a generated export.
+   *
+   * <p>These endpoints need the bearer token like any other, which rules out pointing
+   * `window.open` or an `<a download>` at them: neither sends an Authorization header,
+   * so both would arrive unauthenticated and get a 401 the user sees as a broken link.
+   * Going through the client also means a download benefits from the same single-flight
+   * token refresh as everything else.</p>
+   *
+   * <p>The filename comes from `Content-Disposition` rather than being guessed from the
+   * path, so the server stays the authority on what the file is called.</p>
+   */
+  async blob(
+    path: string,
+    options: Omit<RequestOptions<undefined>, "method" | "body" | "schema"> = {},
+  ): Promise<{ blob: Blob; fileName: string | null }> {
+    const response = await this.send(path, { ...options, method: "GET" }, false);
+    return {
+      blob: await response.blob(),
+      fileName: parseFileName(response.headers.get("content-disposition")),
+    };
+  }
+
   // ------------------------------------------------------------------ internals
 
   /**
@@ -207,4 +230,44 @@ export class ApiClient {
     }
     return url.toString();
   }
+}
+
+/**
+ * Reads the filename out of a `Content-Disposition` header.
+ *
+ * <p>Prefers the RFC 5987 `filename*` form, which is what the backend sends and the only
+ * one that survives a non-ASCII name. Falls back to plain `filename` for anything else.</p>
+ */
+function parseFileName(header: string | null): string | null {
+  if (!header) return null;
+
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      // A malformed header is not worth failing a download over; fall through.
+    }
+  }
+
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain ? plain[1] : null;
+}
+
+/**
+ * Saves a fetched blob to disk.
+ *
+ * <p>The object URL is revoked on the next tick rather than immediately: revoking it in
+ * the same frame as the click races the browser's own read of it, and the failure is
+ * silent — no download, no error.</p>
+ */
+export function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

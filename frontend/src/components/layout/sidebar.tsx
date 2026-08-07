@@ -26,6 +26,7 @@ const NAV = [
   { href: "reports", label: "Reports", icon: BarChart3 },
   { href: "team", label: "Team", icon: Users },
   { href: "notifications", label: "Notifications", icon: Bell },
+  { href: "settings", label: "Administration", icon: Settings },
 ] as const;
 
 export function Sidebar({ orgSlug }: { orgSlug: string }) {

@@ -1,10 +1,17 @@
 "use client";
 
 import { Search } from "lucide-react";
+import { NotificationBell } from "./notification-bell";
 import { UserMenu } from "./user-menu";
 import { useUiStore } from "@/stores/ui-store";
 
-export function Topbar({ breadcrumb }: { breadcrumb?: React.ReactNode }) {
+export function Topbar({
+  orgSlug,
+  breadcrumb,
+}: {
+  orgSlug: string;
+  breadcrumb?: React.ReactNode;
+}) {
   const openPalette = useUiStore((state) => state.setCommandPaletteOpen);
 
   return (
@@ -23,6 +30,8 @@ export function Topbar({ breadcrumb }: { breadcrumb?: React.ReactNode }) {
             the palette is a primary navigation path, not a power-user secret. */}
         <kbd className="hidden rounded border bg-muted px-1 font-mono text-2xs sm:inline">⌘K</kbd>
       </button>
+
+      <NotificationBell orgSlug={orgSlug} />
 
       <UserMenu />
     </header>
