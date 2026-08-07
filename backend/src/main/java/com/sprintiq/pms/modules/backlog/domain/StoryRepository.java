@@ -33,6 +33,34 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
 
     long countBySprintIdAndDeletedAtIsNull(UUID sprintId);
 
+    long countByProjectIdAndStoryPointsIsNotNullAndDeletedAtIsNull(UUID projectId);
+
+    long countByProjectIdAndEstimateSourceInAndDeletedAtIsNull(UUID projectId,
+                                                              Collection<EstimateSource> sources);
+
+    /**
+     * Estimated points across a project, with each story's type.
+     *
+     * <p>Feeds the anchor the M1 estimator works from. Returned as rows rather than as a
+     * SQL median because the estimator needs two medians — the project's and one
+     * restricted to comparable stories — and computing them from a single scan beats two
+     * round trips for a set this size. Points are never in the millions; a project with
+     * ten thousand estimated stories has bigger problems than this query.</p>
+     */
+    @Query("""
+            SELECT s.type AS type, s.storyPoints AS points
+            FROM Story s
+            WHERE s.projectId = :projectId AND s.deletedAt IS NULL AND s.storyPoints IS NOT NULL
+            """)
+    List<EstimatedPoint> findEstimatedPoints(@Param("projectId") UUID projectId);
+
+    /** Projection for {@link #findEstimatedPoints}. */
+    interface EstimatedPoint {
+        StoryType getType();
+
+        BigDecimal getPoints();
+    }
+
     /**
      * The backlog: everything in the project, ordered by rank, with the standard filter
      * set. {@code unassignedSprintOnly} implements the API's {@code sprintId=none}

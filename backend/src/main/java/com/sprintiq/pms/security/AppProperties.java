@@ -18,6 +18,7 @@ public class AppProperties {
     private Security security = new Security();
     private RateLimit rateLimit = new RateLimit();
     private Storage storage = new Storage();
+    private Ai ai = new Ai();
     private Seed seed = new Seed();
 
     @Getter @Setter
@@ -57,6 +58,28 @@ public class AppProperties {
         private String provider = "local";
         private String localPath = "./data/attachments";
         private List<String> allowedContentTypes = List.of();
+    }
+
+    /**
+     * AI integration. {@code provider} selects the {@code AiModelClient} implementation:
+     * {@code mock} runs the deterministic heuristic client, {@code http} calls the real
+     * model services. Endpoints and versions live in the database registry rather than
+     * here — this tree only configures the caller's behaviour.
+     */
+    @Getter @Setter
+    public static class Ai {
+        private boolean enabled = true;
+        private String provider = "mock";
+        /** Ceiling applied on top of each model's own latency budget. */
+        private int timeoutMs = 4000;
+        /**
+         * How long an identical feature vector may be answered from a previous
+         * prediction. Not a staleness window — the hash changes the moment the
+         * underlying item does, so this only bounds how long an unchanged item's
+         * estimate is reused.
+         */
+        private Duration cacheTtl = Duration.ofHours(6);
+        private int maxBatchSize = 50;
     }
 
     @Getter @Setter
