@@ -90,9 +90,14 @@ Model 3 from a measurement into a negotiation. Per-user workload is served by
 ## Reports `/reports`
 `GET /velocity` · `/burndown` · `/burnup` · `/cfd` · `/cycle-time` · `/lead-time` ·
 `/productivity` · `/completion-rate` · `/workload-balance` · `/cost-trend` · `/risk-summary`
-— all implemented. `POST /export` / `GET /export/{jobId}` are **not yet built**; they
-need a job table and a worker, and shipping a synchronous fake behind an async contract
-would be worse than the gap.
+`POST /export` (queues a CSV job, 202) · `GET /export` (your jobs) ·
+`GET /export/{jobId}` (poll) · `GET /export/{jobId}/download`
+
+Exports run on a worker after the job row commits, are kept for 24 hours and belong to
+the person who requested them — an export is a bulk extract of exactly the data a
+permission boundary exists to control. Supported reports: `velocity`, `burndown`,
+`cycle-time`, `lead-time`, `productivity`, `workload-balance`, `completion-rate`,
+`backlog`.
 
 ## AI `/ai`
 *Implemented, plus `GET /risk/sprint/{id}`, `/risk/sprint/{id}/history`,
