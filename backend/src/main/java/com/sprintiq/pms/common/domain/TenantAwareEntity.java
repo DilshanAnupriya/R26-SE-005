@@ -26,7 +26,7 @@ import java.util.UUID;
 @FilterDef(name = TenantAwareEntity.TENANT_FILTER,
         parameters = @ParamDef(name = TenantAwareEntity.TENANT_PARAM, type = UUID.class))
 @Filter(name = TenantAwareEntity.TENANT_FILTER, condition = "organization_id = :organizationId")
-public abstract class TenantAwareEntity extends BaseEntity {
+public abstract class TenantAwareEntity extends BaseEntity implements TenantScoped {
 
     public static final String TENANT_FILTER = "tenantFilter";
     public static final String TENANT_PARAM = "organizationId";

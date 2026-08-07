@@ -102,40 +102,14 @@ app:
     local-path: ${STORAGE_LOCAL_PATH:./data/attachments}
     allowed-content-types: image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
   ai:
+    # Per-model endpoints, versions and latency budgets live in the ai_models table,
+    # not here: swapping a model in must not require a redeploy, and a prediction has
+    # to record which version answered it. This tree configures the caller only.
     enabled: true
     provider: ${AI_PROVIDER:mock}           # mock | http
-    timeout-ms: 4000
-    cache-ttl: PT6H
+    timeout-ms: ${AI_TIMEOUT_MS:4000}
+    cache-ttl: ${AI_CACHE_TTL:PT6H}
     max-batch-size: 50
-    models:
-      story-points:
-        code: M1_STORY_POINTS
-        version: ${AI_M1_VERSION:1.0.0}
-        endpoint: ${AI_M1_URL:http://ai-estimation:8000/v1/predict/story-points}
-      velocity:
-        code: M1_VELOCITY
-        version: ${AI_M1V_VERSION:1.0.0}
-        endpoint: ${AI_M1V_URL:http://ai-estimation:8000/v1/predict/velocity}
-      over-budget-risk:
-        code: M2_OVER_BUDGET
-        version: ${AI_M2A_VERSION:1.0.0}
-        endpoint: ${AI_M2A_URL:http://ai-risk:8000/v1/predict/over-budget}
-      requirement-change-risk:
-        code: M2_REQUIREMENT_CHANGE
-        version: ${AI_M2B_VERSION:1.0.0}
-        endpoint: ${AI_M2B_URL:http://ai-risk:8000/v1/predict/requirement-change}
-      allocation:
-        code: M3_ALLOCATION
-        version: ${AI_M3_VERSION:1.0.0}
-        endpoint: ${AI_M3_URL:http://ai-allocation:8000/v1/predict/rank}
-      cost-initial:
-        code: M4_COST_INITIAL
-        version: ${AI_M4A_VERSION:1.0.0}
-        endpoint: ${AI_M4A_URL:http://ai-cost:8000/v1/predict/initial}
-      cost-mid-sprint:
-        code: M4_COST_MID
-        version: ${AI_M4B_VERSION:1.0.0}
-        endpoint: ${AI_M4B_URL:http://ai-cost:8000/v1/predict/mid-sprint}
   seed:
     enabled: ${SEED_ENABLED:false}
 

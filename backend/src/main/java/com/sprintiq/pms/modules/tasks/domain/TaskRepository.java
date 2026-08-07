@@ -88,4 +88,32 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
               AND t.status <> 'DONE' AND t.status <> 'CANCELLED'
             """)
     List<Task> findOpenForUser(@Param("userId") UUID userId);
+
+    long countByStoryIdAndDeletedAtIsNull(UUID storyId);
+
+    /**
+     * Open estimated minutes grouped by assignee across a project.
+     *
+     * <p>Aggregated in SQL rather than by loading every open task: the allocation panel
+     * asks for this once per ranking, and a project with a thousand open tasks should
+     * not hydrate a thousand entities to produce a handful of percentages.</p>
+     */
+    @Query("""
+            SELECT t.assigneeId AS assigneeId, COALESCE(SUM(t.estimateMinutes), 0) AS estimatedMinutes,
+                   COUNT(t) AS openCount
+            FROM Task t
+            WHERE t.projectId = :projectId AND t.deletedAt IS NULL AND t.assigneeId IS NOT NULL
+              AND t.status <> 'DONE' AND t.status <> 'CANCELLED'
+            GROUP BY t.assigneeId
+            """)
+    List<AssigneeLoad> openLoadByAssignee(@Param("projectId") UUID projectId);
+
+    /** Projection for {@link #openLoadByAssignee}. */
+    interface AssigneeLoad {
+        UUID getAssigneeId();
+
+        Long getEstimatedMinutes();
+
+        long getOpenCount();
+    }
 }
