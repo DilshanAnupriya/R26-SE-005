@@ -54,6 +54,23 @@ public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID> {
             """)
     long sumMinutesInSprint(@Param("sprintId") UUID sprintId);
 
+    /**
+     * Minutes one person logged, optionally narrowed to a project or a sprint.
+     *
+     * <p>Summed in SQL rather than by paging the timesheet: the productivity report asks
+     * this once per team member, and a team of twelve would otherwise page twelve
+     * timesheets to add up twelve numbers.</p>
+     */
+    @Query("""
+            SELECT COALESCE(SUM(t.minutes), 0) FROM TimeEntry t
+            WHERE t.userId = :userId
+              AND (:projectId IS NULL OR t.projectId = :projectId)
+              AND (:sprintId IS NULL OR t.sprintId = :sprintId)
+            """)
+    long sumMinutesLoggedBy(@Param("userId") UUID userId,
+                            @Param("projectId") UUID projectId,
+                            @Param("sprintId") UUID sprintId);
+
     /** Overtime hours in a sprint — priced separately by the M4 cost model. */
     @Query("""
             SELECT COALESCE(SUM(t.minutes), 0) FROM TimeEntry t

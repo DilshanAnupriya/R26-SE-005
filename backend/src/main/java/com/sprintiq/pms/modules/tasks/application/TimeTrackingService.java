@@ -171,6 +171,12 @@ public class TimeTrackingService {
         return timeEntryRepository.sumMinutesInSprint(sprintId);
     }
 
+    /** Minutes one person logged, optionally narrowed to a project or a sprint. */
+    @Transactional(readOnly = true)
+    public long minutesLoggedBy(UUID userId, UUID projectId, UUID sprintId) {
+        return timeEntryRepository.sumMinutesLoggedBy(userId, projectId, sprintId);
+    }
+
     @Transactional(readOnly = true)
     public long overtimeMinutesInSprint(UUID sprintId) {
         return timeEntryRepository.sumOvertimeMinutesInSprint(sprintId);
