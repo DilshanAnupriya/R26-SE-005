@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SessionProvider } from "@/components/session-provider";
+import { RealtimeProvider } from "@/components/realtime-provider";
 import { ApiError } from "@/lib/api/errors";
 
 function makeQueryClient() {
@@ -53,10 +54,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <SessionProvider>
-          <TooltipProvider delayDuration={300}>
-            {children}
-            <Toaster position="bottom-right" closeButton richColors />
-          </TooltipProvider>
+          {/* Inside SessionProvider: the socket needs a token and an organization, and
+              outside it there is neither. */}
+          <RealtimeProvider>
+            <TooltipProvider delayDuration={300}>
+              {children}
+              <Toaster position="bottom-right" closeButton richColors />
+            </TooltipProvider>
+          </RealtimeProvider>
         </SessionProvider>
       </ThemeProvider>
     </QueryClientProvider>

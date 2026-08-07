@@ -101,7 +101,7 @@ export function AppShell({
     <div className="flex min-h-svh">
       <Sidebar orgSlug={resolution.organization.slug} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
+        <Topbar orgSlug={resolution.organization.slug} />
         {/* The landmark a "skip to content" link targets. */}
         <main id="main" className="flex-1 overflow-auto p-6">
           {children}

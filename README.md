@@ -3,12 +3,14 @@
 Multi-tenant Agile delivery platform. Spring Boot 3 / Java 21 backend, Next.js 14 frontend,
 PostgreSQL + Redis, with four AI models integrated as first-class product capabilities.
 
-> **Delivery status — Phases 1, 1b, 2, 3 and 4 backend complete; frontend partially.**
-> The full backend is built and tested: schema, tenancy, security, the delivery core,
-> the AI layer with all four models behind a swappable client, and the collaboration
-> and analytics modules. On the frontend, the marketing site, auth, app shell, and the
-> projects / backlog / AI-insights slices are wired to live endpoints.
-> What remains is listed under [Not built yet](#not-built-yet).
+> **Delivery status — Phases 1 through 4 complete, back and front.**
+> Schema, tenancy, security, the delivery core, the AI layer with all four models behind
+> a swappable client, collaboration, analytics and asynchronous CSV export — with the
+> frontend wired to all of it: projects, backlog, kanban board, sprint planning and
+> close-out, team workload, reports, the notification centre, the admin console, and
+> realtime updates over an authenticated STOMP connection.
+> Phase 5 (seed data, Dockerfiles, CI) is what remains — see
+> [Not built yet](#not-built-yet).
 
 ---
 
@@ -167,6 +169,29 @@ the Hibernate filter cannot help there, because the broker never touches the dat
 lead time as percentiles rather than means, completion rate, workload balance, cost trend
 and risk summary. Assembled from the modules' published services, never their tables.
 
+**Export** — `POST /reports/export` queues a job, a worker generates the CSV after the
+row commits, and the file is kept for 24 hours. The CSV writer is hand-rolled for one
+reason: a story titled `=HYPERLINK("http://evil","click")` is a legal story title and a
+working attack on whoever opens the export, and most CSV libraries do not defuse it.
+
+---
+
+## Frontend
+
+Every AI surface follows one shape. A suggestion is visibly a suggestion — dashed badge,
+"not yet accepted" for screen readers — and never becomes the story's estimate until
+someone presses Accept. When the team's number and the model's differ, Compare shows both
+with the drivers underneath, because the interesting case is disagreement.
+
+The board is drag-and-drop *and* keyboard-operable: focus a card's handle, Enter to pick
+it up, arrows to choose a column, Enter to drop. Drag that only works with a mouse makes
+the primary interface of the product unusable for anyone who cannot use one.
+
+Realtime runs over one authenticated STOMP connection per tab. Server events invalidate
+query keys rather than patching the cache with their payload — a push says *that*
+something changed, and making it also say *what it now is* would let the pushed shape
+drift from the REST one.
+
 ---
 
 ## Not built yet
@@ -175,13 +200,12 @@ Stated plainly so the gap is visible rather than discovered:
 
 | Area | Status |
 |---|---|
-| Frontend: board, sprint planning/board/retro, team, reports, admin console | Endpoints exist; UI not built |
-| Frontend: comments, notification centre, WebSocket subscription | Endpoints exist; UI not built |
-| Report export (`POST /reports/export`) | Documented in the API map; not implemented |
-| Developer-profile metric recomputation job | Columns and API exist; the nightly derivation does not |
+| Sprint retrospective UI | `GET/POST /sprints/{id}/retrospective` exists; the close-out dialog captures a summary, the full retro board does not |
+| Attachment upload UI | Endpoints and storage exist; no picker is wired into the item view |
+| Developer-profile metric recomputation job | Columns and API exist; the nightly derivation does not, so measured metrics stay at their defaults |
 | Malware scanning of attachments | `scan_status` is honestly `PENDING` on every row |
 | Seed/demo data, Dockerfiles, CI workflow | Phase 5 |
-| `pnpm lint` | 3 errors / 2 warnings, all pre-existing React Compiler findings in the Phase 1b auth code |
+| `pnpm lint` | 3 errors / 2 warnings, all pre-existing React Compiler findings in the Phase 1b auth code (`session-provider.tsx`, two auth forms) |
 
 ## AI models at a glance
 

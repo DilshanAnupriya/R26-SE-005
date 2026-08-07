@@ -100,11 +100,10 @@ export const workflowStateSchema = z.object({
   projectId: z.uuid(),
   name: z.string(),
   code: z.string(),
-  category: z.string(),
-  color: z.string().nullish(),
+  category: z.enum(["TODO", "IN_PROGRESS", "DONE", "CANCELLED"]),
   position: z.number().int(),
   wipLimit: z.number().int().nullish(),
-  itemCount: z.number().int().nullish(),
+  color: z.string().nullish(),
 });
 export type WorkflowState = z.infer<typeof workflowStateSchema>;
 
@@ -218,13 +217,12 @@ export const sprintSchema = z.object({
 });
 export type Sprint = z.infer<typeof sprintSchema>;
 
+/** Mirrors `SprintDtos.BoardColumnResponse` — the workflow state nested, not flattened. */
 export const boardColumnSchema = z.object({
-  workflowStateId: z.uuid().nullish(),
-  name: z.string(),
-  color: z.string().nullish(),
-  wipLimit: z.number().int().nullish(),
-  wipExceeded: z.boolean().nullish(),
+  state: workflowStateSchema,
   stories: z.array(storySchema).default([]),
+  itemCount: z.number().int(),
+  wipLimitExceeded: z.boolean(),
 });
 
 export const sprintBoardSchema = z.object({
@@ -232,6 +230,7 @@ export const sprintBoardSchema = z.object({
   sprintName: z.string(),
   status: sprintStatusSchema.nullish(),
   columns: z.array(boardColumnSchema).default([]),
+  totalItems: z.number().int(),
 });
 export type SprintBoard = z.infer<typeof sprintBoardSchema>;
 
