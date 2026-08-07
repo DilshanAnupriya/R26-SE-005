@@ -19,6 +19,10 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
 
     Optional<Story> findByIdAndDeletedAtIsNotNull(UUID id);
 
+    /** The recycle bin's contents for this type, most recently deleted first. */
+    org.springframework.data.domain.Page<Story> findByDeletedAtIsNotNullOrderByDeletedAtDesc(
+            org.springframework.data.domain.Pageable pageable);
+
     List<Story> findByIdInAndDeletedAtIsNull(Collection<UUID> ids);
 
     List<Story> findBySprintIdAndDeletedAtIsNull(UUID sprintId);

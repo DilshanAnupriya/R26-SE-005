@@ -18,6 +18,10 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
 
     Optional<Task> findByIdAndDeletedAtIsNotNull(UUID id);
 
+    /** The recycle bin's contents for this type, most recently deleted first. */
+    org.springframework.data.domain.Page<Task> findByDeletedAtIsNotNullOrderByDeletedAtDesc(
+            org.springframework.data.domain.Pageable pageable);
+
     List<Task> findByStoryIdAndDeletedAtIsNullOrderByRankAsc(UUID storyId);
 
     List<Task> findByParentTaskIdAndDeletedAtIsNullOrderByRankAsc(UUID parentTaskId);

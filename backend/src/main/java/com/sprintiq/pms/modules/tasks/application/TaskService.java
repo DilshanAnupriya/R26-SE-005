@@ -9,6 +9,9 @@ import com.sprintiq.pms.common.util.LexoRank;
 import com.sprintiq.pms.common.web.PageQuery;
 import com.sprintiq.pms.common.web.PageResponse;
 import com.sprintiq.pms.modules.activity.application.ActivityService;
+import com.sprintiq.pms.modules.notifications.application.NotificationService;
+import com.sprintiq.pms.modules.notifications.application.RealtimePublisher;
+import com.sprintiq.pms.modules.notifications.domain.NotificationType;
 import com.sprintiq.pms.modules.activity.application.ChangeSet;
 import com.sprintiq.pms.modules.activity.domain.ActivityAction;
 import com.sprintiq.pms.modules.projects.application.ItemKeyService;
@@ -48,6 +51,8 @@ public class TaskService {
     private final WorkflowStateService workflowStateService;
     private final UserService userService;
     private final ActivityService activityService;
+    private final NotificationService notifications;
+    private final RealtimePublisher realtime;
 
     // ------------------------------------------------------------------ queries
 
@@ -216,6 +221,27 @@ public class TaskService {
                 request.assigneeId() == null
                         ? "%s unassigned".formatted(task.getItemKey())
                         : "%s assigned (%s)".formatted(task.getItemKey(), source));
+
+        // Both sides are told. Being given work matters most, but so does discovering
+        // that something you were tracking is no longer yours.
+        if (request.assigneeId() != null) {
+            notifications.notify(new NotificationService.Notify(request.assigneeId(),
+                    NotificationType.ASSIGNED, "%s was assigned to you".formatted(task.getItemKey()),
+                    task.getTitle(), EntityType.TASK, task.getId(),
+                    "/projects/%s/tasks/%s".formatted(task.getProjectId(), task.getId())));
+        }
+        if (previous != null && !previous.equals(request.assigneeId())) {
+            notifications.notify(new NotificationService.Notify(previous,
+                    NotificationType.UNASSIGNED, "%s is no longer yours".formatted(task.getItemKey()),
+                    task.getTitle(), EntityType.TASK, task.getId(),
+                    "/projects/%s/tasks/%s".formatted(task.getProjectId(), task.getId())));
+        }
+
+        // The board reflects the change for everyone watching it, without a poll.
+        realtime.projectEvent(task.getProjectId(), "task.assigned",
+                java.util.Map.of("taskId", task.getId(),
+                        "assigneeId", String.valueOf(request.assigneeId())));
+
         return toResponse(task);
     }
 
