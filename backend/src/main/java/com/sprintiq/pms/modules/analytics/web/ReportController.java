@@ -1,19 +1,29 @@
 package com.sprintiq.pms.modules.analytics.web;
 
 import com.sprintiq.pms.common.web.ApiConstants;
+import com.sprintiq.pms.common.web.PageQuery;
+import com.sprintiq.pms.common.web.PageResponse;
 import com.sprintiq.pms.modules.ai.application.CostForecastService;
 import com.sprintiq.pms.modules.ai.application.RiskService;
 import com.sprintiq.pms.modules.ai.web.dto.AiDtos.CostTrendPoint;
 import com.sprintiq.pms.modules.ai.web.dto.AiDtos.RiskAssessmentResponse;
 import com.sprintiq.pms.modules.analytics.application.AnalyticsService;
+import com.sprintiq.pms.modules.analytics.application.ExportService;
 import com.sprintiq.pms.modules.analytics.web.dto.ReportDtos.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,6 +44,7 @@ public class ReportController {
     private final AnalyticsService analytics;
     private final RiskService riskService;
     private final CostForecastService costService;
+    private final ExportService exportService;
 
     @Operation(summary = "Velocity across recent sprints, with its standard deviation")
     @PreAuthorize("@perm.has('report:read')")
@@ -146,5 +157,55 @@ public class ReportController {
                 .orElse("LOW");
 
         return new RiskSummaryResponse(projectId, rows, atRisk, highest);
+    }
+
+    // --------------------------------------------------------------------- export
+
+    @Operation(summary = "Queue a CSV export",
+            description = "Returns immediately with a job id. Poll GET /reports/export/{jobId} "
+                    + "until it reports COMPLETED, then follow downloadUrl.")
+    @PreAuthorize("@perm.has('report:export')")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @PostMapping("/export")
+    public ExportJobResponse requestExport(@Valid @RequestBody CreateExportRequest request) {
+        return exportService.request(request);
+    }
+
+    @Operation(summary = "Your recent exports")
+    @PreAuthorize("@perm.has('report:export')")
+    @GetMapping("/export")
+    public PageResponse<ExportJobResponse> myExports(@Valid PageQuery query) {
+        return exportService.mine(query);
+    }
+
+    @Operation(summary = "Export status")
+    @PreAuthorize("@perm.has('report:export')")
+    @GetMapping("/export/{jobId}")
+    public ExportJobResponse exportStatus(@PathVariable UUID jobId) {
+        return exportService.status(jobId);
+    }
+
+    /**
+     * Streams the generated CSV.
+     *
+     * <p>Same headers as an attachment download — {@code nosniff} and a forced
+     * disposition — because a CSV is a file the browser will happily try to interpret,
+     * and the contents include user-authored strings.</p>
+     */
+    @Operation(summary = "Download a completed export")
+    @PreAuthorize("@perm.has('report:export')")
+    @GetMapping("/export/{jobId}/download")
+    public ResponseEntity<InputStreamResource> downloadExport(@PathVariable UUID jobId) {
+        ExportService.Download download = exportService.download(jobId);
+        String encodedName = URLEncoder.encode(download.fileName(), StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedName)
+                .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=utf-8")
+                .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(download.sizeBytes()))
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=0, no-store")
+                .body(new InputStreamResource(download.content()));
     }
 }
