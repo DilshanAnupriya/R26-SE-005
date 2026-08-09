@@ -59,7 +59,13 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
-        {children}
+        {/*
+          The Command root is required here, not optional styling. CommandInput and
+          CommandList read cmdk's store from context; rendered as bare children of
+          DialogContent they find nothing and throw on `undefined.subscribe` the
+          moment the dialog opens. The generated file shipped without it.
+        */}
+        <Command>{children}</Command>
       </DialogContent>
     </Dialog>
   )
