@@ -12,6 +12,7 @@ import { Models } from "@/components/marketing/models";
 import { Pricing } from "@/components/marketing/pricing";
 import { Faq } from "@/components/marketing/faq";
 import { Analytics } from "@/components/marketing/analytics";
+import { GoalCard } from "@/features/goals/components/goal-card";
 import { ApiError } from "@/lib/api/errors";
 
 /**
@@ -116,5 +117,54 @@ describe("accessibility — marketing", () => {
     expect(chart?.getAttribute("aria-label")).toMatch(/velocity/i);
 
     await expectNoViolations(<Analytics />);
+  });
+});
+
+describe("accessibility — goals", () => {
+  const goal = {
+    id: "3f1d2c6a-0f6e-4a3a-9a51-4d3ad9b1f001",
+    title: "Make onboarding effortless",
+    status: "AT_RISK" as const,
+    level: "TEAM" as const,
+    period: "Q3 2026",
+    progressPct: 38,
+    overdue: false,
+    daysRemaining: 52,
+    ownerName: "Priya Raman",
+    ownerUserId: "3f1d2c6a-0f6e-4a3a-9a51-4d3ad9b1f009",
+    keyResults: [
+      {
+        id: "3f1d2c6a-0f6e-4a3a-9a51-4d3ad9b1f002",
+        goalId: "3f1d2c6a-0f6e-4a3a-9a51-4d3ad9b1f001",
+        title: "Median time to first project",
+        metricType: "NUMBER" as const,
+        unit: "min",
+        startValue: 42,
+        currentValue: 18,
+        targetValue: 10,
+        direction: "DECREASE" as const,
+        status: "ON_TRACK" as const,
+        progressPct: 75,
+        achieved: false,
+        position: 0,
+        linkedItems: [],
+      },
+    ],
+  };
+
+  it("goal card has no violations", async () => {
+    await expectNoViolations(<GoalCard goal={goal} />);
+  });
+
+  it("says which direction counts as progress", () => {
+    // The trend arrow is the only visual cue that 18 against a target of 10 is good
+    // news. Without a text equivalent the row reads as a 44% overshoot.
+    const { getByRole } = render(<GoalCard goal={goal} />);
+    const row = getByRole("button", { name: /Median time to first project/ });
+
+    expect(row.getAttribute("aria-label")).toContain("Lower is better");
+    expect(row.getAttribute("aria-label")).toContain("18 min of 10 min");
+    // Opens with the visible title, so voice control can still address it by name.
+    expect(row.getAttribute("aria-label")).toMatch(/^Median time to first project:/);
   });
 });

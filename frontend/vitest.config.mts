@@ -13,6 +13,14 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // src/lib/env.ts validates at import time and throws when these are missing, so
+    // any test that reaches a component importing the session provider fails on
+    // configuration rather than on the thing it is testing. Fixed values, not the
+    // developer's .env.local, so a test can never quietly talk to a real backend.
+    env: {
+      NEXT_PUBLIC_API_URL: "http://localhost:8080/api/v1",
+      NEXT_PUBLIC_WS_URL: "ws://localhost:8080/ws",
+    },
     setupFiles: ["./src/tests/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     // Playwright specs live in tests/e2e and are driven by Playwright, not Vitest.

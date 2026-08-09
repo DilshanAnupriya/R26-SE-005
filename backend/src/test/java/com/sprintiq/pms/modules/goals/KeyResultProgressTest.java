@@ -242,4 +242,64 @@ class KeyResultProgressTest {
             assertThat(goal.getProgressPct()).isEqualByComparingTo("0.00");
         }
     }
+
+    @Nested
+    @DisplayName("drifting against the calendar")
+    class Drift {
+
+        private static Goal quarterlyGoal() {
+            return Goal.builder()
+                    .title("Ship onboarding")
+                    .startDate(LocalDate.of(2026, 1, 1))
+                    .targetDate(LocalDate.of(2026, 3, 31))
+                    .build();
+        }
+
+        @Test
+        @DisplayName("the same numbers slide from on track to off track as the cycle burns")
+        void sameNumbersDegrade() {
+            // The defect this guards: status was only recomputed on a write, so a goal
+            // nobody checked into kept the verdict from its last check-in for months.
+            Goal goal = quarterlyGoal();
+            List<KeyResult> results = List.of(keyResult(0, 20, 100, MetricDirection.INCREASE));
+
+            goal.recalculateFrom(results, LocalDate.of(2026, 1, 20));
+            assertThat(goal.getStatus()).isEqualTo(GoalStatus.ON_TRACK);
+
+            // Nothing moved; only the calendar did.
+            assertThat(goal.statusOn(results, LocalDate.of(2026, 2, 15)))
+                    .isEqualTo(GoalStatus.AT_RISK);
+            assertThat(goal.statusOn(results, LocalDate.of(2026, 3, 20)))
+                    .isEqualTo(GoalStatus.OFF_TRACK);
+        }
+
+        @Test
+        @DisplayName("asking is not answering — statusOn leaves the goal alone")
+        void statusOnIsPure() {
+            Goal goal = quarterlyGoal();
+            List<KeyResult> results = List.of(keyResult(0, 20, 100, MetricDirection.INCREASE));
+            goal.recalculateFrom(results, LocalDate.of(2026, 1, 20));
+
+            goal.statusOn(results, LocalDate.of(2026, 3, 20));
+
+            assertThat(goal.getStatus()).isEqualTo(GoalStatus.ON_TRACK);
+            assertThat(goal.getProgressPct()).isEqualByComparingTo("20.00");
+        }
+
+        @Test
+        @DisplayName("a closed verdict does not drift")
+        void closedDoesNotDrift() {
+            Goal goal = Goal.builder()
+                    .title("Last quarter")
+                    .status(GoalStatus.ACHIEVED)
+                    .startDate(LocalDate.of(2026, 1, 1))
+                    .targetDate(LocalDate.of(2026, 3, 31))
+                    .build();
+
+            assertThat(goal.statusOn(
+                    List.of(keyResult(0, 0, 100, MetricDirection.INCREASE)),
+                    LocalDate.of(2026, 3, 30)))
+                    .isEqualTo(GoalStatus.ACHIEVED);
+        }
+    }
 }
