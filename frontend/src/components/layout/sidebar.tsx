@@ -3,121 +3,166 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
-  Bell,
+  Bot,
+  Calendar,
+  ChevronLeft,
+  ClipboardList,
+  FileText,
   FolderKanban,
-  LayoutDashboard,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Gauge,
+  Home,
+  KanbanSquare,
+  ListTodo,
+  Map,
   Settings,
-  Sparkles,
+  Target,
   Users,
+  Workflow,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { OrgSwitcher } from "./org-switcher";
 import { useUiStore } from "@/stores/ui-store";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { href: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "projects", label: "Projects", icon: FolderKanban },
-  { href: "ai-insights", label: "AI insights", icon: Sparkles },
-  { href: "reports", label: "Reports", icon: BarChart3 },
-  { href: "team", label: "Team", icon: Users },
-  { href: "notifications", label: "Notifications", icon: Bell },
-  { href: "settings", label: "Administration", icon: Settings },
-] as const;
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof Home;
+  /** Rendered as a count pill; hidden when the sidebar is collapsed. */
+  badge?: number;
+};
+
+/**
+ * The design's four nav groups. The first is deliberately unlabelled — Home, My Work
+ * and Projects are where people start, and a heading above them would be noise.
+ * The rest follow the plan → work → workspace progression the design sets out.
+ */
+const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
+  {
+    items: [
+      { href: "dashboard", label: "Home", icon: Home },
+      { href: "my-work", label: "My Work", icon: ListTodo, badge: 3 },
+      { href: "projects", label: "Projects", icon: FolderKanban },
+    ],
+  },
+  {
+    title: "Plan",
+    items: [
+      { href: "roadmap", label: "Roadmap", icon: Map },
+      { href: "goals", label: "Goals & OKRs", icon: Target },
+      { href: "timeline", label: "Timeline", icon: Gauge },
+      { href: "calendar", label: "Calendar", icon: Calendar },
+    ],
+  },
+  {
+    title: "Work",
+    items: [
+      { href: "board", label: "Board", icon: KanbanSquare },
+      { href: "backlog", label: "Backlog & Sprints", icon: ClipboardList },
+      { href: "reports", label: "Reports", icon: Gauge },
+    ],
+  },
+  {
+    title: "Workspace",
+    items: [
+      { href: "ai-insights", label: "AI Assistant", icon: Bot },
+      { href: "automation", label: "Automation", icon: Workflow },
+      { href: "team", label: "Team", icon: Users },
+      { href: "docs", label: "Documents", icon: FileText },
+      { href: "settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
 
 export function Sidebar({ orgSlug }: { orgSlug: string }) {
   const pathname = usePathname();
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const toggle = useUiStore((state) => state.toggleSidebar);
+  const expanded = !collapsed;
 
   return (
     <aside
       className={cn(
-        "flex shrink-0 flex-col border-r bg-sidebar transition-[width] duration-200 ease-out-quart",
-        collapsed ? "w-14" : "w-60",
+        "flex shrink-0 flex-col overflow-hidden border-r border-line bg-surface",
+        "transition-[width] duration-200 ease-out-quart",
       )}
-      // A landmark, so screen-reader users can jump to navigation directly.
+      style={{ width: expanded ? "var(--sidebar-w)" : "var(--sidebar-w-collapsed)" }}
+      // A landmark, so screen-reader users can jump straight to navigation.
       aria-label="Main"
     >
-      <div className="p-2">
+      <div className="border-b border-line p-3 pb-2.5">
         <OrgSwitcher collapsed={collapsed} />
       </div>
 
-      <nav className="flex-1 space-y-0.5 px-2">
-        {NAV.map((item) => {
-          const href = `/app/${orgSlug}/${item.href}`;
-          // startsWith, so a nested route (a project detail page) keeps its section
-          // lit rather than leaving the sidebar looking like nothing is selected.
-          const active = pathname === href || pathname.startsWith(`${href}/`);
-          const Icon = item.icon;
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-4">
+        {NAV_GROUPS.map((group, groupIndex) => (
+          <div key={group.title ?? `group-${groupIndex}`} className="mt-2.5 first:mt-0">
+            {group.title && expanded ? (
+              <div className="px-2 pt-1 pb-1.5 text-2xs font-semibold tracking-[0.06em] text-ink-3 uppercase">
+                {group.title}
+              </div>
+            ) : null}
 
-          const link = (
-            <Link
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
-                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                active
-                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
-                collapsed && "justify-center px-0",
-              )}
-            >
-              <Icon className="size-4 shrink-0" aria-hidden />
-              {!collapsed ? <span className="truncate">{item.label}</span> : null}
-              {collapsed ? <span className="sr-only">{item.label}</span> : null}
-            </Link>
-          );
+            {group.items.map((item) => {
+              const href = `/app/${orgSlug}/${item.href}`;
+              // Prefix match, so a nested route (a project detail page) keeps its
+              // section lit instead of leaving the sidebar looking unselected.
+              const active = pathname === href || pathname.startsWith(`${href}/`);
+              const Icon = item.icon;
 
-          // Collapsed labels are invisible, so the tooltip is the only way to tell
-          // the icons apart.
-          return collapsed ? (
-            <Tooltip key={item.href}>
-              <TooltipTrigger asChild>{link}</TooltipTrigger>
-              <TooltipContent side="right">{item.label}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <div key={item.href}>{link}</div>
-          );
-        })}
-      </nav>
+              const link = (
+                <Link
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  title={item.label}
+                  className={cn(
+                    "my-px flex items-center gap-2.5 rounded-md text-base transition-colors",
+                    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                    expanded ? "px-2.5 py-[7px]" : "justify-center py-2",
+                    active
+                      ? "bg-accent-soft font-semibold text-accent-text"
+                      : "font-medium text-ink-2 hover:bg-surface-3 hover:text-ink",
+                  )}
+                >
+                  <Icon className="size-[18px] shrink-0" strokeWidth={1.8} aria-hidden />
+                  {expanded ? <span className="flex-1 truncate">{item.label}</span> : null}
+                  {expanded && item.badge ? (
+                    <span className="min-w-[18px] rounded-full bg-surface-3 px-1.5 py-px text-center text-2xs font-semibold text-ink-2">
+                      {item.badge}
+                    </span>
+                  ) : null}
+                  {!expanded ? <span className="sr-only">{item.label}</span> : null}
+                </Link>
+              );
 
-      <div className="space-y-0.5 border-t p-2">
-        <Link
-          href={`/app/${orgSlug}/settings`}
-          className={cn(
-            "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground",
-            "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          <Settings className="size-4 shrink-0" aria-hidden />
-          {!collapsed ? <span>Settings</span> : <span className="sr-only">Settings</span>}
-        </Link>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggle}
-          className={cn("w-full text-muted-foreground", collapsed ? "px-0" : "justify-start")}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="size-4" aria-hidden />
-          ) : (
-            <>
-              <PanelLeftClose className="size-4" aria-hidden />
-              <span>Collapse</span>
-            </>
-          )}
-        </Button>
+              // Collapsed labels are invisible, so a tooltip is the only way to tell
+              // the icons apart.
+              return collapsed ? (
+                <Tooltip key={item.href}>
+                  <TooltipTrigger asChild>{link}</TooltipTrigger>
+                  <TooltipContent side="right">{item.label}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <div key={item.href}>{link}</div>
+              );
+            })}
+          </div>
+        ))}
       </div>
+
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex items-center gap-2.5 border-t border-line px-3 py-2.5 text-sm text-ink-3 transition-colors hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-expanded={expanded}
+      >
+        <ChevronLeft
+          className={cn("size-4 shrink-0 transition-transform duration-200", collapsed && "rotate-180")}
+          aria-hidden
+        />
+        {expanded ? <span>Collapse</span> : null}
+      </button>
     </aside>
   );
 }
