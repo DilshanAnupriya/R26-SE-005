@@ -269,9 +269,24 @@
   --radius-xl: 12px;
   --radius-2xl: 16px;
 
-  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-  --ease-in-quart: cubic-bezier(0.5, 0, 0.75, 0);
+  /*
+   * Motion curves. The CSS built-ins are too weak to read as intentional — these
+   * are the stronger variants, and they are the only ones anything should use.
+   *
+   * There is deliberately no ease-in here. It starts slow, which delays movement at
+   * exactly the moment the user is watching most closely, so a 200ms ease-in dropdown
+   * *feels* slower than a 200ms ease-out one.
+   */
+  --ease-out-quart: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-quart: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Durations. Anything above 300ms in the app is a defect: the user is working. */
+  --duration-press: 140ms;
+  --duration-tooltip: 150ms;
+  --duration-menu: 180ms;
+  --duration-overlay: 240ms;
 }
 
 @layer base {
@@ -291,6 +306,52 @@
 
   html {
     @apply font-sans;
+  }
+
+  /*
+   * Press feedback on everything pressable. A control that does not move under the
+   * finger reads as not having registered the press — this is the single cheapest
+   * thing that makes an interface feel like it is listening.
+   *
+   * Named properties, never `transition: all`: `all` animates whatever else happens
+   * to change, including layout properties that then run on the main thread.
+   */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[data-pressable] {
+    transition: transform var(--duration-press) var(--ease-out-quart);
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  a[data-pressable]:active {
+    /* Subtle on purpose. Below ~0.95 it reads as the button shrinking, not depressing. */
+    transform: scale(0.97);
+  }
+
+  /*
+   * Hover effects only where hover is real. A touch device fires hover on tap and
+   * then leaves it stuck on, so a card can stay lit after the user has moved on.
+   */
+  @media not ((hover: hover) and (pointer: fine)) {
+    *:hover {
+      transition: none;
+    }
+  }
+
+  /*
+   * Radix overlays: scale from their trigger, not from the centre of the screen.
+   * A menu that grows out of the button that opened it explains where it came from;
+   * one that grows from the middle has to be re-located by the eye.
+   *
+   * Modals are exempt by design — they are not anchored to a trigger, so centre is
+   * correct for them.
+   */
+  [data-slot="dropdown-menu-content"],
+  [data-slot="popover-content"],
+  [data-slot="select-content"],
+  [data-slot="tooltip-content"] {
+    transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-popover-content-transform-origin, var(--radix-select-content-transform-origin, var(--radix-tooltip-content-transform-origin))));
   }
 
   /* The design's scrollbar: a thumb inset from its track, not the browser default. */
@@ -342,5 +403,49 @@
 }
 
 @utility animate-fade-up {
-  animation: fadeUp 0.3s ease;
+  animation: fadeUp 0.28s var(--ease-out-quart) both;
+}
+
+/*
+ * Staggered entry for a row of cards. Decorative, so it never gates interaction —
+ * the elements are clickable from the first frame.
+ *
+ * Delays are deliberately short: past ~80ms apart the cascade stops reading as one
+ * group arriving and starts reading as the page being slow to load.
+ */
+@utility stagger-children {
+  & > * {
+    animation: fadeUp 0.28s var(--ease-out-quart) both;
+  }
+  & > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  & > *:nth-child(2) {
+    animation-delay: 40ms;
+  }
+  & > *:nth-child(3) {
+    animation-delay: 80ms;
+  }
+  & > *:nth-child(4) {
+    animation-delay: 120ms;
+  }
+  & > *:nth-child(n + 5) {
+    animation-delay: 160ms;
+  }
+}
+
+/*
+ * Reduced motion keeps the fade and drops the movement. "Reduced" is not "none":
+ * an element that simply appears with no transition at all is the jarring change
+ * the animation existed to prevent.
+ */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }

@@ -74,6 +74,10 @@ export function CommandPalette({ orgSlug }: { orgSlug: string }) {
 
   return (
     <CommandDialog
+      // No open/close animation, deliberately. This is opened by keyboard dozens of
+      // times a day, and at that frequency any transition reads as lag between the
+      // keypress and the result. Raycast ships it this way for the same reason.
+      className="!duration-0 !animate-none data-[state=closed]:!animate-none data-[state=open]:!animate-none"
       open={open}
       onOpenChange={setOpen}
       title="Command palette"
