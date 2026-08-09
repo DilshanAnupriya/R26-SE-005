@@ -67,17 +67,27 @@ export function SectionLabel({ children, className }: { children: React.ReactNod
   );
 }
 
-/** Thin progress bar, used for capacity, sprint points and project progress. */
+/**
+ * Thin progress bar, used for capacity, sprint points and project progress.
+ *
+ * <p>The {@code progressbar} role is only claimed when there is a {@code label} to
+ * go with it. An unnamed one announces as "38 percent" of nothing, which is worse
+ * than silence — and where the figure already sits in text beside the bar, silence
+ * is the right answer.</p>
+ */
 export function ProgressBar({
   value,
   colour = "var(--accent)",
   height = 8,
+  label,
   className,
 }: {
   /** 0–100. Clamped, because a sprint can exceed its capacity. */
   value: number;
   colour?: string;
   height?: number;
+  /** What the bar measures. Omit when the number is already stated next to it. */
+  label?: string;
   className?: string;
 }) {
   const clamped = Math.max(0, Math.min(100, value));
@@ -85,10 +95,12 @@ export function ProgressBar({
     <div
       className={cn("overflow-hidden rounded-full bg-surface-3", className)}
       style={{ height }}
-      role="progressbar"
-      aria-valuenow={Math.round(clamped)}
-      aria-valuemin={0}
-      aria-valuemax={100}
+      role={label ? "progressbar" : undefined}
+      aria-label={label}
+      aria-valuenow={label ? Math.round(clamped) : undefined}
+      aria-valuemin={label ? 0 : undefined}
+      aria-valuemax={label ? 100 : undefined}
+      aria-hidden={label ? undefined : true}
     >
       <div
         className="h-full rounded-full transition-[width] duration-300 ease-out-quart"

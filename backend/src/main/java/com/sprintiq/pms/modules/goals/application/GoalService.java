@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -322,6 +323,49 @@ public class GoalService {
     public void unlinkItem(UUID keyResultId, EntityType entityType, UUID entityId) {
         requireKeyResult(keyResultId);
         linkRepository.deleteByKeyResultIdAndEntityTypeAndEntityId(keyResultId, entityType, entityId);
+    }
+
+    // ----------------------------------------------------------------- scheduled
+
+    /**
+     * Re-paces every open goal against the calendar, shortly after midnight.
+     *
+     * <p>Status is a function of elapsed time as well as of the numbers, so a goal
+     * drifts behind pace with nobody touching it. Without this it would keep whatever
+     * verdict it held at its last check-in — which is how an OKR board comes to show
+     * a wall of green in the last week of a quarter.</p>
+     *
+     * <p>Runs with no tenant context, so it sees every organization. That is the
+     * point: the calendar does not stop for tenants nobody logged into.</p>
+     */
+    @Scheduled(cron = "0 20 2 * * *")
+    @Transactional
+    public void repaceOpenGoals() {
+        List<Goal> open = goalRepository.findByStatusInAndDeletedAtIsNull(
+                EnumSet.of(GoalStatus.ON_TRACK, GoalStatus.AT_RISK, GoalStatus.OFF_TRACK));
+        if (open.isEmpty()) {
+            return;
+        }
+
+        Map<UUID, List<KeyResult>> resultsByGoal = keyResultRepository
+                .findByGoalIdInAndDeletedAtIsNull(open.stream().map(Goal::getId).toList()).stream()
+                .collect(java.util.stream.Collectors.groupingBy(KeyResult::getGoalId));
+
+        LocalDate today = LocalDate.now();
+        List<Goal> moved = new ArrayList<>();
+        for (Goal goal : open) {
+            List<KeyResult> results = resultsByGoal.getOrDefault(goal.getId(), List.of());
+            GoalStatus next = goal.statusOn(results, today);
+            if (next != goal.getStatus()) {
+                goal.setStatus(next);
+                moved.add(goal);
+            }
+        }
+
+        if (!moved.isEmpty()) {
+            goalRepository.saveAll(moved);
+            log.info("Re-paced {} of {} open goals against the calendar", moved.size(), open.size());
+        }
     }
 
     // ------------------------------------------------------------------ internals

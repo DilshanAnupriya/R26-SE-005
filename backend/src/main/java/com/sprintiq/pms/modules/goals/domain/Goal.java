@@ -97,41 +97,55 @@ public class Goal extends TenantAwareEntity implements SoftDeletable {
 
     /** Overload taking the date, so the pacing logic is testable without a clock. */
     public void recalculateFrom(List<KeyResult> keyResults, LocalDate today) {
+        progressPct = progressOf(keyResults);
         if (keyResults.isEmpty()) {
-            progressPct = BigDecimal.ZERO;
             return;
         }
+        status = statusOn(keyResults, today);
+    }
 
-        BigDecimal total = keyResults.stream()
+    /** The unweighted mean of the key results' progress, 0–100. */
+    public static BigDecimal progressOf(List<KeyResult> keyResults) {
+        if (keyResults.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return keyResults.stream()
                 .map(KeyResult::progressPct)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        progressPct = total.divide(BigDecimal.valueOf(keyResults.size()), 2, RoundingMode.HALF_UP);
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(keyResults.size()), 2, RoundingMode.HALF_UP);
+    }
 
-        if (status.isClosed() || status == GoalStatus.DRAFT) {
-            return;
+    /**
+     * What this goal's status would be on {@code today}, without changing it.
+     *
+     * <p>Pure, because status is a function of the calendar as much as of the numbers:
+     * a goal that nobody touches drifts behind pace on its own. Something has to be
+     * able to ask "what is this today?" without performing a write.</p>
+     */
+    public GoalStatus statusOn(List<KeyResult> keyResults, LocalDate today) {
+        if (keyResults.isEmpty() || status.isClosed() || status == GoalStatus.DRAFT) {
+            return status;
         }
-
         if (keyResults.stream().allMatch(KeyResult::isAchieved)) {
-            status = GoalStatus.ACHIEVED;
-            return;
+            return GoalStatus.ACHIEVED;
         }
 
+        BigDecimal progress = progressOf(keyResults);
         BigDecimal expected = expectedProgressPct(today);
         if (expected == null) {
-            status = progressPct.compareTo(BigDecimal.ZERO) == 0
+            return progress.compareTo(BigDecimal.ZERO) == 0
                     ? GoalStatus.AT_RISK
                     : GoalStatus.ON_TRACK;
-            return;
         }
 
-        BigDecimal shortfall = expected.subtract(progressPct);
+        BigDecimal shortfall = expected.subtract(progress);
         if (shortfall.compareTo(BigDecimal.valueOf(35)) > 0) {
-            status = GoalStatus.OFF_TRACK;
-        } else if (shortfall.compareTo(BigDecimal.valueOf(15)) > 0) {
-            status = GoalStatus.AT_RISK;
-        } else {
-            status = GoalStatus.ON_TRACK;
+            return GoalStatus.OFF_TRACK;
         }
+        if (shortfall.compareTo(BigDecimal.valueOf(15)) > 0) {
+            return GoalStatus.AT_RISK;
+        }
+        return GoalStatus.ON_TRACK;
     }
 
     /**

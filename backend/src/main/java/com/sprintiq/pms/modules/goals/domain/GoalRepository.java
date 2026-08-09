@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,6 +16,15 @@ public interface GoalRepository extends JpaRepository<Goal, UUID> {
     Optional<Goal> findByIdAndDeletedAtIsNull(UUID id);
 
     List<Goal> findByParentGoalIdAndDeletedAtIsNull(UUID parentGoalId);
+
+    /**
+     * Goals in the given states, across every organization.
+     *
+     * <p>Used only by the nightly re-pacing sweep, which runs with no tenant context
+     * and therefore outside the Hibernate filter — deliberately, because it has to
+     * see every tenant's goals. Nothing serving a request may call this.</p>
+     */
+    List<Goal> findByStatusInAndDeletedAtIsNull(Collection<GoalStatus> statuses);
 
     @Query("""
             SELECT g FROM Goal g
