@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { Moon, Plus, Search, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { BrandLockup } from "@/components/design/brand";
 import { NotificationBell } from "./notification-bell";
 import { UserMenu } from "./user-menu";
 import { WorkTimer } from "./work-timer";
@@ -23,15 +25,21 @@ export function Topbar({ orgSlug, crumb }: { orgSlug: string; crumb?: string }) 
 
   return (
     <header className="relative z-20 flex h-[52px] flex-none items-center gap-3.5 border-b border-line bg-[color-mix(in_srgb,var(--surface)_82%,transparent)] px-4 backdrop-blur-xl">
-      <div className="flex max-w-60 min-w-0 flex-none items-center gap-[7px]">
-        <span className="truncate text-base text-ink-3">{orgName}</span>
+      {/* Product identity lives here; the company lives in the sidebar. Keeping them
+          on separate surfaces means neither has to be truncated to fit the other,
+          and a workspace switch never looks like the product changed. */}
+      <Link
+        href={`/app/${orgSlug}/dashboard`}
+        className="flex max-w-60 min-w-0 flex-none items-center gap-[7px] rounded-md transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <BrandLockup />
         {crumb ? (
           <>
             <span className="text-ink-3">/</span>
             <span className="truncate text-base font-semibold">{crumb}</span>
           </>
         ) : null}
-      </div>
+      </Link>
 
       <button
         type="button"

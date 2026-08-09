@@ -51,7 +51,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stagger-children mb-4 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Active projects"
           value={projects.isLoading ? null : String(items.filter((p) => p.status === "ACTIVE").length)}

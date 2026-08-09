@@ -16,6 +16,12 @@ import { useSession } from "@/components/session-provider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+/** The org's plan tier, from the caller's role. Falls back to a neutral word. */
+function planLabel(roleCode?: string | null): string {
+  if (!roleCode) return "Workspace";
+  return roleCode.charAt(0) + roleCode.slice(1).toLowerCase();
+}
+
 /** First letters of the organization name, for the avatar fallback. */
 function initials(name: string): string {
   return name
@@ -61,16 +67,24 @@ export function OrgSwitcher({ collapsed }: { collapsed: boolean }) {
         )}
         aria-label={`Current organization: ${active.name}. Switch organization`}
       >
-        <Avatar className="size-6 rounded-md">
+        <Avatar className="size-[30px] rounded-lg">
           {active.logoUrl ? <AvatarImage src={active.logoUrl} alt="" /> : null}
-          <AvatarFallback className="rounded-md bg-primary text-2xs text-primary-foreground">
+          <AvatarFallback className="rounded-lg bg-[linear-gradient(135deg,var(--accent),var(--violet))] text-sm font-bold text-white">
             {initials(active.name)}
           </AvatarFallback>
         </Avatar>
         {!collapsed ? (
           <>
-            <span className="flex-1 truncate text-sm font-medium">{active.name}</span>
-            <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            {/* The design's two-line company block: name over plan and headcount.
+                leading-[1.15] because two 11–13px lines at the default 1.45 drift
+                apart enough to read as separate items rather than one identity. */}
+            <span className="min-w-0 flex-1 leading-[1.15]">
+              <span className="block truncate text-base font-semibold">{active.name}</span>
+              <span className="block truncate text-xs text-ink-3">
+                {planLabel(active.roleCode)} · {organizations.length === 1 ? "1 workspace" : `${organizations.length} workspaces`}
+              </span>
+            </span>
+            <ChevronsUpDown className="size-4 shrink-0 text-ink-3" aria-hidden />
           </>
         ) : null}
       </DropdownMenuTrigger>
