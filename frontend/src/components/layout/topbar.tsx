@@ -3,25 +3,20 @@
 import Link from "next/link";
 import { Moon, Plus, Search, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 import { BrandLockup } from "@/components/design/brand";
+import { useHydrated } from "@/lib/client-state";
 import { NotificationBell } from "./notification-bell";
 import { UserMenu } from "./user-menu";
 import { WorkTimer } from "./work-timer";
 import { useUiStore } from "@/stores/ui-store";
-import { useSession } from "@/components/session-provider";
 
 export function Topbar({ orgSlug, crumb }: { orgSlug: string; crumb?: string }) {
   const openPalette = useUiStore((state) => state.setCommandPaletteOpen);
-  const { user } = useSession();
   const { resolvedTheme, setTheme } = useTheme();
 
   // The theme is unknown until the provider has read the stored preference, and
   // rendering the wrong icon first produces a visible flip on every load.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const orgName = user?.activeOrganizationName ?? "Workspace";
+  const mounted = useHydrated();
 
   return (
     <header className="relative z-20 flex h-[52px] flex-none items-center gap-3.5 border-b border-line bg-[color-mix(in_srgb,var(--surface)_82%,transparent)] px-4 backdrop-blur-xl">

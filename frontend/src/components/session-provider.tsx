@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ApiClient } from "@/lib/api/client";
 import { clientSessionSchema, type AuthenticatedUser } from "@/lib/api/schemas";
 import { getTokenStore } from "@/lib/api/token-store";
+import { getActiveOrganization, setActiveOrganization } from "@/lib/api/org-context";
 import { env } from "@/lib/env";
 
 type SessionStatus = "loading" | "authenticated" | "anonymous";
@@ -53,11 +54,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [activeOrganizationId, setActiveOrganizationId] = useState<string | null>(null);
 
-  // Read by the API client's header builder on every request, so it must be current
-  // without forcing the client to be rebuilt whenever the org changes.
-  const organizationRef = useRef<string | null>(null);
-  organizationRef.current = activeOrganizationId;
-
   const tokenStore = useMemo(() => getTokenStore(), []);
 
   const api = useMemo(
@@ -65,19 +61,35 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       new ApiClient({
         baseUrl: env.NEXT_PUBLIC_API_URL,
         tokenStore,
-        getOrganizationId: () => organizationRef.current,
+        // A module-level getter rather than a closure over a ref: the client is built
+        // during render, and anything it reads from React's own storage has to be read
+        // at request time instead — which is what this is.
+        getOrganizationId: getActiveOrganization,
       }),
     [tokenStore],
   );
+
+  /**
+   * Changes the active organization, header first.
+   *
+   * <p>Synchronous rather than through an effect: the shell resolves the org from the
+   * URL slug and the queries for that org fire immediately afterwards. An effect would
+   * order the header update against those refetches by luck, and losing the race sends
+   * the first page of requests to the previous tenant.</p>
+   */
+  const applyOrganization = useCallback((organizationId: string | null) => {
+    setActiveOrganization(organizationId);
+    setActiveOrganizationId(organizationId);
+  }, []);
 
   const adopt = useCallback(
     (session: { accessToken: string; user: AuthenticatedUser }) => {
       tokenStore.setAccessToken(session.accessToken);
       setUser(session.user);
-      setActiveOrganizationId(session.user.activeOrganizationId ?? null);
+      applyOrganization(session.user.activeOrganizationId ?? null);
       setStatus("authenticated");
     },
-    [tokenStore],
+    [tokenStore, applyOrganization],
   );
 
   const signOut = useCallback(async () => {
@@ -85,14 +97,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     // signed out of this browser. The cookie is cleared by the route regardless.
     tokenStore.clear();
     setUser(null);
-    setActiveOrganizationId(null);
+    applyOrganization(null);
     setStatus("anonymous");
     try {
       await callBff("/api/auth/logout");
     } finally {
       router.replace("/login");
     }
-  }, [tokenStore, router]);
+  }, [tokenStore, router, applyOrganization]);
 
   const switchOrganization = useCallback(
     async (organizationId: string) => {
@@ -129,11 +141,26 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
    * Boot: exchange the cookie for an access token. This is what allows memory-only
    * token storage to survive a hard refresh — the browser kept nothing, but the
    * httpOnly cookie is still there.
+   *
+   * <p>Latched to one exchange per provider instance. The exchange rotates the refresh
+   * token, and the backend treats a rotated token presented twice as theft — it revokes
+   * the whole family and signs the user out of every device. StrictMode's double-invoke
+   * in development fires this effect twice with the same cookie, which is exactly that
+   * shape; the `cancelled` flag below only discards the second <i>result</i>, long after
+   * the second request has already gone out.</p>
    */
+  const bootRef = useRef<Promise<unknown> | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
-    callBff("/api/auth/session")
+    // The promise is latched, not the effect. Latching the effect instead would let
+    // StrictMode's cleanup cancel the one exchange that was allowed to start, leaving
+    // the app stuck on "loading" — the second run would find the guard closed and
+    // attach no handlers to anything.
+    bootRef.current ??= callBff("/api/auth/session");
+
+    bootRef.current
       .then((payload) => {
         if (cancelled) return;
         adopt(clientSessionSchema.parse(payload));
@@ -141,7 +168,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {
         if (cancelled) return;
         // No cookie, or the backend rejected it. Anonymous is the correct answer,
-        // and middleware has already redirected anyone who needed a session.
+        // and the proxy has already redirected anyone who needed a session.
         setStatus("anonymous");
       });
 
@@ -159,10 +186,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       signOut,
       switchOrganization,
       activeOrganizationId,
-      setActiveOrganizationId,
+      setActiveOrganizationId: applyOrganization,
       hasPermission: (permission: string) => user?.permissions.includes(permission) ?? false,
     }),
-    [status, user, api, adopt, signOut, switchOrganization, activeOrganizationId],
+    [status, user, api, adopt, signOut, switchOrganization, activeOrganizationId, applyOrganization],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
