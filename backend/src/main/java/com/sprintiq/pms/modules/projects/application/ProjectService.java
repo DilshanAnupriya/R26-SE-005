@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * The project aggregate: lifecycle, membership, the overview roll-up and health.
@@ -74,6 +75,29 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public ProjectResponse get(UUID projectId) {
         return toResponse(require(projectId));
+    }
+
+    /**
+     * Key and name for a batch of projects, for other modules that need to label one.
+     *
+     * <p>Published so a roadmap lane or a calendar row never needs
+     * {@code ProjectRepository}. Ids that do not resolve are simply absent — a link to
+     * a deleted project should leave a lane unlabelled, not fail the page.</p>
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, ProjectSummary> summariesFor(Collection<UUID> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> distinct = projectIds.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        if (distinct.isEmpty()) {
+            return Map.of();
+        }
+        return projectRepository.findAllById(distinct).stream()
+                .filter(project -> project.getDeletedAt() == null)
+                .collect(Collectors.toMap(Project::getId,
+                        project -> new ProjectSummary(project.getId(), project.getProjectKey(),
+                                project.getName())));
     }
 
     /**

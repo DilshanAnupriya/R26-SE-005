@@ -103,6 +103,30 @@ class LayeringRulesTest {
         rule.check(classes);
     }
 
+    /**
+     * The roadmap must not import the delivery modules.
+     *
+     * <p>It reads progress through {@code InitiativeWorkSource}, which the backlog
+     * implements. Without this rule the port quietly becomes optional — injecting
+     * {@code StoryRepository} is easier than adding a method to an interface, and after
+     * two of those the roadmap is welded to the backlog schema and a link to a sprint
+     * or a task needs a migration rather than a class.</p>
+     *
+     * <p>The projects and users modules are deliberately not on this list: their
+     * application services are published for exactly this use, and every module
+     * resolves a name or an avatar through them.</p>
+     */
+    @Test
+    @DisplayName("the roadmap reaches delivery work only through its own port")
+    void roadmapDependsOnPortsOnly() {
+        ArchRule rule = noClasses().that().resideInAPackage("..modules.roadmap..")
+                .should().dependOnClassesThat()
+                .resideInAnyPackage("..modules.backlog..", "..modules.sprints..", "..modules.tasks..")
+                .because("progress comes through InitiativeWorkSource, so linking a new kind of "
+                        + "work is a class rather than a schema change");
+        rule.check(classes);
+    }
+
     @Test
     @DisplayName("services are annotated and transactional boundaries live in the application layer")
     void servicesLiveInApplicationLayer() {

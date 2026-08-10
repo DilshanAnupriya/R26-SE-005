@@ -119,6 +119,28 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
             """)
     BigDecimal sumCompletedPoints(@Param("projectId") UUID projectId);
 
+    /**
+     * Story counts and points per epic, for a batch of epics in one query.
+     *
+     * <p>Grouped rather than fetched-and-counted because the caller is the roadmap,
+     * which asks about every epic on the page at once. The per-epic form of this
+     * question is how a roadmap of thirty lanes becomes a hundred round trips.</p>
+     *
+     * @return rows of (epicId, totalStories, doneStories, totalPoints, donePoints)
+     */
+    @Query("""
+            SELECT s.epicId,
+                   COUNT(s),
+                   COALESCE(SUM(CASE WHEN s.status = 'DONE' THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(COALESCE(s.storyPoints, 0)), 0),
+                   COALESCE(SUM(CASE WHEN s.status = 'DONE'
+                                     THEN COALESCE(s.storyPoints, 0) ELSE 0 END), 0)
+            FROM Story s
+            WHERE s.epicId IN :epicIds AND s.deletedAt IS NULL
+            GROUP BY s.epicId
+            """)
+    List<Object[]> rollUpByEpic(@Param("epicIds") Collection<UUID> epicIds);
+
     @Query("""
             SELECT COUNT(s) FROM Story s
             WHERE s.projectId = :projectId AND s.deletedAt IS NULL AND s.blocked = TRUE
