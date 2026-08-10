@@ -66,7 +66,14 @@ public class RoadmapService {
     @Transactional(readOnly = true)
     public RoadmapResponse roadmap(UUID projectId, InitiativeStatus status,
                                    LocalDate from, LocalDate to) {
-        List<Initiative> initiatives = initiativeRepository.findForRoadmap(projectId, status, from, to);
+        // The window is applied here rather than in the query — see the note on
+        // findForRoadmap. An undated initiative is kept whatever the window: it has not
+        // been scheduled out of the range, it has not been scheduled at all.
+        List<Initiative> initiatives = initiativeRepository.findForRoadmap(projectId, status).stream()
+                .filter(initiative -> initiative.getTargetDate() == null
+                        || ((from == null || !initiative.getTargetDate().isBefore(from))
+                            && (to == null || !initiative.getTargetDate().isAfter(to))))
+                .toList();
         if (initiatives.isEmpty()) {
             return new RoadmapResponse(List.of(), List.of(), 0, 0, 0);
         }

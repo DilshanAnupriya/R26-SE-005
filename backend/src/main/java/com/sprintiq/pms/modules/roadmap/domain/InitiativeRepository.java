@@ -15,25 +15,27 @@ public interface InitiativeRepository extends JpaRepository<Initiative, UUID> {
     Optional<Initiative> findByIdAndDeletedAtIsNull(UUID id);
 
     /**
-     * The whole roadmap for a window, ordered the way it is drawn.
+     * The whole roadmap, ordered the way it is drawn.
      *
      * <p>Unpaged deliberately. A roadmap is a picture of everything in flight — showing
      * page one of it would be worse than useless, because the reader would draw
      * conclusions from an arbitrary subset.</p>
+     *
+     * <p>The date window is applied by the caller rather than here. An optional date
+     * parameter written as {@code :from IS NULL OR …} gives Postgres a bare parameter
+     * with no type context, and it refuses the whole statement with "could not
+     * determine data type". Since this query is unpaged anyway, filtering a roadmap's
+     * worth of rows in Java costs nothing and cannot be got wrong.</p>
      */
     @Query("""
             SELECT i FROM Initiative i
             WHERE i.deletedAt IS NULL
               AND (:projectId IS NULL OR i.projectId = :projectId)
               AND (:status IS NULL OR i.status = :status)
-              AND (:from IS NULL OR i.targetDate IS NULL OR i.targetDate >= :from)
-              AND (:to IS NULL OR i.targetDate IS NULL OR i.targetDate <= :to)
             ORDER BY i.position ASC, i.targetDate ASC NULLS LAST, i.createdAt ASC
             """)
     List<Initiative> findForRoadmap(@Param("projectId") UUID projectId,
-                                    @Param("status") InitiativeStatus status,
-                                    @Param("from") LocalDate from,
-                                    @Param("to") LocalDate to);
+                                    @Param("status") InitiativeStatus status);
 
     /**
      * Open initiatives across every organization, for the nightly re-pacing sweep.
