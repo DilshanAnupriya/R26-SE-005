@@ -1,6 +1,6 @@
 # Delivery status
 
-**As of 10 August 2026** · branch `feat/phase-1b-frontend-shell` · head `c21bc4c`
+**As of 10 August 2026** · branch `feat/phase-1b-frontend-shell` · head `954901e`
 
 A factual account of what exists in the repository, what is partially there, and what has
 not been started. Written to be checkable: every claim below corresponds to code or a test
@@ -12,11 +12,10 @@ you can run, and anything unverified is named as such.
 
 | | |
 |---|---|
-| **Backend** | 17 modules, 27 controllers, 9 Flyway migrations. `mvn verify` green: **64 unit + 59 integration tests**. |
-| **Frontend** | 26 routes, 13 feature slices, 10 BFF auth routes. **129 unit tests + 11 Playwright specs** green. |
-| **Wired end to end** | 15 of 20 app screens call real endpoints. |
-| **Not backed by anything** | 5 screens render an honest "not connected yet" panel: Roadmap, Timeline, Calendar, Documents, Automation. |
-| **Known debt** | `pnpm lint` reports 6 errors / 3 warnings (all React Compiler findings, listed below). |
+| **Backend** | 19 modules, 31 controllers, 11 Flyway migrations. `mvn verify` green: **83 unit + 82 integration tests**. |
+| **Frontend** | 26 routes, 17 feature slices, 10 BFF auth routes. **167 unit tests + 11 Playwright specs** green. `pnpm lint` clean. |
+| **Wired end to end** | 19 of 20 app screens call real endpoints. |
+| **Not backed by anything** | 1 screen: Automation. |
 
 Run the gates yourself:
 
@@ -25,7 +24,7 @@ cd backend && ./mvnw verify
 ```
 
 ```bash
-cd frontend && pnpm test && pnpm typecheck && pnpm e2e
+cd frontend && pnpm test && pnpm typecheck && pnpm lint && pnpm e2e
 ```
 
 ---
@@ -61,10 +60,12 @@ Integration tests run against real Postgres via Testcontainers.
 | `backlog` | Epics, stories, LexoRank ranking, dependency graph with cycle rejection |
 | `sprints` | Commitment freezing, scope creep/reduction, close-out routing, daily `sprint_metrics` snapshots |
 | `tasks` | Tasks, subtasks, watchers, time tracking with a persisted timer, boards |
-| `goals` | Objectives, key results, check-ins, links to work items — **new** |
+| `goals` | Objectives, key results, check-ins, links to work items |
+| `roadmap` | Initiatives, the epics they are made of, quarter lanes |
+| `documents` | Folder/page tree, markdown bodies, full version history |
 | `ai` | `AiModelClient` port, deterministic mock, prediction cache, feedback loop |
 | `comments`, `notifications`, `files` | Mentions, personal inbox, attachments |
-| `analytics` | Velocity, burndown, burn-up, CFD, cycle/lead time percentiles, workload, cost, risk |
+| `analytics` | Velocity, burndown, burn-up, CFD, cycle/lead time percentiles, workload, cost, risk — and the Timeline and Calendar read models |
 | `activity`, `audit`, `admin`, `settings` | Activity feed, audit trail, feature flags, model registry, recycle bin |
 
 ### Decisions worth knowing
@@ -117,13 +118,17 @@ Zustand · Zod · GSAP on the marketing page only.
 | AI Assistant | Wired |
 | Notifications | Wired |
 | Settings | Wired — admin, AI model registry |
-| Roadmap, Timeline, Calendar, Documents, Automation | **Placeholder** — nothing in the database backs them |
+| **Roadmap** | Wired — initiatives |
+| **Timeline** | Wired — assembled from epics, sprints and milestones |
+| **Calendar** | Wired — everything already dated |
+| **Documents** | Wired — tree and version history |
+| Automation | **Placeholder** — nothing in the database backs it |
 | Login, register, forgot/reset password, verify email | Wired |
 | Marketing landing page | Built |
 
-The five placeholders render a `NotConnectedYet` panel that says so plainly rather than
-showing plausible numbers. A mockup figure that reads as real is worse than an obvious
-gap — someone will quote it in a meeting.
+The one remaining placeholder renders a `NotConnectedYet` panel that says so plainly
+rather than showing plausible numbers. A mockup figure that reads as real is worse than an
+obvious gap — someone will quote it in a meeting.
 
 ### Decisions worth knowing
 
@@ -149,64 +154,62 @@ gap — someone will quote it in a meeting.
 
 ---
 
-## Recently completed: Goals / OKRs
+## Recently completed
 
-The most recent capability, done end to end rather than as another placeholder.
+Five slices since the last revision of this document, each verified against the running
+app rather than only against tests.
 
-**Backend** (`8819ca3`) — migration `V9`, the `goals` module (objectives, key results,
-check-ins, links to epics and stories), `goal:read` / `goal:manage` permissions.
+**Goals / OKRs** — objectives, key results, check-ins, calendar-paced status. Driving it
+found that status was frozen at the last write: it is a function of elapsed time as much
+as of the numbers, so a goal nobody checked into kept whatever verdict it held months ago.
+`Goal.statusOn` is pure now and a nightly sweep re-paces every open goal.
 
-**Frontend** (`c21bc4c`) — summary header, cycle and status filters, objectives with their
-key results visible rather than behind a disclosure, a check-in dialog showing recent
-history beside the input, and a create form that takes key results in the same pass. An
-objective saved without numbers has no progress and no status to review.
+**Roadmap** — initiatives with progress read off the linked epics, never typed in; quarter
+lanes derived from target dates so a slip moves the card by itself. The backlog reaches it
+through `InitiativeWorkSource`, which an ArchUnit rule keeps as the only route.
 
-**Three defects found by driving the real app, all fixed:**
+**Timeline** — a Gantt view with no timeline table. Every bar reports where its dates came
+from, and only a genuinely inferred span is drawn as uncertain: a story carrying its
+sprint's window is a commitment somebody made, and dashing it would get it ignored.
 
-1. **Status was frozen at the last write.** Status is a function of elapsed time as much as
-   of the numbers, so a goal nobody checked into kept whatever verdict it held at its last
-   check-in — the exact failure mode the calendar pacing existed to prevent.
-   `Goal.statusOn` is now pure, and a nightly sweep re-paces every open goal.
-   `GoalPacingIT` covers the cross-tenant read, which runs outside the Hibernate filter.
-2. **`ProgressBar` claimed `role="progressbar"` with no accessible name** — everywhere it
-   was used, not only on Goals. It now takes the role only when given a label.
-3. **Key result rows announced as one unpunctuated run** (`Activation rate31%/60%0%`). They
-   now carry an explicit label opening with the visible title, so voice control still
-   matches what is on screen.
+**Calendar** — a month of everything already dated. Building it surfaced a bug in the
+roadmap query: its optional date window was written as `:from IS NULL OR …`, which hands
+Postgres an untyped parameter and gets the whole statement refused. The roadmap screen
+never passed a window, so nothing had run that path. A query parameter no caller exercises
+is a query parameter nobody has run.
+
+**Documents** — a folder/page tree where every title and body change is kept, restores
+append rather than rewind, and deleting a folder takes its contents rather than orphaning
+them somewhere no tree walk reaches.
+
+**Defect fixes** — the session boot exchange fired twice under StrictMode with the same
+refresh cookie, which the backend treats as theft; it is latched now, and the test caught a
+wrong first attempt that left the app stuck on "loading". All nine React Compiler lint
+findings are cleared, including a `ProgressBar` that claimed `role="progressbar"` with no
+accessible name everywhere it was used.
 
 ---
 
 ## What remains
 
-### 1. Screens whose interiors predate the design
+### 1. Automation — the last unbacked screen
+
+The only screen still showing a placeholder. It needs more than a table: a rule is a
+trigger, some conditions and some actions, and something has to fire it when a story
+moves. There is no event bus in the codebase yet, so this is a rule engine plus the
+plumbing to feed it, plus a run log so a rule that silently did nothing is visible.
+
+*Not started. Deliberately left as an honest placeholder rather than a rules screen whose
+rules never fire, which is worse than nothing — it would look finished.*
+
+### 2. Screens whose interiors predate the design
 
 The shell, tokens and typography are adopted, and the design primitives exist in
 `frontend/src/components/design/`. These screens work but still look like the pre-design
-build inside their frames:
-
-- Reports — charts not yet on the design's chart primitives
-- Team — roster layout
-- Settings — panel chrome
-- Project detail — header and tab strip
-- Board cards — item chrome
+build inside their frames: Reports charts, Team roster, Settings panels, project detail
+header, board card chrome.
 
 *Effort: mechanical. No new endpoints, no new decisions.*
-
-### 2. Five screens with no backend at all
-
-Each needs its own schema, module and endpoints before the screen can be wired — the same
-one-capability-at-a-time shape Goals just followed:
-
-| Screen | What it needs |
-|---|---|
-| Roadmap | Initiatives spanning quarters, with the epics that ladder into them |
-| Timeline | A Gantt-shaped read model over existing epics, stories and sprints — possibly derivable from what exists rather than new tables |
-| Calendar | Events, ceremonies, and dated items pulled from several modules |
-| Documents | Document tree, versions, and the permission model that goes with it |
-| Automation | Trigger/condition/action rules and an execution log |
-
-*Effort: substantial. Roadmap and Timeline are the highest value — they are the two most
-people expect a delivery tool to have.*
 
 ### 3. Gaps inside built features
 
@@ -218,19 +221,21 @@ people expect a delivery tool to have.*
 | Attachment upload UI | Endpoints and storage exist; no picker is wired into the item view |
 | Developer-profile metric recomputation | Columns and API exist; the nightly derivation does not, so measured metrics stay at their defaults |
 | Malware scanning of attachments | `scan_status` is honestly `PENDING` on every row |
+| Calendar events | The calendar shows commitments the system already tracks. Meetings and time off are not modelled, and the screen says so |
 
-### 4. Known defects and debt
+### 4. Known debt
 
 | Item | Detail |
 |---|---|
-| **Session boot fires twice** | Under React 19 StrictMode the boot exchange runs twice and both calls present the same refresh cookie. The backend has no grace window on reuse, so this can revoke the whole token family. The refresh path is protected by the single-flight latch; the boot path bypasses it. |
-| `pnpm lint` | 6 errors / 3 warnings, all React Compiler findings: `react-hooks/set-state-in-effect` ×2, `react-hooks/refs` ×2, `react-hooks/incompatible-library` ×2 (react-hook-form's `watch()` cannot be memoized safely), `immutability`, `preserve-manual-memoization`, and one unused variable. Files: `session-provider.tsx`, `work-timer.tsx`, `topbar.tsx`, `charts.tsx`, and two auth forms. |
-| `backend/data/attachments/` | Runtime upload directories accumulating in the working tree, not gitignored |
-| README | Stale — still says Next.js 14, "106 unit tests", "Phases 1–4 complete", and has a duplicated `## Frontend` heading |
+| Async audit writes fail in integration tests | `AuditService.record` is `@Async`, so it runs outside the test's rolled-back transaction and its insert hits a foreign key that has not committed. Tests pass; the logs are full of stack traces that train everyone to ignore them |
+| Roadmap and initiative progress are recomputed nightly | The backlog cannot notify a roadmap card when a story closes without the two modules knowing about each other, so a card is at most a day stale. An event bus — the same one Automation needs — would close this |
+| README | Stale: still says Next.js 14, "106 unit tests", "Phases 1–4 complete", and has a duplicated `## Frontend` heading. Superseded by this document |
 
 ### 5. Phase 5 — not started
 
-Seed/demo data, Dockerfiles for the app images, and a CI workflow.
+Seed/demo data, Dockerfiles for the app images, and a CI workflow. The seeding scripts used
+to exercise these features live in the session scratchpad, not the repository — turning
+them into a committed seeder is part of this.
 
 ---
 
@@ -238,15 +243,18 @@ Seed/demo data, Dockerfiles for the app images, and a CI workflow.
 
 | Suite | Count | Command |
 |---|---|---|
-| Backend unit | 64 | `./mvnw test` |
-| Backend integration (Testcontainers + real Postgres) | 59 | `./mvnw verify` |
-| Frontend unit | 129 | `pnpm test` |
+| Backend unit | 83 | `./mvnw test` |
+| Backend integration (Testcontainers + real Postgres) | 82 | `./mvnw verify` |
+| Frontend unit | 167 | `pnpm test` |
 | Frontend e2e (Playwright, needs the backend up) | 11 | `pnpm e2e` |
 
 Notable coverage: `TenantIsolationIT` (cross-tenant reads), `GoalPacingIT` (the sweep's
-cross-tenant write), `KeyResultProgressTest` (21 cases on the OKR arithmetic in both
-directions), `token-store.test.ts` (18 cases on single-flight refresh, including the
-concurrency defects that would sign a user out everywhere).
+cross-tenant write), `TimelineIT` (every date-source rule), `CalendarIT` (the roadmap
+window that broke), `DocumentsIT` (what counts as a version, and that a restore appends),
+`KeyResultProgressTest` and `InitiativeProgressTest` (the pacing arithmetic in both
+directions), `token-store.test.ts` and `session-provider.test.tsx` (single-flight refresh
+and the boot latch, including the concurrency defects that would sign a user out
+everywhere).
 
 **What the tests do not cover:** colour contrast is checked in Playwright, not in the axe
 unit tests — jsdom has no canvas, so axe silently skips the contrast rule there. Treating
