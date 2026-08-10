@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,9 @@ export function ResetPasswordForm() {
     defaultValues: { token, newPassword: "", confirmPassword: "" },
   });
   const { formError, handleError, clearError } = useSubmitError(form.setError);
-  const newPassword = form.watch("newPassword");
+  // useWatch rather than form.watch: watch() returns a fresh function on every
+  // render, which stops React Compiler memoizing this component at all.
+  const newPassword = useWatch({ control: form.control, name: "newPassword" });
 
   const onSubmit = form.handleSubmit(async (values) => {
     clearError();

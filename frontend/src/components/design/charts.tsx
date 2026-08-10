@@ -179,7 +179,15 @@ export function Donut({
   const circumference = 2 * Math.PI * radius;
   const centre = size / 2;
   const total = segments.reduce((sum, s) => sum + s.value, 0) || 1;
-  let offset = 0;
+
+  // Arc lengths and their start offsets are computed up front rather than by
+  // accumulating inside the map. React makes no promise about how many times a
+  // render runs, and a counter that survives between those runs draws a donut whose
+  // segments have crept round the circle.
+  const lengths = segments.map((segment) => (segment.value / total) * circumference);
+  const offsets = lengths.map((_, index) =>
+    lengths.slice(0, index).reduce((sum, length) => sum + length, 0),
+  );
 
   return (
     <svg width={size} height={size} className={className} role="presentation">
@@ -191,27 +199,22 @@ export function Donut({
         stroke="var(--surface-3)"
         strokeWidth={thickness}
       />
-      {segments.map((segment, index) => {
-        const length = (segment.value / total) * circumference;
-        const element = (
-          <circle
-            key={index}
-            cx={centre}
-            cy={centre}
-            r={radius}
-            fill="none"
-            stroke={segment.color}
-            strokeWidth={thickness}
-            strokeDasharray={`${length} ${circumference - length}`}
-            strokeDashoffset={-offset}
-            // Rotated so the first segment starts at twelve o'clock rather than
-            // three, which is where SVG's zero angle is.
-            transform={`rotate(-90 ${centre} ${centre})`}
-          />
-        );
-        offset += length;
-        return element;
-      })}
+      {segments.map((segment, index) => (
+        <circle
+          key={index}
+          cx={centre}
+          cy={centre}
+          r={radius}
+          fill="none"
+          stroke={segment.color}
+          strokeWidth={thickness}
+          strokeDasharray={`${lengths[index]} ${circumference - lengths[index]}`}
+          strokeDashoffset={-offsets[index]}
+          // Rotated so the first segment starts at twelve o'clock rather than
+          // three, which is where SVG's zero angle is.
+          transform={`rotate(-90 ${centre} ${centre})`}
+        />
+      ))}
     </svg>
   );
 }

@@ -33,3 +33,7 @@ frontend/.next/
 frontend/out/
 frontend/next-env.d.ts
 frontend/.env*.local
+
+# Runtime uploads. The local storage adapter writes here; these are whatever the
+# developer last attached to a test issue, and they have no business in the history.
+backend/data/

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useNowSeconds } from "@/lib/client-state";
 
 /**
  * The header's running time-tracking clock.
@@ -16,19 +16,12 @@ import { useEffect, useState } from "react";
  * follow-up; the shape here already matches it.</p>
  */
 export function WorkTimer({ startedAt }: { startedAt?: Date | null }) {
-  const [elapsed, setElapsed] = useState<number | null>(null);
+  const now = useNowSeconds();
 
-  useEffect(() => {
-    if (!startedAt) {
-      setElapsed(null);
-      return;
-    }
-    const tick = () => setElapsed(Math.max(0, Date.now() - startedAt.getTime()));
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [startedAt]);
-
+  // Derived, not stored. Elapsed time is a function of two instants, and keeping a
+  // copy in state only creates a second thing that can be wrong.
+  const elapsed =
+    startedAt && now !== null ? Math.max(0, now * 1000 - startedAt.getTime()) : null;
   const running = elapsed !== null;
 
   return (
@@ -41,7 +34,7 @@ export function WorkTimer({ startedAt }: { startedAt?: Date | null }) {
         aria-hidden
       />
       {/* tabular-nums so the digits do not jitter as the seconds change. */}
-      <span className="tabular-nums">{running ? format(elapsed!) : "00:00:00"}</span>
+      <span className="tabular-nums">{elapsed === null ? "00:00:00" : format(elapsed)}</span>
       <span className="sr-only">{running ? "Timer running" : "No timer running"}</span>
     </div>
   );
