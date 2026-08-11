@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/components/session-provider";
 import { queryKeys, type ProjectFilters } from "@/lib/api/query-keys";
-import { projectsApi } from "./api";
+import { projectsApi, workspacesApi } from "./api";
 
 /**
  * Query hooks for projects.
@@ -60,6 +60,15 @@ export function useProjectMembers(projectId: string | undefined) {
     queryKey: queryKeys.projects.members(projectId ?? ""),
     queryFn: () => projectsApi.members(api, projectId!),
     enabled: status === "authenticated" && Boolean(projectId),
+  });
+}
+
+export function useWorkspaces() {
+  const { api, status } = useSession();
+  return useQuery({
+    queryKey: ["workspaces"],
+    queryFn: () => workspacesApi.list(api),
+    enabled: status === "authenticated",
   });
 }
 

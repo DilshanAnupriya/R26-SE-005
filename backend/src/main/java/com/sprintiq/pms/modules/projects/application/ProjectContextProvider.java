@@ -42,6 +42,15 @@ public class ProjectContextProvider implements ProjectContextSource {
                 project.getCurrency() == null ? "USD" : project.getCurrency(),
                 requirementRepository.countByProjectIdAndDeletedAtIsNull(projectId),
                 requirementRepository.totalChangeCount(projectId),
-                memberRepository.countByProjectId(projectId));
+                memberRepository.countByProjectId(projectId),
+                project.getDomain(),
+                // One stack, first-listed — the model was trained on a single value and
+                // the team's own ordering is a better answer than alphabetical.
+                project.primaryTechStack(),
+                project.getTeamSize(),
+                project.getDevExperienceLevel(),
+                project.getTeamVelocityAvg(),
+                project.getRecentCompletionRate(),
+                project.getDefaultSprintDays());
     }
 }

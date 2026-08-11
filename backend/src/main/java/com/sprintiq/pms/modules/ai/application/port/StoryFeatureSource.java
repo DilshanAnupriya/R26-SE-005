@@ -58,7 +58,16 @@ public interface StoryFeatureSource {
                          BigDecimal currentPoints,
                          BigDecimal projectMedianPoints,
                          BigDecimal comparableMedianPoints,
-                         int comparableCount) {
+                         int comparableCount,
+                         /** When the story was raised — the model reads backlog age as a signal. */
+                         java.time.Instant createdAt) {
+
+        /** Days since the story was raised. Zero when unknown, which is the median-ish case. */
+        public int ageInDays() {
+            if (createdAt == null) return 0;
+            long days = java.time.Duration.between(createdAt, java.time.Instant.now()).toDays();
+            return (int) Math.max(0, Math.min(days, 365));
+        }
 
         /** Words across title, description and criteria — the crudest complexity proxy. */
         public int wordCount() {

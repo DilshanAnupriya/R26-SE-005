@@ -79,7 +79,32 @@ public class EstimationService {
         ProjectContextSource.ProjectContext project = projects.contextFor(features.projectId());
 
         FeatureVector vector = FeatureVector.create()
+                // ---- What the M1 model actually reads --------------------------
+                // Names match the trained columns exactly. The service maps them onto
+                // the 184-column matrix; a typo here would not error, it would silently
+                // fall back to a training median, so these are worth being careful with.
+                .put("title", features.title())
+                .put("description", features.description())
+                .put("acceptance_criteria", features.acceptanceCriteria())
                 .put("story_type", features.type())
+                .put("domain", project.domain())
+                .put("tech_stack", project.techStack())
+                .put("dev_experience_level", project.devExperienceLevel())
+                .put("team_size", project.teamSize())
+                .put("sprint_duration_days", project.sprintDurationDays())
+                .put("team_velocity_avg", project.teamVelocityAvg())
+                .put("recent_completion_rate", project.recentCompletionRate())
+                // Derived from what this project already knows, rather than asked for:
+                // acceptance criteria are the closest thing to a component count, and
+                // dependencies are how a story reaches outside itself.
+                .putNumber("num_components", Math.max(1, features.criteriaCount()))
+                .putNumber("external_apis", features.dependencyCount())
+                .putNumber("similar_task_count", features.comparableCount())
+                .putNumber("task_age_days", features.ageInDays())
+
+                // ---- Retained for the mock client and the stored feature record ----
+                // The mock scores on these, and every prediction persists its whole
+                // vector, so dropping them would make old predictions unexplainable.
                 .put("priority", features.priority().name())
                 .putNumber("acceptance_criteria_count", features.criteriaCount())
                 .putNumber("word_count", features.wordCount())

@@ -216,6 +216,13 @@ public class ProjectService {
                         ? new ArrayList<>() : new ArrayList<>(request.definitionOfReady()))
                 .definitionOfDone(request.definitionOfDone() == null
                         ? new ArrayList<>() : new ArrayList<>(request.definitionOfDone()))
+                // Estimation context passes through unchanged, nulls included. A
+                // missing value must stay missing: the model reads absent as
+                // "typical" and zero as "this team delivers nothing".
+                .teamSize(request.teamSize())
+                .devExperienceLevel(request.devExperienceLevel())
+                .teamVelocityAvg(request.teamVelocityAvg())
+                .recentCompletionRate(request.recentCompletionRate())
                 .build();
         project.setOrganizationId(organizationId);
 
@@ -253,6 +260,13 @@ public class ProjectService {
         changes.apply("health", project.getHealth(), request.health(), project::setHealth);
         changes.apply("defaultSprintDays", project.getDefaultSprintDays(), request.defaultSprintDays(),
                 project::setDefaultSprintDays);
+        changes.apply("teamSize", project.getTeamSize(), request.teamSize(), project::setTeamSize);
+        changes.apply("devExperienceLevel", project.getDevExperienceLevel(),
+                request.devExperienceLevel(), project::setDevExperienceLevel);
+        changes.apply("teamVelocityAvg", project.getTeamVelocityAvg(), request.teamVelocityAvg(),
+                project::setTeamVelocityAvg);
+        changes.apply("recentCompletionRate", project.getRecentCompletionRate(),
+                request.recentCompletionRate(), project::setRecentCompletionRate);
 
         if (request.leadUserId() != null && !request.leadUserId().equals(project.getLeadUserId())) {
             userService.requireActiveMember(request.leadUserId());
@@ -482,6 +496,8 @@ public class ProjectService {
                 project.getBudgetAmount(), project.getCurrency(), project.getLeadUserId(), project.getTeamId(),
                 project.getDomain(), project.getTechStack(), project.getDefaultSprintDays(),
                 project.getDefinitionOfReady(), project.getDefinitionOfDone(),
+                project.getTeamSize(), project.getDevExperienceLevel(),
+                project.getTeamVelocityAvg(), project.getRecentCompletionRate(),
                 memberRepository.countByProjectId(project.getId()),
                 project.getCreatedAt(), project.getUpdatedAt());
     }

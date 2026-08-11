@@ -1,0 +1,11 @@
+# Python bytecode and virtualenvs — machine-local, and a .pyc committed against a
+# different interpreter is worse than none.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# The model bundles ARE committed, deliberately: the service cannot start without
+# them, and a coursework repo that needs an out-of-band 3MB download to run is a
+# repo nobody can mark. If they later grow, or a training pipeline starts
+# producing them, fetch them at deploy time instead and ignore them here.

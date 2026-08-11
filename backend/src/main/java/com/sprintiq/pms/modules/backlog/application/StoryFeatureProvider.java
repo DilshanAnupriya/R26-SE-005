@@ -147,7 +147,7 @@ public class StoryFeatureProvider implements StoryFeatureSource, WorkItemFeature
                 dependencyService.list(EntityType.STORY, story.getId()).size(),
                 (int) taskCounter.countTasksForStory(story.getId()),
                 story.getEpicId() != null, story.getStoryPoints(),
-                median(allPoints), median(comparable), comparable.size());
+                median(allPoints), median(comparable), comparable.size(), story.getCreatedAt());
     }
 
     /**
