@@ -94,13 +94,8 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
   const skillMatch = explanation.breakdown.skill_match;
   const workloadBal = explanation.breakdown.workload_balance;
 
-  const currentLoad = allocation.developer.current_workload;
   const devName = `${allocation.developer.dev_id}`;
   const avatar = `https://ui-avatars.com/api/?name=${allocation.developer.dev_id}&background=random`;
-
-  // Dynamic capacity calculation based on experience (matches Simulator logic)
-  const devCapacity = (allocation.developer.experience_level || 2) * 10;
-  const isOverloaded = currentLoad >= devCapacity;
 
   return (
     <div className="min-h-screen bg-background p-6 lg:p-10">
@@ -149,6 +144,7 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
           </div>
         </div>
 
+        {/* AI Executive Summary */}
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -156,11 +152,11 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
         >
           <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
           <h2 className="text-lg font-semibold text-emerald-400 flex items-center mb-2">
-            <Award className="w-5 h-5 mr-2" />
-            Why {devName} was selected
+            <BrainCircuit className="w-5 h-5 mr-2" />
+            Model Reasoning Summary
           </h2>
-          <p className="text-slate-300 leading-relaxed text-lg">
-            {explanation.summary}
+          <p className="text-slate-300 leading-relaxed text-lg italic font-medium">
+            "{explanation.summary}"
           </p>
         </motion.div>
 
@@ -170,21 +166,22 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
           animate="show"
           className="grid grid-cols-1 md:grid-cols-2 gap-6"
         >
+          {/* Detailed Score Breakdown */}
           <motion.div variants={item} className="glass p-6 rounded-xl border border-card-border">
             <h3 className="text-lg font-semibold flex items-center mb-6">
               <Target className="w-5 h-5 mr-2 text-primary" />
-              Breakdown Details
+              Composite Score Components
             </h3>
             <div className="space-y-5">
               {[
                 { label: "Skill Match", val: skillMatch.value * 100, weight: skillMatch.weight, expl: skillMatch.explanation },
                 { label: "Workload Balance", val: workloadBal.value * 100, weight: workloadBal.weight, expl: workloadBal.explanation },
-                { label: "ML Prediction", val: mlPred.value, weight: mlPred.weight, expl: mlPred.explanation },
+                { label: "ML Performance", val: mlPred.value, weight: mlPred.weight, expl: mlPred.explanation },
               ].map((metric, idx) => (
                 <div key={idx}>
                   <div className="flex justify-between text-sm mb-1.5">
-                    <span className="font-medium text-slate-300">{metric.label} (Weight: {metric.weight})</span>
-                    <span className="text-slate-400 text-xs text-right max-w-[200px] truncate">{metric.expl}</span>
+                    <span className="font-medium text-slate-300">{metric.label} ({metric.weight})</span>
+                    <span className="text-slate-400 text-xs text-right max-w-[200px]">{metric.expl}</span>
                   </div>
                   <div className="relative h-2.5 bg-slate-800 rounded-full overflow-hidden">
                     <motion.div 
@@ -201,76 +198,60 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
               ))}
             </div>
             
+            {/* AI Identified Strengths */}
             {explanation.strengths && explanation.strengths.length > 0 && (
-              <div className="mt-8">
-                 <h4 className="text-sm font-semibold text-emerald-400 mb-3">Strengths</h4>
-                 <ul className="space-y-2">
+              <div className="mt-8 pt-8 border-t border-slate-800">
+                 <h4 className="text-sm font-semibold text-emerald-400 mb-4 uppercase tracking-wider">Top AI Strengths</h4>
+                 <ul className="space-y-3">
                     {explanation.strengths.map((s: any, idx: number) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm text-slate-300">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                      <li key={idx} className="flex items-start gap-3 text-sm text-slate-300 bg-emerald-500/5 p-3 rounded-lg border border-emerald-500/10">
+                        <Award className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
                         <div>
-                          <span className="font-medium text-white">{s.strength}: </span>
-                          <span className="text-slate-400">{s.detail}</span>
+                          <div className="font-bold text-white mb-0.5">{s.strength}</div>
+                          <div className="text-slate-400 text-xs">{s.detail}</div>
                         </div>
                       </li>
                     ))}
                  </ul>
               </div>
             )}
-            
           </motion.div>
 
           <div className="space-y-6">
+            {/* AI Identified Concerns */}
             <motion.div variants={item} className="glass p-6 rounded-xl border border-card-border">
               <h3 className="text-lg font-semibold flex items-center mb-6">
-                <Activity className="w-5 h-5 mr-2 text-blue-400" />
-                Workload Consideration
+                <AlertCircle className="w-5 h-5 mr-2 text-yellow-400" />
+                Risk Assessment
               </h3>
               
-              <div className="mb-4">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-400">Current Load vs. Capacity</span>
-                  <span className={`font-mono ${isOverloaded ? 'text-red-400' : 'text-blue-400'}`}>
-                    {Math.round((currentLoad / devCapacity)*100)}%
-                  </span>
+              {explanation.concerns && explanation.concerns.length > 0 ? (
+                <div className="space-y-4">
+                  {explanation.concerns.map((c: any, idx: number) => (
+                    <div key={idx} className={`p-4 rounded-lg border flex items-start gap-3 ${
+                      c.severity === 'high' ? 'bg-red-500/10 border-red-500/20' : 'bg-yellow-500/10 border-yellow-500/20'
+                    }`}>
+                      <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 ${c.severity === 'high' ? 'text-red-400' : 'text-yellow-400'}`} />
+                      <div>
+                        <div className="text-sm font-bold text-white mb-1">{c.concern}</div>
+                        <div className="text-xs text-slate-400 leading-relaxed">{c.detail}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="h-4 bg-slate-800 rounded-full overflow-hidden flex">
-                  <div 
-                    className={`h-full ${isOverloaded ? 'bg-red-500' : 'bg-blue-500'}`} 
-                    style={{ width: `${Math.min((currentLoad / devCapacity)*100, 100)}%` }} 
-                  />
+              ) : (
+                <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  <p className="text-sm text-slate-300">No significant risks or constraints identified by the AI for this allocation.</p>
                 </div>
-                <div className="flex justify-between text-xs mt-2 text-slate-500">
-                  <span>0%</span>
-                  <span className="text-yellow-500">Threshold ({devCapacity} SP)</span>
-                  <span>Max</span>
-                </div>
-              </div>
-
-              <div className={`flex items-start gap-3 rounded-lg p-3 border ${
-                isOverloaded 
-                  ? 'bg-red-500/10 border-red-500/20' 
-                  : 'bg-blue-500/10 border-blue-500/20'
-              }`}>
-                {isOverloaded ? (
-                   <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                ) : (
-                   <AlertCircle className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-                )}
-                <p className="text-sm text-slate-300">
-                  {devName} currently has **{currentLoad} Story Points** assigned. 
-                  {isOverloaded 
-                    ? ` This exceeds their calculated capacity of ${devCapacity} SP. The AI suggests caution as this may impact delivery quality.` 
-                    : ` This is within their calculated capacity of ${devCapacity} SP. This task can be safely added.`
-                  }
-                </p>
-              </div>
+              )}
             </motion.div>
 
+            {/* AI Confidence & Features */}
             <motion.div variants={item} className="glass p-6 rounded-xl border border-card-border">
-              <h3 className="text-lg font-semibold flex items-center mb-4">
+              <h3 className="text-lg font-semibold flex items-center mb-6">
                 <BrainCircuit className="w-5 h-5 mr-2 text-purple-400" />
-                AI Recommendation Confidence
+                Model Confidence
               </h3>
               
               <div className="grid grid-cols-2 gap-4">
