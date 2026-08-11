@@ -125,7 +125,11 @@ class StoryPointPredictor:
         drivers = [
             {"feature": _label_for(column),
              "contribution": round(value, 3),
-             "direction": "increases" if value > 0 else "decreases"}
+             # INCREASE / DECREASE, matching PredictionDriver in the backend. The UI
+             # compares against those exact strings, so lowercase prose here made
+             # every driver render as a decrease — a silent mismatch, since nothing
+             # validates the vocabulary on the way through.
+             "direction": "INCREASE" if value > 0 else "DECREASE"}
             for column, value in ranked if abs(value) > 0.01
         ]
         # The wording matters: the text moved the estimate, but which words did it
@@ -134,7 +138,7 @@ class StoryPointPredictor:
             drivers.append({
                 "feature": "wording of the story",
                 "contribution": round(text_total, 3),
-                "direction": "increases" if text_total > 0 else "decreases",
+                "direction": "INCREASE" if text_total > 0 else "DECREASE",
             })
         return drivers
 
@@ -186,7 +190,7 @@ class StoryPointPredictor:
                     f"({coverage}% of the time). ")
 
         if drivers:
-            top = [d for d in drivers if d["direction"] == "increases"][:2]
+            top = [d for d in drivers if d["direction"] == "INCREASE"][:2]
             if top:
                 sentence += "Pushed up by " + " and ".join(d["feature"] for d in top) + ". "
 
