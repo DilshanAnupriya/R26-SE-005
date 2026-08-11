@@ -1,0 +1,451 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Tailwind 4 has no `darkMode: 'class'` config option; the variant is declared here. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Tokens transcribed from the Claude Design handoff
+ * (prototype-approach-decision-needed/project/Dcode SprintIQ.dc.html).
+ *
+ * Kept as literal hex rather than reconverted to OKLCH: the design is the authority
+ * on these values, and a conversion — however faithful — leaves the next person
+ * comparing two notations to work out whether the implementation drifted.
+ *
+ * The design's own names are preserved (--canvas, --surface-2, --text-3,
+ * --accent-soft…) so any value traces straight back to the mockup. shadcn's token
+ * names are aliased onto these further down rather than kept as a second palette.
+ */
+:root {
+  --canvas: #f5f6f9;
+  --surface: #ffffff;
+  --surface-2: #fafbfc;
+  --surface-3: #f2f3f7;
+  --line: #e8eaf0;
+  --line-strong: #dadde6;
+  --ink: #171a21;
+  --ink-2: #59627a;
+  --ink-3: #8993a6;
+
+  --accent: #5b5cf0;
+  --accent-hover: #4b4ce0;
+  --accent-soft: #ececfe;
+  --accent-text: #4b4ce0;
+
+  --green: #16a34a;
+  --green-soft: #e7f6ed;
+  --amber: #d97706;
+  --amber-soft: #fbf0da;
+  --red: #dc2626;
+  --red-soft: #fbe9e9;
+  --blue: #2563eb;
+  --blue-soft: #e7eefd;
+  --violet: #7c3aed;
+  --violet-soft: #f1e9fd;
+  --teal: #0d9488;
+  --teal-soft: #e0f5f2;
+
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-2: 0 4px 14px rgba(16, 24, 40, 0.08), 0 1px 3px rgba(16, 24, 40, 0.05);
+  --shadow-3: 0 12px 32px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.06);
+
+  --sidebar-w: 250px;
+  --sidebar-w-collapsed: 62px;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --canvas: #0b0c10;
+  --surface: #15171e;
+  --surface-2: #1a1d25;
+  --surface-3: #20232d;
+  --line: #262a34;
+  --line-strong: #333844;
+  --ink: #e9ebf1;
+  --ink-2: #9aa3b4;
+  --ink-3: #697086;
+
+  --accent: #7071f6;
+  --accent-hover: #8384f8;
+  --accent-soft: #1e2040;
+  --accent-text: #aeaffb;
+
+  --green: #34d399;
+  --green-soft: #122a20;
+  --amber: #fbbf24;
+  --amber-soft: #2c2311;
+  --red: #f87171;
+  --red-soft: #2e1719;
+  --blue: #60a5fa;
+  --blue-soft: #132241;
+  --violet: #a78bfa;
+  --violet-soft: #231a3a;
+  --teal: #2dd4bf;
+  --teal-soft: #0e2a28;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+/*
+ * shadcn's primitives are written against its own token names, and the existing
+ * screens use semantic ones (--status-*, --risk-*, --ai-*). Both are aliased onto
+ * the design's palette rather than kept alive alongside it, so a colour is defined
+ * in exactly one place and every existing screen picks up the new look for free.
+ */
+:root,
+.dark {
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-3);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-3);
+  --muted-foreground: var(--ink-3);
+  --accent-foreground: var(--ink);
+  --destructive: var(--red);
+  --destructive-foreground: #ffffff;
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--accent-soft);
+  --sidebar-accent-foreground: var(--accent-text);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--accent);
+
+  /* Workflow status — the design's board column colours. */
+  --status-todo: var(--ink-3);
+  --status-progress: var(--blue);
+  --status-review: var(--violet);
+  --status-done: var(--green);
+  --status-blocked: var(--red);
+
+  --priority-lowest: var(--ink-3);
+  --priority-low: var(--blue);
+  --priority-medium: var(--amber);
+  --priority-high: var(--amber);
+  --priority-critical: var(--red);
+
+  --risk-low: var(--green);
+  --risk-medium: var(--amber);
+  --risk-high: var(--red);
+
+  /* AI surfaces borrow the design's violet, keeping them distinct from the accent. */
+  --ai-accent: var(--violet);
+  --ai-confidence-high: var(--green);
+  --ai-confidence-low: var(--amber);
+
+  /* Chart series in the design's own order for "Issues by type". */
+  --chart-1: var(--green);
+  --chart-2: var(--blue);
+  --chart-3: var(--red);
+  --chart-4: var(--violet);
+  --chart-5: var(--amber);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist), "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /*
+   * The design's type scale, in px as authored. It runs small and tight — 13.5px
+   * body, not 16 — because these screens are dense: a hundred-row backlog and a
+   * six-column board only work at this size.
+   */
+  --text-2xs: 10.5px;
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-base: 13.5px;
+  --text-md: 14px;
+  --text-lg: 14.5px;
+  --text-xl: 17px;
+  --text-2xl: 20px;
+  --text-3xl: 23px;
+  --text-4xl: 27px;
+  --text-5xl: 34px;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+
+  --color-green: var(--green);
+  --color-green-soft: var(--green-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-red: var(--red);
+  --color-red-soft: var(--red-soft);
+  --color-blue: var(--blue);
+  --color-blue-soft: var(--blue-soft);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
+  --color-teal: var(--teal);
+  --color-teal-soft: var(--teal-soft);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-status-todo: var(--status-todo);
+  --color-status-progress: var(--status-progress);
+  --color-status-review: var(--status-review);
+  --color-status-done: var(--status-done);
+  --color-status-blocked: var(--status-blocked);
+
+  --color-priority-lowest: var(--priority-lowest);
+  --color-priority-low: var(--priority-low);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-high: var(--priority-high);
+  --color-priority-critical: var(--priority-critical);
+
+  --color-risk-low: var(--risk-low);
+  --color-risk-medium: var(--risk-medium);
+  --color-risk-high: var(--risk-high);
+
+  --color-ai-accent: var(--ai-accent);
+  --color-ai-confidence-high: var(--ai-confidence-high);
+  --color-ai-confidence-low: var(--ai-confidence-low);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --shadow-card: var(--shadow-1);
+  --shadow-raised: var(--shadow-2);
+  --shadow-overlay: var(--shadow-3);
+
+  /* The design's radii, authored in px: 6 / 8 / 11 / 12. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 11px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+
+  /*
+   * Motion curves. The CSS built-ins are too weak to read as intentional — these
+   * are the stronger variants, and they are the only ones anything should use.
+   *
+   * There is deliberately no ease-in here. It starts slow, which delays movement at
+   * exactly the moment the user is watching most closely, so a 200ms ease-in dropdown
+   * *feels* slower than a 200ms ease-out one.
+   */
+  --ease-out-quart: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-quart: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Durations. Anything above 300ms in the app is a defect: the user is working. */
+  --duration-press: 140ms;
+  --duration-tooltip: 150ms;
+  --duration-menu: 180ms;
+  --duration-overlay: 240ms;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    /* The design's body metrics, set here rather than per-screen. */
+    font-size: 13.5px;
+    line-height: 1.45;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  /*
+   * Press feedback on everything pressable. A control that does not move under the
+   * finger reads as not having registered the press — this is the single cheapest
+   * thing that makes an interface feel like it is listening.
+   *
+   * Named properties, never `transition: all`: `all` animates whatever else happens
+   * to change, including layout properties that then run on the main thread.
+   */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[data-pressable] {
+    transition: transform var(--duration-press) var(--ease-out-quart);
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  a[data-pressable]:active {
+    /* Subtle on purpose. Below ~0.95 it reads as the button shrinking, not depressing. */
+    transform: scale(0.97);
+  }
+
+  /*
+   * Hover effects only where hover is real. A touch device fires hover on tap and
+   * then leaves it stuck on, so a card can stay lit after the user has moved on.
+   */
+  @media not ((hover: hover) and (pointer: fine)) {
+    *:hover {
+      transition: none;
+    }
+  }
+
+  /*
+   * Radix overlays: scale from their trigger, not from the centre of the screen.
+   * A menu that grows out of the button that opened it explains where it came from;
+   * one that grows from the middle has to be re-located by the eye.
+   *
+   * Modals are exempt by design — they are not anchored to a trigger, so centre is
+   * correct for them.
+   */
+  [data-slot="dropdown-menu-content"],
+  [data-slot="popover-content"],
+  [data-slot="select-content"],
+  [data-slot="tooltip-content"] {
+    transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-popover-content-transform-origin, var(--radix-select-content-transform-origin, var(--radix-tooltip-content-transform-origin))));
+  }
+
+  /* The design's scrollbar: a thumb inset from its track, not the browser default. */
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 20px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-3);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /*
+   * One global reduced-motion rule so no component can forget it. Individual GSAP
+   * timelines still check the media query (lib/motion.ts) because JS-driven
+   * animation is not reachable from CSS.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* The design's screen-entry animation. */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-fade-up {
+  animation: fadeUp 0.28s var(--ease-out-quart) both;
+}
+
+/*
+ * Staggered entry for a row of cards. Decorative, so it never gates interaction —
+ * the elements are clickable from the first frame.
+ *
+ * Delays are deliberately short: past ~80ms apart the cascade stops reading as one
+ * group arriving and starts reading as the page being slow to load.
+ */
+@utility stagger-children {
+  & > * {
+    animation: fadeUp 0.28s var(--ease-out-quart) both;
+  }
+  & > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  & > *:nth-child(2) {
+    animation-delay: 40ms;
+  }
+  & > *:nth-child(3) {
+    animation-delay: 80ms;
+  }
+  & > *:nth-child(4) {
+    animation-delay: 120ms;
+  }
+  & > *:nth-child(n + 5) {
+    animation-delay: 160ms;
+  }
+}
+
+/*
+ * Reduced motion keeps the fade and drops the movement. "Reduced" is not "none":
+ * an element that simply appears with no transition at all is the jarring change
+ * the animation existed to prevent.
+ */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

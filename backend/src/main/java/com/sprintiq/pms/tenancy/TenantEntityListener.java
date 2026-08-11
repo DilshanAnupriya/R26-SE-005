@@ -1,6 +1,6 @@
 package com.sprintiq.pms.tenancy;
 
-import com.sprintiq.pms.common.domain.TenantAwareEntity;
+import com.sprintiq.pms.common.domain.TenantScoped;
 import com.sprintiq.pms.common.error.ApplicationException;
 import com.sprintiq.pms.common.error.ErrorCode;
 import jakarta.persistence.PrePersist;
@@ -19,7 +19,10 @@ import java.util.UUID;
 public class TenantEntityListener {
 
     @PrePersist
-    public void onPersist(TenantAwareEntity entity) {
+    public void onPersist(Object candidate) {
+        if (!(candidate instanceof TenantScoped entity)) {
+            return;
+        }
         if (entity.getOrganizationId() == null) {
             entity.setOrganizationId(TenantContext.requireOrganizationId());
         } else {
@@ -28,8 +31,10 @@ public class TenantEntityListener {
     }
 
     @PreUpdate
-    public void onUpdate(TenantAwareEntity entity) {
-        assertSameTenant(entity.getOrganizationId());
+    public void onUpdate(Object candidate) {
+        if (candidate instanceof TenantScoped entity) {
+            assertSameTenant(entity.getOrganizationId());
+        }
     }
 
     private void assertSameTenant(UUID entityOrganizationId) {

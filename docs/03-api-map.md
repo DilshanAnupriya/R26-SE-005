@@ -27,9 +27,15 @@ Standard error:
 | POST | `/mfa/setup` · `/mfa/verify` · `/mfa/challenge` | flag-gated |
 
 ## Users `/users`
-`GET /` (filters: `status`, `roleId`, `teamId`) · `GET /{id}` · `PATCH /me` · `PATCH /{id}` ·
-`PATCH /{id}/status` · `GET /{id}/workload` · `GET /{id}/developer-profile` ·
-`PUT /{id}/developer-profile` · `GET /{id}/skills` · `PUT /{id}/skills`
+`GET /` (filters: `status`, `roleId`) · `GET /me` · `PATCH /me` · `GET /{id}` ·
+`PATCH /{id}/status` · `GET /{id}/developer-profile` · `PUT /{id}/developer-profile` ·
+`GET /{id}/skills` · `PUT /{id}/skills` · `GET /skills/catalogue`
+
+The developer profile splits declared attributes (seniority, rate, capacity) from
+measured ones (velocity, consistency, learning rate, defect and reopen rates). Only the
+declared half is writable — letting anyone type their own consistency score would turn
+Model 3 from a measurement into a negotiation. Per-user workload is served by
+`GET /reports/workload-balance`, which answers the same question for the whole team.
 
 ## Organizations `/organizations`
 `POST /` · `GET /` (my orgs) · `GET /{id}` · `PATCH /{id}` · `GET /{id}/members` ·
@@ -83,10 +89,20 @@ Standard error:
 
 ## Reports `/reports`
 `GET /velocity` · `/burndown` · `/burnup` · `/cfd` · `/cycle-time` · `/lead-time` ·
-`/productivity` · `/completion-rate` · `/workload-balance` · `/cost-trend` · `/risk-summary` ·
-`POST /export` (async job) · `GET /export/{jobId}`
+`/productivity` · `/completion-rate` · `/workload-balance` · `/cost-trend` · `/risk-summary`
+`POST /export` (queues a CSV job, 202) · `GET /export` (your jobs) ·
+`GET /export/{jobId}` (poll) · `GET /export/{jobId}/download`
+
+Exports run on a worker after the job row commits, are kept for 24 hours and belong to
+the person who requested them — an export is a bulk extract of exactly the data a
+permission boundary exists to control. Supported reports: `velocity`, `burndown`,
+`cycle-time`, `lead-time`, `productivity`, `workload-balance`, `completion-rate`,
+`backlog`.
 
 ## AI `/ai`
+*Implemented, plus `GET /risk/sprint/{id}`, `/risk/sprint/{id}/history`,
+`POST /risk/{id}/acknowledge`, `/allocation/story/{id}/suggest`,
+`GET /cost/sprint/{id}/history` and `POST /insights/sprint/{id}/refresh`.*
 | Method | Path |
 |---|---|
 | POST | `/estimation/story-points` · `/estimation/story-points/batch` |
@@ -101,7 +117,12 @@ Standard error:
 
 ## Governance
 `GET /audit-logs` (`actorId,action,entityType,entityId,from,to`) · `GET /audit-logs/{id}` ·
-`GET|PATCH /settings` · `GET|POST /integrations` · `GET /admin/recycle-bin` ·
-`POST /admin/recycle-bin/{type}/{id}/restore`
+`GET|PATCH /workspaces/{id}/settings` · `GET|POST /integrations` ·
+`PATCH|DELETE /integrations/{id}` · `GET|PATCH /workspaces/{id}/feature-flags` ·
+`DELETE /workspaces/{id}/feature-flags/{key}` · `GET /admin/recycle-bin` ·
+`GET /admin/recycle-bin/types` · `POST /admin/recycle-bin/{type}/{id}/restore`
+
+Settings are scoped to a workspace rather than sitting at `/settings`, because that is
+the level at which they are actually decided.
 
 Docs: `/swagger-ui.html` · `/v3/api-docs` · Health: `/actuator/health`
