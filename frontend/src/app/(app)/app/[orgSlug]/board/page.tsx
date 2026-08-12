@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useProjects } from "@/features/projects/hooks";
+import { workableProjects } from "@/features/projects/api";
 import { Card } from "@/components/design/surfaces";
 import { ProjectKey, StatusPill } from "@/components/design/item-chrome";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,8 +15,10 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export default function Page() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
-  const projects = useProjects({ status: "ACTIVE" });
-  const items = projects.data?.content ?? [];
+  // Everything except finished projects. Filtering the query on ACTIVE hid every
+  // project the moment it was created, because a new project starts as PLANNING.
+  const projects = useProjects();
+  const items = workableProjects(projects.data?.content ?? []);
 
   return (
     <div className="mx-auto max-w-[900px] animate-fade-up px-1 pb-14">
@@ -30,7 +33,7 @@ export default function Page() {
         </div>
       ) : items.length === 0 ? (
         <Card className="p-8 text-center">
-          <p className="text-base text-ink-2">No active projects yet.</p>
+          <p className="text-base text-ink-2">No projects yet.</p>
           <Link href={`/app/${orgSlug}/projects`} className="mt-2 inline-block text-sm font-medium text-accent-text hover:underline">
             Go to projects
           </Link>

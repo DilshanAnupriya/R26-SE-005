@@ -143,9 +143,16 @@ public class DemoDataSeeder implements ApplicationRunner {
     // ------------------------------------------------------------------ the walk
 
     private void seedEverything(UUID workspaceId, UUID owner, UUID nadia, UUID rui, UUID amara) {
-        ProjectResponse payroll = project(workspaceId, "Payroll SaaS", "PAY", "fintech", owner);
-        ProjectResponse crm = project(workspaceId, "CRM Platform", "CRM", "sales", nadia);
-        ProjectResponse mobile = project(workspaceId, "Mobile App", "MOB", "consumer", rui);
+        // Domain and tech stack use the vocabulary the model was trained on; anything
+        // else it simply does not recognise and leaves the one-hot unset.
+        ProjectResponse payroll = project(workspaceId, "Payroll SaaS", "PAY",
+                "finance", "springboot", "senior", 6, 24, 0.88, owner);
+        ProjectResponse crm = project(workspaceId, "CRM Platform", "CRM",
+                "ecommerce", "nodejs", "mid", 5, 18, 0.74, nadia);
+        // Left without estimation context on purpose, so the fallback path — training
+        // medians, and an explanation that says so — is visible in the demo too.
+        ProjectResponse mobile = project(workspaceId, "Mobile App", "MOB",
+                "logistics", "react", null, 4, 14, 0.80, rui);
 
         // ---- Payroll: the project with a full history behind it -----------------
         UUID sso = epic(payroll.id(), "SSO and authentication", monday.minusDays(28), monday.plusDays(21));
@@ -345,11 +352,17 @@ public class DemoDataSeeder implements ApplicationRunner {
         orgMemberRepository.save(membership);
     }
 
-    private ProjectResponse project(UUID workspaceId, String name, String key, String domain, UUID lead) {
+    private ProjectResponse project(UUID workspaceId, String name, String key, String domain,
+                                    String techStack, String experience, int teamSize,
+                                    double velocity, double completionRate, UUID lead) {
         return projectService.create(new CreateProjectRequest(workspaceId, name, key,
                 "Seeded demo project", monday.minusDays(60), monday.plusDays(120),
                 BigDecimal.valueOf(250_000), "USD", lead, null, domain,
-                List.of("java", "typescript"), (short) 14, List.of(), List.of()));
+                // Primary stack first: the model is given one stack, and it takes the
+                // first entry.
+                List.of(techStack, "typescript"), (short) 14, List.of(), List.of(),
+                (short) teamSize, experience, BigDecimal.valueOf(velocity),
+                BigDecimal.valueOf(completionRate)));
     }
 
     private UUID epic(UUID projectId, String title, LocalDate start, LocalDate target) {

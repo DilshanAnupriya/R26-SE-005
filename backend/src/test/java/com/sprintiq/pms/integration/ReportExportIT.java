@@ -82,7 +82,7 @@ class ReportExportIT extends AbstractIntegrationTest {
 
         ProjectResponse project = projectService.create(new CreateProjectRequest(workspaceId,
                 "Mobile Banking", null, "Created by ReportExportIT", null, null, null, "USD",
-                null, null, "fintech", List.of("java"), (short) 14, List.of(), List.of()));
+                null, null, "fintech", List.of("java"), (short) 14, List.of(), List.of(), null, null, null, null));
 
         storyService.create(new CreateStoryRequest(project.id(), null, null,
                 "Ordinary story", "Detail.", "One", null, null, null, BigDecimal.valueOf(5),

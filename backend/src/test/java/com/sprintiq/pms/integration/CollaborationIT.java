@@ -119,7 +119,7 @@ class CollaborationIT extends AbstractIntegrationTest {
 
         return projectService.create(new CreateProjectRequest(workspaceId, name, null,
                 "Created by CollaborationIT", null, null, null, "USD", null, null, "fintech",
-                List.of("java"), (short) 14, List.of(), List.of()));
+                List.of("java"), (short) 14, List.of(), List.of(), null, null, null, null));
     }
 
     private void actAs(UUID organizationId, UUID userId) {

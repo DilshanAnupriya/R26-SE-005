@@ -26,8 +26,25 @@ export const backlogApi = {
 
   createStory: (
     api: ApiClient,
-    body: { projectId: string; title: string; description?: string | null },
+    body: {
+      projectId: string;
+      title: string;
+      description?: string | null;
+      // Acceptance criteria and epic are not decoration: the estimator reads the
+      // criteria count as its component signal and scores the combined text, so a
+      // story created without them is one it has less to go on for.
+      acceptanceCriteria?: string | null;
+      epicId?: string | null;
+      type?: string | null;
+      priority?: string | null;
+      storyPoints?: number | null;
+    },
   ) => api.request("/stories", { method: "POST", body, schema: storySchema }),
+
+  createEpic: (
+    api: ApiClient,
+    body: { projectId: string; title: string; description?: string | null },
+  ) => api.request("/epics", { method: "POST", body, schema: epicSchema }),
 
   updateStory: (api: ApiClient, storyId: string, body: Record<string, unknown>) =>
     api.request(`/stories/${storyId}`, { method: "PATCH", body, schema: storySchema }),

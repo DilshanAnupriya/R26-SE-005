@@ -72,7 +72,7 @@ class CalendarIT extends AbstractIntegrationTest {
                 .findByOrganizationIdAndDeletedAtIsNull(organization.getId()).get(0).getId();
         projectId = projectService.create(new CreateProjectRequest(workspaceId, "Payroll SaaS",
                 null, "Seeded by CalendarIT", null, null, null, "USD", null, null, "fintech",
-                List.of("java"), (short) 14, List.of(), List.of())).id();
+                List.of("java"), (short) 14, List.of(), List.of(), null, null, null, null)).id();
     }
 
     @AfterEach

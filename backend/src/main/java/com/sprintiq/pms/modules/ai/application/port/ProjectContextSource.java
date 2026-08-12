@@ -24,7 +24,20 @@ public interface ProjectContextSource {
                           String currency,
                           long requirementCount,
                           long postApprovalChanges,
-                          long memberCount) {
+                          long memberCount,
+
+                          // ---- What the M1 model needs about the team and the stack ----
+                          // Every one of these is nullable. Absent means "the project
+                          // never said", and the model service substitutes the median of
+                          // its training set — which is a different, and far safer,
+                          // statement than a zero.
+                          String domain,
+                          String techStack,
+                          Short teamSize,
+                          String devExperienceLevel,
+                          BigDecimal teamVelocityAvg,
+                          BigDecimal recentCompletionRate,
+                          Short sprintDurationDays) {
 
         /** Post-approval edits per requirement — churn normalised for project size. */
         public BigDecimal churnRate() {

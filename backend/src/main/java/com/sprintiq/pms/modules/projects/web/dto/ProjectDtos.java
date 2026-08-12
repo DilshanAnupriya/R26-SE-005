@@ -46,7 +46,21 @@ public final class ProjectDtos {
             List<@Size(max = 60) String> techStack,
             @Min(1) @Max(60) Short defaultSprintDays,
             List<@Size(max = 255) String> definitionOfReady,
-            List<@Size(max = 255) String> definitionOfDone) {}
+            List<@Size(max = 255) String> definitionOfDone,
+
+            // ---- Estimation context: what the M1 model needs about the team ----
+            // Optional. Left out, the model falls back to its training medians and
+            // says so in its explanation; that is honest, whereas storing zero would
+            // tell it this team has never delivered anything.
+            @Schema(description = "Delivery team size — an input to the story-point model")
+            @Min(1) @Max(50) Short teamSize,
+            @Schema(description = "Predominant experience level: junior, mid or senior")
+            @Pattern(regexp = "junior|mid|senior", message = "must be junior, mid or senior")
+            String devExperienceLevel,
+            @Schema(description = "Average story points completed per sprint")
+            @DecimalMin("0.0") @DecimalMax("500.0") BigDecimal teamVelocityAvg,
+            @Schema(description = "Proportion of committed work recently finished, 0 to 1")
+            @DecimalMin("0.0") @DecimalMax("1.0") BigDecimal recentCompletionRate) {}
 
     @Schema(name = "UpdateProjectRequest")
     public record UpdateProjectRequest(
@@ -64,7 +78,15 @@ public final class ProjectDtos {
             List<@Size(max = 60) String> techStack,
             @Min(1) @Max(60) Short defaultSprintDays,
             List<@Size(max = 255) String> definitionOfReady,
-            List<@Size(max = 255) String> definitionOfDone) {}
+            List<@Size(max = 255) String> definitionOfDone,
+
+            // The same estimation context as on create, so a project can be
+            // corrected once real velocity is known rather than staying wrong.
+            @Min(1) @Max(50) Short teamSize,
+            @Pattern(regexp = "junior|mid|senior", message = "must be junior, mid or senior")
+            String devExperienceLevel,
+            @DecimalMin("0.0") @DecimalMax("500.0") BigDecimal teamVelocityAvg,
+            @DecimalMin("0.0") @DecimalMax("1.0") BigDecimal recentCompletionRate) {}
 
     @Schema(name = "ProjectResponse")
     public record ProjectResponse(
@@ -87,6 +109,10 @@ public final class ProjectDtos {
             short defaultSprintDays,
             List<String> definitionOfReady,
             List<String> definitionOfDone,
+            Short teamSize,
+            String devExperienceLevel,
+            BigDecimal teamVelocityAvg,
+            BigDecimal recentCompletionRate,
             long memberCount,
             Instant createdAt,
             Instant updatedAt) {}

@@ -1,12 +1,14 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
-import { FolderKanban } from "lucide-react";
+import { FolderKanban, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
+import { Button } from "@/components/ui/button";
 import { useProjects } from "@/features/projects/hooks";
+import { CreateProjectDialog } from "@/features/projects/components/create-project-dialog";
 import type { Project } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
 
@@ -19,14 +21,21 @@ const HEALTH_TONE = {
 export default function ProjectsPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = use(params);
   const { data, isPending, error, refetch } = useProjects();
+  const [creating, setCreating] = useState(false);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Every project in this organization, with its explained health.
-        </p>
+    <div className="animate-fade-up mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every project in this organization, with its explained health.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setCreating(true)}>
+          <Plus className="size-4" aria-hidden />
+          New project
+        </Button>
       </div>
 
       {isPending ? (
@@ -38,7 +47,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ orgSlug: st
       ) : error ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : data && data.content.length > 0 ? (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="stagger-children grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.content.map((project) => (
             <li key={project.id}>
               <ProjectCard project={project} orgSlug={orgSlug} />
@@ -50,8 +59,16 @@ export default function ProjectsPage({ params }: { params: Promise<{ orgSlug: st
           icon={FolderKanban}
           title="No projects yet"
           description="A project holds the backlog, the sprints and the board. Create one to get started."
+          action={
+            <Button onClick={() => setCreating(true)}>
+              <Plus className="size-4" aria-hidden />
+              Create a project
+            </Button>
+          }
         />
       )}
+
+      <CreateProjectDialog open={creating} onOpenChange={setCreating} />
     </div>
   );
 }

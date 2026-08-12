@@ -108,7 +108,7 @@ class DeliveryCoreIT extends AbstractIntegrationTest {
 
         return projectService.create(new CreateProjectRequest(workspaceId, projectName, null,
                 "Created by DeliveryCoreIT", null, null, null, "USD", null, null, "fintech",
-                List.of("java", "react"), (short) 14, List.of(), List.of()));
+                List.of("java", "react"), (short) 14, List.of(), List.of(), null, null, null, null));
     }
 
     private StoryResponse newStory(UUID projectId, String title, BigDecimal points) {

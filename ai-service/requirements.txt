@@ -1,0 +1,14 @@
+# Pinned to the versions this bundle was verified to load and score with.
+# Not guesses: scikit-learn refuses a model pickled by a different minor version,
+# and xgboost's pred_contribs layout has shifted between majors, so the driver
+# list would silently misattribute if this drifted.
+fastapi>=0.115
+uvicorn[standard]>=0.34
+pydantic>=2.10
+
+joblib==1.4.2
+numpy==2.3.5
+scipy==1.16.3
+scikit-learn==1.7.2
+xgboost==3.2.0
+lightgbm==4.6.0

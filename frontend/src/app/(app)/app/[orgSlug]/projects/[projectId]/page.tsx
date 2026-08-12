@@ -2,11 +2,12 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ListTodo, Sparkles } from "lucide-react";
+import { ArrowLeft, ListTodo, Plus, Sparkles } from "lucide-react";
 import { CommentThread } from "@/features/comments/components/comment-thread";
 import { useProjectMembers } from "@/features/projects/hooks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CreateStoryDialog } from "@/features/backlog/components/create-story-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { EstimatePanel } from "@/features/ai/components/estimate-panel";
@@ -36,6 +37,7 @@ export default function ProjectPage({
   const batch = useEstimateBatch();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [creatingStory, setCreatingStory] = useState(false);
   const stories = backlog.data?.content ?? [];
   const selected = stories.find((story) => story.id === selectedId) ?? null;
 
@@ -46,7 +48,7 @@ export default function ProjectPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="animate-fade-up mx-auto max-w-6xl space-y-6">
       <div>
         <Link
           href={`/app/${orgSlug}/projects`}
@@ -112,19 +114,25 @@ export default function ProjectPage({
             <h2 id="backlog-heading" className="text-sm font-medium">
               Backlog
             </h2>
-            {unestimated.length > 0 ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={batch.isPending}
-                onClick={() => batch.mutate(unestimated.slice(0, 50).map((story) => story.id))}
-              >
-                <Sparkles className="size-3.5" aria-hidden />
-                {batch.isPending
-                  ? "Estimating…"
-                  : `Suggest estimates for ${unestimated.length} unsized`}
+            <div className="flex flex-wrap items-center gap-2">
+              {unestimated.length > 0 ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={batch.isPending}
+                  onClick={() => batch.mutate(unestimated.slice(0, 50).map((story) => story.id))}
+                >
+                  <Sparkles className="size-3.5" aria-hidden />
+                  {batch.isPending
+                    ? "Estimating…"
+                    : `Suggest estimates for ${unestimated.length} unsized`}
+                </Button>
+              ) : null}
+              <Button size="sm" onClick={() => setCreatingStory(true)}>
+                <Plus className="size-3.5" aria-hidden />
+                New item
               </Button>
-            ) : null}
+            </div>
           </div>
 
           {backlog.isPending ? (
@@ -191,6 +199,15 @@ export default function ProjectPage({
           )}
         </aside>
       </div>
+
+      <CreateStoryDialog
+        projectId={projectId}
+        open={creatingStory}
+        onOpenChange={setCreatingStory}
+        // Selecting it straight away puts the new item in the sizing panel, which is
+        // almost always the next thing you want to do with a freshly written story.
+        onCreated={setSelectedId}
+      />
     </div>
   );
 }

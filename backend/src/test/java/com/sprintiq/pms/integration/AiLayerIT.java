@@ -106,7 +106,7 @@ class AiLayerIT extends AbstractIntegrationTest {
 
         return projectService.create(new CreateProjectRequest(workspaceId, projectName, null,
                 "Created by AiLayerIT", null, null, BigDecimal.valueOf(90000), "USD", null, null,
-                "fintech", List.of("java"), (short) 14, List.of(), List.of()));
+                "fintech", List.of("java"), (short) 14, List.of(), List.of(), null, null, null, null));
     }
 
     private StoryResponse newStory(UUID projectId, String title, String description,

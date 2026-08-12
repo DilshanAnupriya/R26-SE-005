@@ -9,6 +9,13 @@ spring:
 app:
   seed:
     enabled: true
+  ai:
+    # Dev talks to the real estimation service, so the model in the repo is what
+    # you see on screen. Falls back to the mock automatically when the service is
+    # not up: HttpAiModelClient turns a connection failure into a FAILED
+    # prediction, and the UI shows the story unestimated rather than inventing a
+    # number. Run it with:  cd ai-service && uvicorn app.main:app --port 8000
+    provider: ${AI_PROVIDER:http}
 logging:
   level:
     org.hibernate.SQL: DEBUG

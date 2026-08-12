@@ -70,7 +70,7 @@ class TimelineIT extends AbstractIntegrationTest {
 
         projectId = projectService.create(new CreateProjectRequest(workspaceId, "Payroll SaaS",
                 null, "Seeded by TimelineIT", null, null, null, "USD", null, null, "fintech",
-                List.of("java"), (short) 14, List.of(), List.of())).id();
+                List.of("java"), (short) 14, List.of(), List.of(), null, null, null, null)).id();
     }
 
     @AfterEach
