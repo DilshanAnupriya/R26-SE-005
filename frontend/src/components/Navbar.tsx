@@ -18,7 +18,7 @@ import {
 import { useState } from "react";
 
 const navItems = [
-  { name: "Overview", href: "/", icon: Home },
+  { name: "Overview", href: "/overview", icon: Home },
   { name: "Sprint Board", href: "/sprint-board", icon: Layout },
   { name: "AI Allocation", href: "/ai-allocation", icon: Bot },
   { name: "Developers", href: "/developers", icon: Users },
@@ -36,7 +36,7 @@ export default function Navbar() {
       <nav className="max-w-7xl mx-auto">
         <div className="glass rounded-2xl border border-card-border px-6 py-3 flex items-center justify-between shadow-2xl backdrop-blur-xl bg-background/40">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link href="/overview" className="flex items-center gap-2 group">
             <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30 group-hover:bg-primary/30 transition-all">
               <Zap className="w-6 h-6 text-primary fill-primary/20" />
             </div>
