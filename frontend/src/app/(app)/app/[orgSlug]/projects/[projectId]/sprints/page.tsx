@@ -21,6 +21,7 @@ import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { LineChart, chartPalette } from "@/components/charts";
 import { CostWidget } from "@/features/ai/components/cost-widget";
 import { RiskCard } from "@/features/ai/components/risk-card";
+import { VelocityPanel } from "@/features/ai/components/velocity-panel";
 import {
   useAssessSprintRisk,
   useForecastCost,
@@ -319,26 +320,7 @@ function SprintDetail({
           </div>
         </div>
 
-        {predictVelocity.data ? (
-          <div className="rounded-lg border p-3">
-            <p className="text-sm">
-              Predicted velocity{" "}
-              <span className="font-semibold tabular-nums">
-                {predictVelocity.data.predictedVelocity}
-              </span>{" "}
-              points — commitment is{" "}
-              <span className="font-medium">
-                {predictVelocity.data.commitmentVerdict.replace("_", " ").toLowerCase()}
-              </span>
-              .
-            </p>
-            {predictVelocity.data.prediction?.explanation ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {predictVelocity.data.prediction.explanation}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
+        {predictVelocity.data ? <VelocityPanel velocity={predictVelocity.data} /> : null}
 
         <div className="grid gap-3 lg:grid-cols-2">
           {(assessRisk.data?.overBudget ?? risk.data?.overBudget) ? (
