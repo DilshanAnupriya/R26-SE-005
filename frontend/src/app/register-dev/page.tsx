@@ -37,7 +37,7 @@ export default function RegisterPage() {
     // Simulate a brief delay for UX
     setTimeout(() => {
       setLoading(false);
-      router.push("/register/setup");
+      router.push("/register-dev/setup");
     }, 1000);
   };
 
