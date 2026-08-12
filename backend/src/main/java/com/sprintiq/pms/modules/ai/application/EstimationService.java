@@ -156,11 +156,35 @@ public class EstimationService {
         ProjectContextSource.ProjectContext project = projects.contextFor(sprint.projectId());
 
         FeatureVector vector = FeatureVector.create()
+                // ---- What the velocity model actually reads ---------------------
+                // Names match the trained columns. The service engineers four more
+                // (velocity_delta, effective_capacity, stress_score, velocity_per_dev)
+                // from these rather than trusting us to, so the row it scores is
+                // always self-consistent.
+                // put(), not putNumber(): putNumber normalises null to zero so the mock
+                // never sees a gap, and for this model zero is the most damaging value
+                // available. A sprint with no team size recorded would be scored as a
+                // team of nobody at 0% availability rather than as a typical team — and
+                // because the key would be present, the service's median fallback could
+                // never fire. A null is dropped by NON_NULL serialisation, which is
+                // exactly the "not supplied" the service is built to handle.
                 .put("historical_velocities", sprint.historicalVelocities())
+                .put("team_size", teamSizeFor(sprint))
+                .put("sprint_duration_days", sprint.durationDays())
+                .put("planned_story_points", sprint.committedPoints())
+                .put("leave_days", sprint.absenceDays())
+                .putNumber("num_bugs", sprint.defectCount())  // a long: zero is real
+                .put("developer_availability", availability(sprint))
+                .put("completion_rate", project.recentCompletionRate())
+                .put("dev_experience_level", project.devExperienceLevel())
+                .put("domain", project.domain())
+
+                // ---- Retained for the mock client and the stored feature record ---
+                // The mock scores on these, and every prediction persists its whole
+                // vector, so dropping them would make old predictions unexplainable.
                 .putNumber("rolling_velocity", sprint.rollingVelocity())
                 .putNumber("capacity_points", sprint.capacityPoints())
                 .putNumber("capacity_hours", sprint.capacityHours())
-                .putNumber("team_size", sprint.teamSize())
                 .putNumber("duration_days", sprint.durationDays())
                 .putNumber("absence_days", sprint.absenceDays())
                 .putNumber("committed_points", sprint.committedPoints())
@@ -183,6 +207,47 @@ public class EstimationService {
         return new VelocityPredictionResponse(sprintId, predicted, sprint.rollingVelocity(),
                 sprint.committedPoints(), sprint.capacityPoints(), ratio, verdict,
                 PredictionEnvelope.from(prediction));
+    }
+
+    /**
+     * The team the sprint was actually staffed with.
+     *
+     * <p>The planned {@code teamSize} first, because that is what capacity was set
+     * against. Falling back to the number of people who touched the work covers the
+     * common case of a sprint nobody filled the field in for, and returning null
+     * rather than zero matters: the model reads a supplied zero as a team with
+     * nobody on it, and an absent value as "assume a typical team".</p>
+     */
+    private BigDecimal teamSizeFor(SprintFeatureSource.SprintFeatures sprint) {
+        if (sprint.teamSize() != null && sprint.teamSize() > 0) {
+            return BigDecimal.valueOf(sprint.teamSize());
+        }
+        return sprint.contributorCount() > 0 ? BigDecimal.valueOf(sprint.contributorCount()) : null;
+    }
+
+    /**
+     * The fraction of the sprint the team was actually available for.
+     *
+     * <p>Absence is recorded in person-days, so the denominator is the whole team's
+     * days, not one person's. Null when either side is unknown — the model then uses
+     * the median availability of its training set instead of being told this team
+     * was fully available, which is the more damaging of the two guesses.</p>
+     */
+    private BigDecimal availability(SprintFeatureSource.SprintFeatures sprint) {
+        BigDecimal team = teamSizeFor(sprint);
+        if (team == null || sprint.durationDays() == null || sprint.durationDays() <= 0
+                || sprint.absenceDays() == null) {
+            return null;
+        }
+        BigDecimal personDays = team.multiply(BigDecimal.valueOf(sprint.durationDays()));
+        if (personDays.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        BigDecimal available = BigDecimal.ONE.subtract(
+                sprint.absenceDays().divide(personDays, 4, RoundingMode.HALF_UP));
+        // The training set spans 0.55–1.00; clamping keeps a data-entry slip from
+        // handing the model a value it has never seen.
+        return available.max(BigDecimal.valueOf(0.05)).min(BigDecimal.ONE);
     }
 
     /**

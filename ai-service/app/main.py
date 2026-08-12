@@ -19,34 +19,48 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .predictor import StoryPointPredictor
+from .velocity_predictor import VelocityPredictor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-5s %(name)s: %(message)s")
 log = logging.getLogger("sprintiq.ai")
 
-MODEL_PATH = Path(os.getenv(
-    "SPRINTIQ_MODEL_PATH",
-    Path(__file__).resolve().parent.parent / "models" / "model_xgb_lgbm_uncertainty.pkl",
-))
+MODELS = Path(__file__).resolve().parent.parent / "models"
+
+MODEL_PATH = Path(os.getenv("SPRINTIQ_MODEL_PATH",
+                            MODELS / "model_xgb_lgbm_uncertainty.pkl"))
+VELOCITY_MODEL_PATH = Path(os.getenv("SPRINTIQ_VELOCITY_MODEL_PATH",
+                                     MODELS / "velocity_transfer_bundle.pkl"))
 
 app = FastAPI(
     title="SprintIQ estimation service",
-    description="Story-point estimation with calibrated uncertainty (M1).",
-    version="1.0.0",
+    description="Story-point estimation with calibrated uncertainty (M1) and "
+                "next-sprint velocity prediction with domain transfer (M1_VELOCITY).",
+    version="1.1.0",
 )
 
 # Loaded once at import. A 2MB bundle takes about a second to unpickle, and doing
 # it per request would put that on every planning click.
 predictor: StoryPointPredictor | None = None
+velocity: VelocityPredictor | None = None
 
 
 @app.on_event("startup")
 def load_model() -> None:
-    global predictor
+    global predictor, velocity
     if not MODEL_PATH.exists():
         raise RuntimeError(
             f"No model bundle at {MODEL_PATH}. Set SPRINTIQ_MODEL_PATH or place the "
             f"pickle in ai-service/models/.")
     predictor = StoryPointPredictor(MODEL_PATH)
+
+    # The velocity model is optional at startup rather than required: a deployment
+    # that only serves story points should not fail to boot over a bundle it never
+    # calls. /predict/velocity answers 503 in that case, which is the honest reply.
+    if VELOCITY_MODEL_PATH.exists():
+        velocity = VelocityPredictor(VELOCITY_MODEL_PATH)
+    else:
+        log.warning("No velocity bundle at %s — /predict/velocity will answer 503",
+                    VELOCITY_MODEL_PATH)
 
 
 class InferenceRequest(BaseModel):
@@ -65,12 +79,38 @@ class InferenceRequest(BaseModel):
 def health() -> dict[str, Any]:
     if predictor is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
-    return {
+    body: dict[str, Any] = {
         "status": "UP",
         "columns": int(predictor.model.n_features_in_),
         "test_mae": predictor.metrics.get("xgb_test", {}).get("mae"),
         "interval_coverage": predictor.coverage,
     }
+    body["velocity"] = {
+        "loaded": velocity is not None,
+        "features": len(velocity.features) if velocity else None,
+        "zero_shot_mae": velocity.zero_shot_mae if velocity else None,
+        "fine_tuned_domains": velocity.tuned_domains if velocity else [],
+    }
+    return body
+
+
+@app.post("/predict/velocity")
+def predict_velocity(request: InferenceRequest) -> dict[str, Any]:
+    if velocity is None:
+        raise HTTPException(status_code=503, detail="Velocity model not loaded")
+
+    started = time.perf_counter()
+    try:
+        result = velocity.predict(request.features)
+    except Exception as error:  # noqa: BLE001
+        log.exception("Velocity prediction failed")
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    log.info("Predicted %s points [%s, %s] via %s in %sms", result["value"],
+             result["lower_bound"], result["upper_bound"],
+             result["provenance"]["routed_to"], elapsed_ms)
+    return {**result, "latency_ms": elapsed_ms}
 
 
 @app.post("/predict/story-points")
@@ -102,15 +142,34 @@ def contract() -> dict[str, Any]:
     from .features import (KNOWN_DOMAINS, KNOWN_EXPERIENCE, KNOWN_TASK_TYPES,
                            KNOWN_TECH_STACKS, TRAINING_MEDIANS)
 
-    return {
-        "text_fields": ["title", "description", "acceptance_criteria"],
-        "numeric_fields": sorted(TRAINING_MEDIANS.keys()),
-        "categorical_fields": {
-            "task_type": list(KNOWN_TASK_TYPES),
-            "domain": list(KNOWN_DOMAINS),
-            "tech_stack": list(KNOWN_TECH_STACKS),
-            "dev_experience_level": list(KNOWN_EXPERIENCE),
+    from .velocity_features import TRAINING_MEDIANS as VELOCITY_MEDIANS
+    from .velocity_features import KNOWN_DOMAINS as VELOCITY_DOMAINS
+
+    contract: dict[str, Any] = {
+        "story_points": {
+            "text_fields": ["title", "description", "acceptance_criteria"],
+            "numeric_fields": sorted(TRAINING_MEDIANS.keys()),
+            "categorical_fields": {
+                "task_type": list(KNOWN_TASK_TYPES),
+                "domain": list(KNOWN_DOMAINS),
+                "tech_stack": list(KNOWN_TECH_STACKS),
+                "dev_experience_level": list(KNOWN_EXPERIENCE),
+            },
+            "output_scale": predictor.fib,
+            "defaults": TRAINING_MEDIANS,
         },
-        "output_scale": predictor.fib,
-        "defaults": TRAINING_MEDIANS,
     }
+    if velocity is not None:
+        contract["velocity"] = {
+            # Listed in the order the model was fitted with; the service builds the
+            # row itself, but a caller comparing contracts should see the truth.
+            "features": velocity.features,
+            "supplied_by_caller": sorted(VELOCITY_MEDIANS.keys()) + ["historical_velocities", "domain"],
+            "derived_by_service": ["velocity_delta", "effective_capacity", "stress_score",
+                                   "velocity_per_dev", "workload_ratio"],
+            "domains": list(VELOCITY_DOMAINS),
+            "fine_tuned_domains": velocity.tuned_domains,
+            "defaults": VELOCITY_MEDIANS,
+            "metrics": velocity.metrics,
+        }
+    return contract
