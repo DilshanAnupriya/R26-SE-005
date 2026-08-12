@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Pencil, Sparkles, X } from "lucide-react";
+import { Check, Pencil, RefreshCw, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import type { Story } from "@/lib/api/delivery-schemas";
 import type { StoryPointEstimate } from "@/lib/api/ai-schemas";
 import { useEstimateStory, useSubmitFeedback } from "../hooks";
@@ -17,6 +18,11 @@ import {
   DriverList,
   PredictionMeta,
 } from "./prediction-explanation";
+
+type FeedbackVerdict = "ACCEPTED" | "OVERRIDDEN" | "DISMISSED";
+
+/** What this session did with the suggestion, so the panel can say it happened. */
+type Verdict = { action: FeedbackVerdict; points: number | null };
 
 /**
  * Model 1's story-point panel: Accept, Override, Compare.
@@ -40,11 +46,18 @@ export function EstimatePanel({
   const feedback = useSubmitFeedback();
   const [overriding, setOverriding] = useState(false);
   const [overrideValue, setOverrideValue] = useState("");
+  const [verdict, setVerdict] = useState<Verdict | null>(null);
 
-  // The freshest suggestion wins: the mutation result if one has just run, otherwise
-  // whatever was stored against the story last time.
+  // A mutation result outlives the story it was produced for, so it has to be checked
+  // against the story on screen. Without this the panel showed the previously sized
+  // story's suggestion under this story's title, and Accept then wrote those points
+  // back to the *other* story — the request succeeded, and nothing here changed.
+  const fresh = estimate.data?.storyId === story.id ? estimate.data : null;
+
+  // The freshest suggestion wins: the mutation result if one has just run for this
+  // story, otherwise whatever was stored against the story last time.
   const suggestion: StoryPointEstimate | null =
-    estimate.data ??
+    fresh ??
     (story.aiEstimate?.points != null
       ? {
           storyId: story.id,
@@ -56,27 +69,57 @@ export function EstimatePanel({
         }
       : null);
 
-  const predictionId = estimate.data?.prediction?.predictionId ?? story.aiEstimate?.predictionId;
+  const predictionId = fresh?.prediction?.predictionId ?? story.aiEstimate?.predictionId;
   const busy = estimate.isPending || feedback.isPending;
 
-  async function respond(action: "ACCEPTED" | "OVERRIDDEN" | "DISMISSED", value?: number) {
-    if (!predictionId) return;
-    await feedback.mutateAsync({
-      predictionId,
-      action,
-      finalValue: value ?? null,
-      storyId: story.id,
-    });
+  /**
+   * Runs the model again on the story as it stands now.
+   *
+   * <p>The reason to want this is that the estimate is a function of the story text
+   * and its structure, both of which change while a story is being refined. A
+   * suggestion recorded before the acceptance criteria were written is stale, and
+   * there was previously no way to ask for a fresh one short of reloading.</p>
+   */
+  function reEstimate() {
+    // The old verdict described the old number, so it stops being true here.
+    setVerdict(null);
+    setOverriding(false);
+    estimate.mutate(story.id);
+  }
+
+  async function respond(action: FeedbackVerdict, value?: number) {
+    if (!predictionId) {
+      // Nothing to record a verdict against. Saying so beats a button that swallows
+      // the click, which is indistinguishable from a broken one.
+      toast.error("This suggestion is no longer on file. Run it again to accept it.");
+      return;
+    }
+
+    try {
+      await feedback.mutateAsync({
+        predictionId,
+        action,
+        finalValue: value ?? null,
+        storyId: story.id,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not record that.");
+      return;
+    }
+
     setOverriding(false);
     if (action === "ACCEPTED" && suggestion?.suggestedPoints != null) {
+      setVerdict({ action, points: suggestion.suggestedPoints });
       onEstimateApplied?.(suggestion.suggestedPoints);
-      toast.success(`Estimated at ${suggestion.suggestedPoints} points.`);
+      toast.success(`${story.itemKey} is now ${suggestion.suggestedPoints} points.`);
     }
     if (action === "OVERRIDDEN" && value != null) {
+      setVerdict({ action, points: value });
       onEstimateApplied?.(value);
-      toast.success(`Estimated at ${value} points.`);
+      toast.success(`${story.itemKey} is now ${value} points.`);
     }
     if (action === "DISMISSED") {
+      setVerdict({ action, points: null });
       toast.info("Suggestion dismissed. It will not be applied.");
     }
   }
@@ -106,7 +149,7 @@ export function EstimatePanel({
     );
   }
 
-  const prediction = estimate.data?.prediction;
+  const prediction = fresh?.prediction;
   const human = story.storyPoints;
   const suggested = suggestion.suggestedPoints;
   const disagrees = human != null && suggested != null && human !== suggested;
@@ -121,6 +164,9 @@ export function EstimatePanel({
           >
             <Sparkles className="size-3.5 text-primary" aria-hidden />
             Suggested estimate
+            {estimate.isPending ? (
+              <span className="text-xs font-normal text-muted-foreground">re-estimating…</span>
+            ) : null}
           </h3>
 
           <div className="mt-1.5 flex items-baseline gap-2">
@@ -177,6 +223,37 @@ export function EstimatePanel({
         </>
       ) : null}
 
+      {/* What just happened, in the panel rather than only in a toast that has already
+          faded. Accepting a suggestion that matches the story's current points changes
+          nothing else on screen, so without this the button looks broken. */}
+      {verdict ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-dashed p-2">
+          <Check className="size-3.5 text-primary" aria-hidden />
+          <p className="flex-1 text-xs" role="status">
+            {verdict.action === "DISMISSED"
+              ? "Dismissed. The story keeps its own estimate."
+              : `Applied — ${story.itemKey} is ${verdict.points} points.`}
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => {
+              setVerdict(null);
+              setOverrideValue(String(verdict.points ?? suggested ?? ""));
+              setOverriding(true);
+            }}
+          >
+            <Pencil className="size-3.5" aria-hidden />
+            Change
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={reEstimate}>
+            <RefreshCw className={cn("size-3.5", estimate.isPending && "animate-spin")} aria-hidden />
+            Re-estimate
+          </Button>
+        </div>
+      ) : null}
+
       {predictionId ? (
         overriding ? (
           <form
@@ -214,7 +291,7 @@ export function EstimatePanel({
               Cancel
             </Button>
           </form>
-        ) : (
+        ) : verdict ? null : (
           <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" disabled={busy} onClick={() => void respond("ACCEPTED")}>
               <Check className="size-3.5" aria-hidden />
@@ -231,6 +308,15 @@ export function EstimatePanel({
             >
               <Pencil className="size-3.5" aria-hidden />
               Override
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={reEstimate}
+            >
+              <RefreshCw className={cn("size-3.5", estimate.isPending && "animate-spin")} aria-hidden />
+              Re-estimate
             </Button>
             <Button
               size="sm"
