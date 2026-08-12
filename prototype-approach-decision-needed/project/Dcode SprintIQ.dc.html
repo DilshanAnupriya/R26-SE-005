@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+:root{--canvas:#F5F6F9;--surface:#FFFFFF;--surface-2:#FAFBFC;--surface-3:#F2F3F7;--border:#E8EAF0;--border-strong:#DADDE6;--text:#171A21;--text-2:#59627A;--text-3:#8993A6;--accent:#5B5CF0;--accent-hover:#4B4CE0;--accent-soft:#ECECFE;--accent-text:#4B4CE0;--green:#16A34A;--green-soft:#E7F6ED;--amber:#D97706;--amber-soft:#FBF0DA;--red:#DC2626;--red-soft:#FBE9E9;--blue:#2563EB;--blue-soft:#E7EEFD;--violet:#7C3AED;--violet-soft:#F1E9FD;--teal:#0D9488;--teal-soft:#E0F5F2;--shadow-sm:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.04);--shadow-md:0 4px 14px rgba(16,24,40,.08),0 1px 3px rgba(16,24,40,.05);--shadow-lg:0 12px 32px rgba(16,24,40,.12),0 2px 6px rgba(16,24,40,.06);--sidebar:250px}
+[data-theme="dark"]{--canvas:#0B0C10;--surface:#15171E;--surface-2:#1A1D25;--surface-3:#20232D;--border:#262A34;--border-strong:#333844;--text:#E9EBF1;--text-2:#9AA3B4;--text-3:#697086;--accent:#7071F6;--accent-hover:#8384F8;--accent-soft:#1E2040;--accent-text:#AEAFFB;--green:#34D399;--green-soft:#122A20;--amber:#FBBF24;--amber-soft:#2C2311;--red:#F87171;--red-soft:#2E1719;--blue:#60A5FA;--blue-soft:#132241;--violet:#A78BFA;--violet-soft:#231A3A;--teal:#2DD4BF;--teal-soft:#0E2A28;--shadow-sm:0 1px 2px rgba(0,0,0,.3);--shadow-md:0 6px 18px rgba(0,0,0,.4);--shadow-lg:0 16px 40px rgba(0,0,0,.55)}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:20px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--text-3);background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="height:100vh;width:100%;overflow:hidden;background:var(--canvas);color:var(--text);font-family:'Geist','Inter',system-ui,-apple-system,sans-serif;font-size:13.5px;line-height:1.45;letter-spacing:-.01em;display:grid;grid-template-columns:{{sidebarW}} 1fr">
+
+<aside style="background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;overflow:hidden">
+  <div style="padding:12px 12px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px">
+    <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#8B5CF6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex:none;box-shadow:var(--shadow-sm)">D</div>
+    <sc-if value="{{expanded}}">
+    <div style="flex:1;min-width:0;line-height:1.15">
+      <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Dcode Cloud</div>
+      <div style="font-size:11px;color:var(--text-3);white-space:nowrap">Business · 7 members</div>
+    </div>
+    <span style="width:16px;height:16px;color:var(--text-3);flex:none">{{chevDown}}</span>
+    </sc-if>
+  </div>
+
+  <div style="flex:1;min-height:0;overflow-y:auto;padding:8px 8px 16px">
+    <sc-for list="{{navSections}}" as="section" hint-placeholder-count="4">
+      <div style="margin-top:10px">
+        <sc-if value="{{section.showTitle}}">
+          <div style="font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);padding:4px 8px 5px">{{section.title}}</div>
+        </sc-if>
+        <sc-for list="{{section.items}}" as="it" hint-placeholder-count="5">
+          <div onClick="{{it.onClick}}" title="{{it.label}}" style="{{it.style}}" style-hover="{{it.hover}}">
+            <span style="width:18px;height:18px;display:flex;flex:none">{{it.iconEl}}</span>
+            <sc-if value="{{expanded}}"><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{it.label}}</span></sc-if>
+            <sc-if value="{{it.badgeShow}}"><span style="{{it.badgeStyle}}">{{it.badge}}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+
+  <div onClick="{{toggleSidebar}}" style="border-top:1px solid var(--border);padding:9px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;color:var(--text-3);font-size:12px" style-hover="background:var(--surface-3)">
+    <span style="width:16px;height:16px;display:flex;flex:none;transform:{{collapseRot}}">{{chevLeft}}</span>
+    <sc-if value="{{expanded}}"><span>Collapse</span></sc-if>
+  </div>
+</aside>
+
+<main style="min-width:0;display:flex;flex-direction:column;min-height:0">
+  <header style="height:52px;flex:none;border-bottom:1px solid var(--border);background:color-mix(in srgb, var(--surface) 82%, transparent);backdrop-filter:blur(12px);display:flex;align-items:center;gap:14px;padding:0 16px;position:relative;z-index:20">
+    <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:none;max-width:240px">
+      <span style="font-size:13px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Dcode Cloud</span>
+      <span style="color:var(--text-3)">/</span>
+      <span style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{crumb}}</span>
+    </div>
+    <div onClick="{{openSearch}}" style="flex:1 1 auto;max-width:440px;min-width:120px;margin:0 auto;display:flex;align-items:center;gap:9px;height:34px;padding:0 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--text-3);cursor:pointer;font-size:13px" style-hover="border-color:var(--border-strong);background:var(--surface)">
+      <span style="width:15px;height:15px;display:flex;flex:none">{{iconSearch}}</span>
+      <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search issues, projects, docs…</span>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;padding:2px 6px;border:1px solid var(--border-strong);border-radius:5px;background:var(--surface)">⌘K</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px">
+      <div style="display:flex;align-items:center;gap:7px;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-family:'Geist Mono',monospace;font-size:12.5px;font-weight:500" title="Time tracking">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-soft)"></span>01:24:38
+      </div>
+      <button style="{{iconBtn}}" style-hover="background:var(--surface-3)" title="Notifications"><span style="width:18px;height:18px;display:flex;position:relative">{{iconBell}}<span style="position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--red);border:1.5px solid var(--surface)"></span></span></button>
+      <button onClick="{{toggleTheme}}" style="{{iconBtn}}" style-hover="background:var(--surface-3)" title="Toggle theme"><span style="width:18px;height:18px;display:flex">{{themeIcon}}</span></button>
+      <button onClick="{{goCreate}}" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 10px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm);margin-left:4px" style-hover="background:var(--accent-hover)"><span style="width:16px;height:16px;display:flex">{{iconPlus}}</span>Create</button>
+      <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;margin-left:4px;cursor:pointer;box-shadow:var(--shadow-sm)">DP</div>
+    </div>
+  </header>
+
+  <div style="flex:1;min-height:0;overflow-y:auto">
+
+    <sc-if value="{{isDashboard}}"><div style="padding:22px 26px 60px;max-width:1360px;margin:0 auto;animation:fadeUp .3s ease">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px">
+        <div>
+          <div style="font-size:12.5px;color:var(--text-3);font-weight:500;margin-bottom:3px">{{dateStr}}</div>
+          <h1 style="margin:0;font-size:23px;font-weight:600;letter-spacing:-.02em">{{greeting}}, Dilshan</h1>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button style="{{btnGhost}}" style-hover="background:var(--surface-3)">This week ▾</button>
+          <button onClick="{{goBoard}}" style="{{btnSolid}}" style-hover="background:var(--accent-hover)">Open active sprint</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px">
+        <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+              <span style="font-size:12.5px;color:var(--text-2);font-weight:500">{{s.label}}</span>
+              <span style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:{{s.iconBg}};color:{{s.iconColor}}"><span style="width:16px;height:16px;display:flex">{{s.iconEl}}</span></span>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <span style="font-size:27px;font-weight:600;letter-spacing:-.02em">{{s.value}}</span>
+              <span style="font-size:12px;font-weight:600;color:{{s.deltaColor}}">{{s.delta}}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:16px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px 12px;border-bottom:1px solid var(--border)">
+            <div><div style="font-weight:600;font-size:14.5px">{{sprint.name}}</div><div style="font-size:12px;color:var(--text-3);margin-top:1px">Day {{sprint.day}} of {{sprint.total}} · ends {{sprint.ends}}</div></div>
+            <span style="font-size:12px;font-weight:600;color:var(--green);background:var(--green-soft);padding:4px 9px;border-radius:20px">On track</span>
+          </div>
+          <div style="padding:16px 18px">
+            <div style="display:flex;gap:26px">
+              <div style="flex:none;width:210px">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-2);margin-bottom:5px"><span>Story points</span><span style="font-weight:600;color:var(--text)">{{sprint.pd}} / {{sprint.pt}}</span></div>
+                <div style="height:8px;border-radius:20px;background:var(--surface-3);overflow:hidden;margin-bottom:14px"><div style="height:100%;width:{{sprint.pct}}%;background:var(--accent);border-radius:20px"></div></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <div><div style="font-size:20px;font-weight:600">{{sprint.done}}</div><div style="font-size:11.5px;color:var(--text-3)">Completed</div></div>
+                  <div><div style="font-size:20px;font-weight:600">{{sprint.remaining}}</div><div style="font-size:11.5px;color:var(--text-3)">Remaining</div></div>
+                  <div><div style="font-size:20px;font-weight:600;color:var(--amber)">{{sprint.inprog}}</div><div style="font-size:11.5px;color:var(--text-3)">In progress</div></div>
+                  <div><div style="font-size:20px;font-weight:600;color:var(--red)">{{sprint.blocked}}</div><div style="font-size:11.5px;color:var(--text-3)">Blocked</div></div>
+                </div>
+              </div>
+              <div style="flex:1;min-width:0" data-om-raster="true">
+                <div style="font-size:12px;color:var(--text-2);margin-bottom:6px">Burndown</div>
+                {{burndownEl}}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:14px 16px 10px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px">Team activity</div>
+          <div style="padding:6px 8px;overflow:hidden">
+            <sc-for list="{{activity}}" as="a" hint-placeholder-count="5">
+              <div style="display:flex;gap:10px;padding:8px 8px;border-radius:9px" style-hover="background:var(--surface-2)">
+                <span style="flex:none;margin-top:1px">{{a.avatarEl}}</span>
+                <div style="min-width:0;font-size:12.5px;line-height:1.4">
+                  <span style="font-weight:600">{{a.who}}</span> <span style="color:var(--text-2)">{{a.action}}</span> <span style="font-weight:500;color:var(--accent-text)">{{a.target}}</span>
+                  <div style="color:var(--text-3);font-size:11.5px;margin-top:1px">{{a.time}}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 12px;border-bottom:1px solid var(--border)"><span style="font-weight:600;font-size:14px">Active projects</span><span onClick="{{goBoard}}" style="font-size:12.5px;color:var(--accent-text);cursor:pointer;font-weight:500">View all</span></div>
+          <div>
+            <sc-for list="{{projects}}" as="p" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:1.7fr 90px 1fr 92px;gap:14px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border)" style-hover="background:var(--surface-2)">
+                <div style="display:flex;align-items:center;gap:11px;min-width:0">
+                  <span style="width:30px;height:30px;border-radius:8px;background:{{p.iconBg}};color:{{p.iconColor}};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;font-family:'Geist Mono',monospace;flex:none">{{p.key}}</span>
+                  <div style="min-width:0"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{p.name}}</div><div style="font-size:11.5px;color:var(--text-3)">{{p.meta}}</div></div>
+                </div>
+                <span style="font-size:11.5px;font-weight:600;color:{{p.healthColor}};background:{{p.healthBg}};padding:3px 8px;border-radius:20px;justify-self:start">{{p.health}}</span>
+                <div style="display:flex;align-items:center;gap:9px"><div style="flex:1;height:6px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:{{p.progress}}%;background:{{p.barColor}};border-radius:20px"></div></div><span style="font-size:12px;font-weight:600;width:32px">{{p.progress}}%</span></div>
+                <span style="font-size:12px;color:var(--text-2);justify-self:end">{{p.due}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="padding:14px 16px 10px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px">Upcoming deadlines</div>
+          <div style="padding:6px 8px">
+            <sc-for list="{{deadlines}}" as="d" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:11px;padding:9px 8px;border-radius:9px" style-hover="background:var(--surface-2)">
+                <div style="flex:none;width:40px;text-align:center"><div style="font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase">{{d.mon}}</div><div style="font-size:17px;font-weight:600;line-height:1">{{d.day}}</div></div>
+                <div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{d.title}}</div><div style="font-size:11.5px;color:var(--text-3)">{{d.meta}}</div></div>
+                <span style="flex:none">{{d.prioEl}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isBoard}}"><div style="display:flex;flex-direction:column;height:100%;animation:fadeUp .3s ease">
+      <div style="flex:none;padding:16px 22px 12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:11px">
+            <span style="width:32px;height:32px;border-radius:9px;background:var(--accent-soft);color:var(--accent-text);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;font-family:'Geist Mono',monospace">PAY</span>
+            <div><h1 style="margin:0;font-size:18px;font-weight:600;letter-spacing:-.02em">Payroll SaaS</h1><div style="font-size:12px;color:var(--text-3)">Sprint 24 · 6 days left</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;align-items:center">
+              <sc-for list="{{boardAvatars}}" as="a" hint-placeholder-count="5"><span style="margin-left:-6px;border:2px solid var(--surface);border-radius:50%;display:flex">{{a}}</span></sc-for>
+            </div>
+            <button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Filter</button>
+            <button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Group: Status ▾</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin:0 -22px;padding:0 22px">
+          <sc-for list="{{boardTabs}}" as="t" hint-placeholder-count="6"><div style="{{t.style}}" style-hover="color:var(--text)">{{t.label}}</div></sc-for>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-x:auto;overflow-y:hidden">
+        <div style="display:flex;gap:14px;padding:4px 22px 22px;height:100%;min-width:min-content">
+          <sc-for list="{{board}}" as="col" hint-placeholder-count="6">
+            <div style="width:288px;flex:none;display:flex;flex-direction:column;min-height:0">
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 4px 10px;flex:none">
+                <span style="width:8px;height:8px;border-radius:3px;background:{{col.color}}"></span>
+                <span style="font-weight:600;font-size:13px">{{col.name}}</span>
+                <span style="font-size:12px;color:var(--text-3);font-weight:500">{{col.count}}</span>
+                <sc-if value="{{col.wipShow}}"><span style="font-size:10.5px;font-weight:600;color:{{col.wipColor}};background:{{col.wipBg}};padding:2px 7px;border-radius:20px;margin-left:2px">{{col.wip}}</span></sc-if>
+                <span style="flex:1"></span>
+                <span style="width:16px;height:16px;display:flex;color:var(--text-3);cursor:pointer">{{iconPlusSmall}}</span>
+              </div>
+              <div onDragOver="{{col.onDragOver}}" onDrop="{{col.onDrop}}" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:2px 3px 8px;border:1.5px solid transparent;border-radius:12px;{{col.dropStyle}}">
+                <sc-for list="{{col.cards}}" as="c" hint-placeholder-count="3">
+                  <div draggable="true" onDragStart="{{c.onDragStart}}" onDragEnd="{{c.onDragEnd}}" onClick="{{c.open}}" style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 12px;box-shadow:var(--shadow-sm);cursor:grab;opacity:{{c.dragOpacity}}" style-hover="border-color:var(--border-strong);box-shadow:var(--shadow-md);transform:translateY(-1px)">
+                    <sc-if value="{{c.hasLabels}}"><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px"><sc-for list="{{c.labels}}" as="l" hint-placeholder-count="2"><span style="font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:6px;background:{{l.bg}};color:{{l.color}}">{{l.text}}</span></sc-for></div></sc-if>
+                    <div style="font-size:13px;font-weight:500;line-height:1.35;margin-bottom:10px;color:var(--text)">{{c.title}}</div>
+                    <div style="display:flex;align-items:center;gap:9px;color:var(--text-3);font-size:11.5px">
+                      <span style="display:flex;align-items:center;gap:4px;font-family:'Geist Mono',monospace;font-weight:500">{{c.typeEl}}{{c.id}}</span>
+                      <span style="flex:none">{{c.prioEl}}</span>
+                      <sc-if value="{{c.hasSub}}"><span style="display:flex;align-items:center;gap:3px"><span style="width:13px;height:13px;display:flex">{{iconBranch}}</span>{{c.sub}}</span></sc-if>
+                      <sc-if value="{{c.hasComments}}"><span style="display:flex;align-items:center;gap:3px"><span style="width:13px;height:13px;display:flex">{{iconComment}}</span>{{c.comments}}</span></sc-if>
+                      <span style="flex:1"></span>
+                      <span style="font-weight:600;color:var(--text-2)">{{c.pts}}</span>
+                      <span style="flex:none">{{c.avatarEl}}</span>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="border:1.5px dashed var(--border);border-radius:11px;padding:9px;text-align:center;color:var(--text-3);font-size:12px;cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent-text)">+ Add issue</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isIssue}}"><div style="display:flex;height:100%;animation:fadeUp .3s ease">
+      <div style="flex:1;min-width:0;overflow-y:auto;padding:20px 28px 60px">
+        <div style="max-width:760px;margin:0 auto">
+          <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-3);margin-bottom:14px">
+            <span onClick="{{goBack}}" style="cursor:pointer;display:flex;align-items:center;gap:5px" style-hover="color:var(--text)"><span style="width:15px;height:15px;display:flex">{{chevLeft}}</span>Board</span>
+            <span>/</span><span style="color:var(--accent-text)">{{iss.epic}}</span>
+            <span>/</span><span style="font-family:'Geist Mono',monospace;color:var(--text-2)">{{iss.id}}</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:11px;margin-bottom:18px">
+            <span style="width:26px;height:26px;display:flex;margin-top:3px">{{issTypeEl}}</span>
+            <h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.28">{{iss.title}}</h1>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:24px">
+            <div style="display:flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;background:var(--blue-soft);color:var(--blue);font-weight:600;font-size:13px"><span style="width:7px;height:7px;border-radius:50%;background:var(--blue)"></span>In Progress</div>
+            <button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Assign</button>
+            <button style="{{btnGhost}}" style-hover="background:var(--surface-3)">+ Add subtask</button>
+            <span style="flex:1"></span>
+            <button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Share</button>
+          </div>
+
+          <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Description</div>
+          <div style="font-size:14px;line-height:1.65;color:var(--text-2);margin-bottom:8px">Add single sign-on to the payroll app so enterprise customers can authenticate with their existing Google Workspace or Microsoft Entra ID accounts. Users should be able to link an existing email/password account to a provider.</div>
+          <ul style="font-size:14px;line-height:1.7;color:var(--text-2);margin:0 0 26px;padding-left:20px">
+            <li>OAuth2 authorization-code flow with PKCE</li>
+            <li>Google Workspace &amp; Microsoft Entra ID providers</li>
+            <li>Graceful fallback to email/password</li>
+            <li>Audit-log every sign-in event</li>
+          </ul>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em">Subtasks · {{issSubDone}}/{{issSubTotal}}</div>
+            <div style="display:flex;align-items:center;gap:8px"><div style="width:120px;height:6px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:{{issSubPct}}%;background:var(--green);border-radius:20px"></div></div><span style="font-size:12px;font-weight:600;color:var(--text-2)">{{issSubPct}}%</span></div>
+          </div>
+          <div style="border:1px solid var(--border);border-radius:11px;overflow:hidden;margin-bottom:28px;background:var(--surface)">
+            <sc-for list="{{issSub}}" as="s" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--border)" style-hover="background:var(--surface-2)">
+                <span style="width:18px;height:18px;border-radius:6px;border:1.5px solid {{s.check}};background:{{s.checkBg}};color:#fff;display:flex;align-items:center;justify-content:center;flex:none">{{s.mark}}</span>
+                <span style="flex:1;font-size:13.5px;text-decoration:{{s.deco}};color:{{s.tcolor}}">{{s.t}}</span>
+                <span style="flex:none">{{s.avatarEl}}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Development</div>
+          <div style="border:1px solid var(--border);border-radius:11px;overflow:hidden;margin-bottom:28px;background:var(--surface)">
+            <sc-for list="{{issDev}}" as="d" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--border)" style-hover="background:var(--surface-2)">
+                <span style="width:16px;height:16px;display:flex;color:{{d.color}};flex:none">{{d.iconEl}}</span>
+                <span style="font-size:13px;font-weight:500;font-family:'Geist Mono',monospace">{{d.label}}</span>
+                <span style="flex:1"></span>
+                <span style="font-size:12px;color:var(--text-3)">{{d.meta}}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Comments</div>
+          <sc-for list="{{issComments}}" as="c" hint-placeholder-count="3">
+            <div style="display:flex;gap:12px;margin-bottom:18px">
+              <span style="flex:none">{{c.avatarEl}}</span>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px"><span style="font-weight:600;font-size:13px">{{c.name}}</span><span style="font-size:11.5px;color:var(--text-3)">{{c.time}}</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:var(--text-2)">{{c.text}}</div>
+              </div>
+            </div>
+          </sc-for>
+          <div style="display:flex;gap:12px;margin-top:4px">
+            <span style="flex:none">{{issMe}}</span>
+            <div style="flex:1;border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text-3);font-size:13.5px;background:var(--surface)">Write a comment… use @ to mention</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:300px;flex:none;border-left:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:18px 18px 40px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Details</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="display:grid;grid-template-columns:78px 1fr;align-items:center;gap:8px;padding:7px 0"><span style="font-size:12.5px;color:var(--text-3)">Assignee</span><span style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500">{{issAssignee}}Nadeesha K.</span></div>
+          <div style="display:grid;grid-template-columns:78px 1fr;align-items:center;gap:8px;padding:7px 0"><span style="font-size:12.5px;color:var(--text-3)">Reporter</span><span style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500">{{issReporter}}Dilshan P.</span></div>
+          <div style="display:grid;grid-template-columns:78px 1fr;align-items:center;gap:8px;padding:7px 0"><span style="font-size:12.5px;color:var(--text-3)">Priority</span><span style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500">{{issPrioEl}}High</span></div>
+          <div style="display:grid;grid-template-columns:78px 1fr;align-items:center;gap:8px;padding:7px 0"><span style="font-size:12.5px;color:var(--text-3)">Points</span><span style="font-size:13px;font-weight:600">{{iss.pts}}</span></div>
+          <div style="display:grid;grid-template-columns:78px 1fr;align-items:center;gap:8px;padding:7px 0"><span style="font-size:12.5px;color:var(--text-3)">Sprint</span><span style="font-size:13px;font-weight:500;color:var(--accent-text)">{{iss.sprint}}</span></div>
+          <div style="display:grid;grid-template-columns:78px 1fr;align-items:center;gap:8px;padding:7px 0"><span style="font-size:12.5px;color:var(--text-3)">Epic</span><span style="font-size:13px;font-weight:500;color:var(--accent-text)">{{iss.epic}}</span></div>
+          <div style="display:grid;grid-template-columns:78px 1fr;align-items:center;gap:8px;padding:7px 0"><span style="font-size:12.5px;color:var(--text-3)">Due</span><span style="font-size:13px;font-weight:500">{{iss.due}}</span></div>
+        </div>
+        <div style="height:1px;background:var(--border);margin:14px 0"></div>
+        <div style="font-size:12.5px;color:var(--text-3);margin-bottom:8px">Labels</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"><sc-for list="{{issLabels}}" as="l" hint-placeholder-count="2"><span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;background:{{l.bg}};color:{{l.color}}">{{l.text}}</span></sc-for></div>
+        <div style="font-size:12.5px;color:var(--text-3);margin-bottom:8px">Components</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px"><span style="font-size:11px;font-weight:500;padding:3px 9px;border-radius:6px;background:var(--surface-3);color:var(--text-2)">Auth Service</span><span style="font-size:11px;font-weight:500;padding:3px 9px;border-radius:6px;background:var(--surface-3);color:var(--text-2)">API Gateway</span></div>
+        <div style="height:1px;background:var(--border);margin:0 0 14px"></div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Activity</div>
+        <sc-for list="{{issActivity}}" as="a" hint-placeholder-count="3">
+          <div style="display:flex;gap:9px;margin-bottom:12px;font-size:12.5px;line-height:1.45">
+            <span style="flex:none;margin-top:1px">{{a.avatarEl}}</span>
+            <div><span style="font-weight:600">{{a.who}}</span> <span style="color:var(--text-2)">{{a.text}}</span> <sc-if value="{{a.hasDetail}}"><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--text);background:var(--surface-3);padding:1px 5px;border-radius:4px">{{a.detail}}</span></sc-if><div style="color:var(--text-3);font-size:11px;margin-top:1px">{{a.time}}</div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isMyWork}}"><div style="padding:22px 26px 60px;max-width:1240px;margin:0 auto;animation:fadeUp .3s ease">
+      <h1 style="margin:0 0 4px;font-size:23px;font-weight:600;letter-spacing:-.02em">My Work</h1>
+      <div style="font-size:13px;color:var(--text-3);margin-bottom:18px">Everything assigned to you across all projects</div>
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start">
+        <div>
+          <div style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px">
+            <div style="padding:8px 12px;font-size:13px;font-weight:600;color:var(--text);border-bottom:2px solid var(--accent);margin-bottom:-1px;cursor:pointer">Assigned to me</div>
+            <div style="padding:8px 12px;font-size:13px;font-weight:500;color:var(--text-3);cursor:pointer" style-hover="color:var(--text)">Created by me</div>
+            <div style="padding:8px 12px;font-size:13px;font-weight:500;color:var(--text-3);cursor:pointer" style-hover="color:var(--text)">Subscribed</div>
+          </div>
+          <sc-for list="{{mwGroups}}" as="g" hint-placeholder-count="3">
+            <div style="margin-bottom:22px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px"><span style="width:8px;height:8px;border-radius:3px;background:{{g.color}}"></span><span style="font-weight:600;font-size:13.5px">{{g.label}}</span><span style="font-size:12px;color:var(--text-3);font-weight:500">{{g.count}}</span></div>
+              <div style="border:1px solid var(--border);border-radius:11px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow-sm)">
+                <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
+                  <div onClick="{{goToIssue}}" style="display:grid;grid-template-columns:22px 20px 74px 1fr auto auto 92px;gap:11px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)">
+                    <span style="width:18px;height:18px;border-radius:6px;border:1.5px solid {{r.checkBd}};background:{{r.checkBg}};color:#fff;display:flex;align-items:center;justify-content:center;flex:none">{{r.mark}}</span>
+                    <span style="width:16px;height:16px;display:flex">{{r.typeEl}}</span>
+                    <span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--text-3)">{{r.id}}</span>
+                    <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:{{r.deco}};color:{{r.tcolor}}">{{r.t}}</span>
+                    <span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:6px;background:{{r.proj.bg}};color:{{r.proj.color}};font-family:'Geist Mono',monospace">{{r.proj.k}}</span>
+                    <span style="flex:none">{{r.prioEl}}</span>
+                    <span style="font-size:12px;color:{{r.dueColor}};justify-self:end;white-space:nowrap">{{r.due}}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow-sm)">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:16px">{{mwMe}}<div><div style="font-weight:600;font-size:14px">Dilshan Perera</div><div style="font-size:12px;color:var(--text-3)">Product Manager</div></div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div><div style="font-size:22px;font-weight:600">12</div><div style="font-size:11.5px;color:var(--text-3)">Assigned</div></div>
+              <div><div style="font-size:22px;font-weight:600;color:var(--green)">5</div><div style="font-size:11.5px;color:var(--text-3)">Done this wk</div></div>
+              <div><div style="font-size:22px;font-weight:600;color:var(--red)">2</div><div style="font-size:11.5px;color:var(--text-3)">Overdue</div></div>
+              <div><div style="font-size:22px;font-weight:600">21</div><div style="font-size:11.5px;color:var(--text-3)">Points (wk)</div></div>
+            </div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow-sm)">
+            <div style="font-weight:600;font-size:13.5px;margin-bottom:14px">By priority</div>
+            <sc-for list="{{mwPrio}}" as="p" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px">
+                <span style="width:52px;font-size:12px;color:var(--text-2)">{{p.l}}</span>
+                <div style="flex:1;height:7px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:{{p.w}}%;background:{{p.c}};border-radius:20px"></div></div>
+                <span style="font-size:12px;font-weight:600;width:16px;text-align:right">{{p.n}}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:linear-gradient(135deg,var(--accent-soft),transparent);border:1px solid var(--border);border-radius:12px;padding:16px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:18px;height:18px;display:flex;color:var(--accent-text)">{{iconAi}}</span><span style="font-weight:600;font-size:13.5px">Focus suggestion</span></div>
+            <div style="font-size:12.5px;color:var(--text-2);line-height:1.5">You have 2 overdue urgent items. Clearing PAY-148 first unblocks the OAuth2 rollout due tomorrow.</div>
+          </div>
+        </div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isBacklog}}"><div style="display:flex;height:100%;animation:fadeUp .3s ease">
+      <div style="flex:1;min-width:0;overflow-y:auto;padding:20px 26px 60px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+          <div><h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em">Backlog &amp; Sprint Planning</h1><div style="font-size:12.5px;color:var(--text-3);margin-top:2px">Payroll SaaS · drag issues between the sprint and backlog</div></div>
+          <div style="display:flex;gap:8px"><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Filter</button><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">+ Create issue</button></div>
+        </div>
+
+        <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-sm);margin-bottom:16px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--accent-soft);border-bottom:1px solid var(--border)">
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>
+            <span style="font-weight:600;font-size:14px">Sprint 24 · Payroll</span>
+            <span style="font-size:12px;color:var(--text-2)">Aug 5 – Aug 15</span>
+            <span style="font-size:11.5px;font-weight:600;color:var(--accent-text);background:var(--surface);padding:3px 9px;border-radius:20px">Active</span>
+            <span style="flex:1"></span>
+            <span style="font-size:12.5px;color:var(--text-2)"><b>{{blSprintCount}}</b> issues · <b>{{blSprintPts}}</b> / {{blCapacity}} pts</span>
+            <button style="{{btnSolid}}" style-hover="background:var(--accent-hover)">Complete sprint</button>
+          </div>
+          <div style="padding:8px 10px 6px 16px"><div style="display:flex;align-items:center;gap:9px;margin-bottom:6px"><span style="font-size:11.5px;color:var(--text-3);width:56px">Capacity</span><div style="flex:1;height:7px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:{{blSprintPct}}%;background:var(--accent);border-radius:20px"></div></div><span style="font-size:11.5px;font-weight:600">{{blSprintPts}}/{{blCapacity}}</span></div></div>
+          <sc-for list="{{blSprint}}" as="r" hint-placeholder-count="6">
+            <div onClick="{{goToIssue}}" style="display:grid;grid-template-columns:16px 20px 78px 1fr auto auto 26px 26px;gap:11px;align-items:center;padding:9px 16px;border-top:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)">
+              <span style="width:10px;height:16px;color:var(--text-3);display:flex;align-items:center;font-size:12px;cursor:grab">⋮⋮</span>
+              <span style="width:16px;height:16px;display:flex">{{r.typeEl}}</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--text-3)">{{r.id}}</span>
+              <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.t}}</span>
+              <span style="font-size:11px;font-weight:600;color:{{r.st.color}}">{{r.st.name}}</span>
+              <span style="flex:none">{{r.prioEl}}</span>
+              <span style="font-size:11px;font-weight:600;color:var(--text-2);width:20px;height:20px;border-radius:6px;background:var(--surface-3);display:flex;align-items:center;justify-content:center">{{r.pts}}</span>
+              <span style="flex:none">{{r.avatarEl}}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border)">
+            <span style="font-weight:600;font-size:14px">Backlog</span>
+            <span style="font-size:12px;color:var(--text-3)">{{blBacklogCount}} issues</span>
+            <span style="flex:1"></span>
+            <button style="{{btnGhost}}" style-hover="background:var(--surface-3)">+ Create sprint</button>
+          </div>
+          <sc-for list="{{blBacklog}}" as="r" hint-placeholder-count="6">
+            <div onClick="{{goToIssue}}" style="display:grid;grid-template-columns:16px 20px 78px 1fr auto auto 26px 26px;gap:11px;align-items:center;padding:9px 16px;border-top:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)">
+              <span style="width:10px;height:16px;color:var(--text-3);display:flex;align-items:center;font-size:12px;cursor:grab">⋮⋮</span>
+              <span style="width:16px;height:16px;display:flex">{{r.typeEl}}</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--text-3)">{{r.id}}</span>
+              <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.t}}</span>
+              <sc-if value="{{r.hasLabels}}"><span style="display:flex;gap:5px"><sc-for list="{{r.labels}}" as="l" hint-placeholder-count="1"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;background:{{l.bg}};color:{{l.color}}">{{l.text}}</span></sc-for></span></sc-if>
+              <span style="flex:none">{{r.prioEl}}</span>
+              <span style="font-size:11px;font-weight:600;color:var(--text-2);width:20px;height:20px;border-radius:6px;background:var(--surface-3);display:flex;align-items:center;justify-content:center">{{r.pts}}</span>
+              <span style="flex:none">{{r.avatarEl}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="width:264px;flex:none;border-left:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:18px 16px 40px">
+        <div style="font-weight:600;font-size:13.5px;margin-bottom:12px">Sprint 24 overview</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+          <div><div style="font-size:20px;font-weight:600">10</div><div style="font-size:11px;color:var(--text-3)">Days total</div></div>
+          <div><div style="font-size:20px;font-weight:600;color:var(--accent-text)">6</div><div style="font-size:11px;color:var(--text-3)">Days left</div></div>
+          <div><div style="font-size:20px;font-weight:600;color:var(--green)">34</div><div style="font-size:11px;color:var(--text-3)">Points done</div></div>
+          <div><div style="font-size:20px;font-weight:600">58</div><div style="font-size:11px;color:var(--text-3)">Committed</div></div>
+        </div>
+        <div style="font-size:12.5px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Velocity</div>
+        <div data-om-raster="true" style="margin-bottom:8px">{{blVelocity}}</div>
+        <div style="font-size:12px;color:var(--text-3)">Avg 46 pts over last 5 sprints. This sprint committed +12 above average.</div>
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2);line-height:1.5"><span style="width:16px;height:16px;display:flex;color:var(--amber);flex:none">{{issPrioEl}}</span>Nadeesha is at 96% capacity — consider reassigning PAY-150.</div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isReports}}"><div style="padding:20px 26px 60px;max-width:1360px;margin:0 auto;animation:fadeUp .3s ease">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div><h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em">Reports &amp; Analytics</h1><div style="font-size:12.5px;color:var(--text-3);margin-top:2px">Payroll SaaS · last 30 days</div></div>
+        <div style="display:flex;gap:8px"><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">All teams ▾</button><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Last 30 days ▾</button><button style="{{btnSolid}}" style-hover="background:var(--accent-hover)">Export PDF</button></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm)"><div style="font-size:12.5px;color:var(--text-2);margin-bottom:6px">Avg velocity</div><div style="font-size:26px;font-weight:600">45.4<span style="font-size:13px;color:var(--text-3);font-weight:500"> pts</span></div><div style="font-size:12px;color:var(--green);font-weight:600;margin-top:2px">▲ 8% vs prev</div></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm)"><div style="font-size:12.5px;color:var(--text-2);margin-bottom:6px">Avg cycle time</div><div style="font-size:26px;font-weight:600">3.9<span style="font-size:13px;color:var(--text-3);font-weight:500"> days</span></div><div style="font-size:12px;color:var(--green);font-weight:600;margin-top:2px">▼ 0.7d faster</div></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm)"><div style="font-size:12.5px;color:var(--text-2);margin-bottom:6px">Throughput</div><div style="font-size:26px;font-weight:600">38<span style="font-size:13px;color:var(--text-3);font-weight:500"> issues</span></div><div style="font-size:12px;color:var(--text-3);font-weight:600;margin-top:2px">this month</div></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm)"><div style="font-size:12.5px;color:var(--text-2);margin-bottom:6px">Sprint predictability</div><div style="font-size:26px;font-weight:600">86<span style="font-size:13px;color:var(--text-3);font-weight:500">%</span></div><div style="font-size:12px;color:var(--amber);font-weight:600;margin-top:2px">◆ committed vs done</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-weight:600;font-size:14px">Sprint velocity</span><span style="font-size:11.5px;color:var(--text-3)"><span style="color:var(--text-2)">▬ committed</span> &nbsp; <span style="color:var(--accent-text)">▬ completed</span></span></div>
+          <div style="position:relative;height:150px" data-om-raster="true"><div style="position:absolute;inset:0">{{rVelocityCommit}}</div><div style="position:absolute;inset:0">{{rVelocityDone}}</div></div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+          <div style="font-weight:600;font-size:14px;margin-bottom:12px">Sprint 24 burndown</div>
+          <div data-om-raster="true">{{rBurndown}}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+          <div style="font-weight:600;font-size:14px;margin-bottom:12px">Cumulative flow</div>
+          <div data-om-raster="true">{{rFlow}}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+          <div style="font-weight:600;font-size:14px;margin-bottom:12px">Cycle time (days)</div>
+          <div data-om-raster="true">{{rCycle}}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+          <div style="font-weight:600;font-size:14px;margin-bottom:14px">Workload by assignee</div>
+          <sc-for list="{{rWorkload}}" as="w" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:11px">
+              <span style="flex:none">{{w.avatarEl}}</span>
+              <span style="width:96px;font-size:12.5px;font-weight:500">{{w.n}}</span>
+              <div style="flex:1;height:9px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:{{w.pct}}%;background:{{w.barColor}};border-radius:20px"></div></div>
+              <span style="width:52px;text-align:right;font-size:12px;font-weight:600;color:var(--text-2)">{{w.pts}} pts</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+          <div style="font-weight:600;font-size:14px;margin-bottom:8px">Issues by type</div>
+          <div style="display:flex;align-items:center;gap:18px">
+            <div data-om-raster="true" style="flex:none;position:relative">{{rDonut}}<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:22px;font-weight:600">96</span><span style="font-size:10.5px;color:var(--text-3)">total</span></div></div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:8px;font-size:12.5px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:3px;background:var(--green)"></span>Story<span style="flex:1"></span><b>38</b></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:3px;background:var(--blue)"></span>Task<span style="flex:1"></span><b>24</b></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:3px;background:var(--red)"></span>Bug<span style="flex:1"></span><b>16</b></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:3px;background:var(--violet)"></span>Feature<span style="flex:1"></span><b>12</b></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:3px;background:var(--amber)"></span>Epic<span style="flex:1"></span><b>6</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isTimeline}}"><div style="display:flex;flex-direction:column;height:100%;animation:fadeUp .3s ease">
+      <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:18px 24px 12px">
+        <div><h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em">Timeline</h1><div style="font-size:12.5px;color:var(--text-3);margin-top:2px">Payroll SaaS · Aug – Oct 2026</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:flex;background:var(--surface-3);border-radius:8px;padding:2px">
+            <span style="padding:5px 11px;font-size:12px;font-weight:500;color:var(--text-3);border-radius:6px;cursor:pointer">Day</span>
+            <span style="padding:5px 11px;font-size:12px;font-weight:600;background:var(--surface);border-radius:6px;box-shadow:var(--shadow-sm);cursor:pointer">Week</span>
+            <span style="padding:5px 11px;font-size:12px;font-weight:500;color:var(--text-3);border-radius:6px;cursor:pointer">Month</span>
+            <span style="padding:5px 11px;font-size:12px;font-weight:500;color:var(--text-3);border-radius:6px;cursor:pointer">Quarter</span>
+          </div>
+          <button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Filter</button>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:0 24px 30px">
+        <div style="min-width:900px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow-sm)">
+          <div style="display:grid;grid-template-columns:240px 1fr;border-bottom:1px solid var(--border);background:var(--surface-2)">
+            <div style="padding:10px 16px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);border-right:1px solid var(--border)">Task</div>
+            <div style="display:flex">
+              <sc-for list="{{tlWeeks}}" as="w" hint-placeholder-count="10"><div style="flex:1;padding:10px 4px;font-size:10.5px;color:var(--text-3);text-align:center;border-right:1px solid var(--border)">{{w}}</div></sc-for>
+            </div>
+          </div>
+          <sc-for list="{{tlGroups}}" as="g" hint-placeholder-count="3">
+            <div>
+              <div style="display:grid;grid-template-columns:240px 1fr;background:var(--surface-2);border-bottom:1px solid var(--border)">
+                <div style="padding:8px 16px;font-size:12px;font-weight:600;color:var(--text-2)">{{g.name}}</div>
+                <div style="position:relative"><div style="position:absolute;top:0;bottom:0;left:{{tlToday}};width:2px;background:var(--accent);opacity:.5"></div></div>
+              </div>
+              <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:240px 1fr;border-bottom:1px solid var(--border);min-height:42px;align-items:center" style-hover="background:var(--surface-2)">
+                  <div style="padding:8px 16px 8px 26px;display:flex;align-items:center;gap:8px;border-right:1px solid var(--border);min-width:0">
+                    <sc-if value="{{r.milestone}}"><span style="width:12px;height:12px;background:var(--amber);transform:rotate(45deg);border-radius:2px;flex:none"></span></sc-if>
+                    <span style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.name}}</span>
+                  </div>
+                  <div style="position:relative;height:42px">
+                    <div style="position:absolute;top:0;bottom:0;left:{{tlToday}};width:2px;background:var(--accent);opacity:.35"></div>
+                    <sc-if value="{{r.milestone}}"><div style="position:absolute;top:50%;left:{{r.left}};transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px"><span style="width:13px;height:13px;background:var(--amber);transform:rotate(45deg);border-radius:2px;box-shadow:var(--shadow-sm)"></span></div></sc-if>
+                    <sc-if value="{{r.color}}"><div style="position:absolute;top:9px;height:24px;left:{{r.left}};width:{{r.width}};background:{{r.color}};border-radius:7px;box-shadow:var(--shadow-sm);opacity:.92;display:flex;align-items:center;padding:0 8px;overflow:hidden" style-hover="opacity:1"><div style="position:absolute;left:0;top:0;bottom:0;width:{{r.pctW}};background:rgba(255,255,255,.28);border-radius:7px 0 0 7px"></div><span style="position:relative;font-size:10.5px;font-weight:600;color:#fff;white-space:nowrap">{{r.pct}}%</span></div></sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isRoadmap}}"><div style="display:flex;flex-direction:column;height:100%;animation:fadeUp .3s ease">
+      <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:18px 24px 12px">
+        <div><h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em">Roadmap</h1><div style="font-size:12.5px;color:var(--text-3);margin-top:2px">Product roadmap · grouped by project</div></div>
+        <div style="display:flex;gap:8px"><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">By project ▾</button><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Now / Next / Later</button></div>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:0 24px 30px">
+        <div style="min-width:940px">
+          <div style="display:grid;grid-template-columns:160px 1fr 1fr 1fr;gap:14px;margin-bottom:12px;position:sticky;top:0">
+            <div></div>
+            <sc-for list="{{rmQuarters}}" as="q" hint-placeholder-count="3"><div style="font-size:13px;font-weight:600;color:var(--text-2);padding:0 4px">{{q}}</div></sc-for>
+          </div>
+          <sc-for list="{{rmLanes}}" as="lane" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:160px 1fr 1fr 1fr;gap:14px;margin-bottom:14px;align-items:stretch">
+              <div style="display:flex;align-items:center;gap:9px;padding:10px 0"><span style="width:30px;height:30px;border-radius:8px;background:{{lane.bg}};color:{{lane.color}};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;font-family:'Geist Mono',monospace;flex:none">{{lane.k}}</span><span style="font-size:12.5px;font-weight:600">{{lane.name}}</span></div>
+              <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:60px">
+                <sc-for list="{{lane.q3}}" as="c" hint-placeholder-count="1">
+                  <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid {{lane.color}};border-radius:8px;padding:10px 11px;box-shadow:var(--shadow-sm)"><div style="font-size:12.5px;font-weight:600;margin-bottom:7px">{{c.t}}</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:5px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:{{c.pctW}};background:{{lane.color}};border-radius:20px"></div></div><span style="font-size:10.5px;font-weight:600;color:var(--text-3)">{{c.pct}}%</span></div><sc-if value="{{c.hasStatus}}"><div style="font-size:10.5px;font-weight:600;color:{{c.statusColor}};margin-top:6px">● {{c.status}}</div></sc-if></div>
+                </sc-for>
+              </div>
+              <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:60px">
+                <sc-for list="{{lane.q4}}" as="c" hint-placeholder-count="1">
+                  <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid {{lane.color}};border-radius:8px;padding:10px 11px;box-shadow:var(--shadow-sm)"><div style="font-size:12.5px;font-weight:600;margin-bottom:7px">{{c.t}}</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:5px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:{{c.pctW}};background:{{lane.color}};border-radius:20px"></div></div><span style="font-size:10.5px;font-weight:600;color:var(--text-3)">{{c.pct}}%</span></div><sc-if value="{{c.hasStatus}}"><div style="font-size:10.5px;font-weight:600;color:{{c.statusColor}};margin-top:6px">● {{c.status}}</div></sc-if></div>
+                </sc-for>
+              </div>
+              <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:60px">
+                <sc-for list="{{lane.q1}}" as="c" hint-placeholder-count="1">
+                  <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid {{lane.color}};border-radius:8px;padding:10px 11px;box-shadow:var(--shadow-sm)"><div style="font-size:12.5px;font-weight:600;margin-bottom:7px">{{c.t}}</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:5px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:{{c.pctW}};background:{{lane.color}};border-radius:20px"></div></div><span style="font-size:10.5px;font-weight:600;color:var(--text-3)">{{c.pct}}%</span></div><sc-if value="{{c.hasStatus}}"><div style="font-size:10.5px;font-weight:600;color:{{c.statusColor}};margin-top:6px">● {{c.status}}</div></sc-if></div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isGoals}}"><div style="padding:22px 26px 60px;max-width:1080px;margin:0 auto;animation:fadeUp .3s ease">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div><h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em">Goals &amp; OKRs</h1><div style="font-size:12.5px;color:var(--text-3);margin-top:2px">Q3 2026 · company down to team objectives</div></div>
+        <button style="{{btnSolid}}" style-hover="background:var(--accent-hover)">+ New objective</button>
+      </div>
+      <sc-for list="{{goalObjectives}}" as="o" hint-placeholder-count="3">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);margin-bottom:16px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:16px;padding:16px 18px;border-bottom:1px solid var(--border)">
+            <div style="position:relative;flex:none">{{o.ringEl}}<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{o.pct}}%</div></div>
+            <div style="flex:1;min-width:0">
+              <span style="font-size:10.5px;font-weight:600;color:{{o.scopeColor}};text-transform:uppercase;letter-spacing:.04em">{{o.scope}}</span>
+              <div style="font-size:15px;font-weight:600;letter-spacing:-.01em;margin-top:2px">{{o.title}}</div>
+            </div>
+            <span style="flex:none">{{o.ownerEl}}</span>
+          </div>
+          <div style="padding:6px 18px 12px">
+            <sc-for list="{{o.krs}}" as="k" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--border)">
+                <span style="width:16px;height:16px;display:flex;color:var(--text-3);flex:none">{{iconFlag}}</span>
+                <span style="flex:1;font-size:13px;font-weight:500;min-width:0">{{k.t}}</span>
+                <div style="width:140px;height:7px;border-radius:20px;background:var(--surface-3);overflow:hidden;flex:none"><div style="height:100%;width:{{k.pctW}};background:{{k.color}};border-radius:20px"></div></div>
+                <span style="font-size:12px;font-weight:600;width:74px;text-align:right"><span style="color:var(--text)">{{k.cur}}</span><span style="color:var(--text-3)"> / {{k.tgt}}</span></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div></sc-if>
+
+    <sc-if value="{{isAi}}"><div style="display:flex;flex-direction:column;height:100%;animation:fadeUp .3s ease">
+      <div style="flex:1;min-height:0;overflow-y:auto">
+        <div style="max-width:720px;margin:0 auto;padding:28px 24px 20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:26px">
+            <div style="width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--accent),#8B5CF6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-md)"><span style="width:22px;height:22px;display:flex">{{iconAiBig}}</span></div>
+            <div><div style="font-size:16px;font-weight:600">SprintIQ Assistant</div><div style="font-size:12.5px;color:var(--text-3)">Knows your workspace, projects, and sprints</div></div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;margin-bottom:18px">
+            <div style="display:flex;gap:10px;align-items:flex-start;max-width:80%">
+              <div style="background:var(--accent);color:#fff;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:13.5px;line-height:1.5">Why is the CRM Platform project at risk?</div>
+              <span style="flex:none;margin-top:2px">{{aiUserAvatar}}</span>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:20px">
+            <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#8B5CF6);color:#fff;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:16px;height:16px;display:flex">{{iconAi}}</span></div>
+            <div style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:4px 14px 14px 14px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+              <div style="font-size:14px;line-height:1.6;margin-bottom:14px"><b>CRM Platform is tracking at risk</b> — currently <span style="color:var(--red);font-weight:600">12% behind</span> its Q3 plan, with the migration path as the main blocker.</div>
+              <div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Top contributors</div>
+              <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px">
+                <div style="display:flex;gap:10px;font-size:13px;line-height:1.5"><span style="color:var(--red);font-weight:700">1</span><div>3 of 8 in-progress issues are blocked on the data-migration spike <span style="font-family:'Geist Mono',monospace;font-size:11.5px;background:var(--surface-3);padding:1px 6px;border-radius:5px">CRM-71</span></div></div>
+                <div style="display:flex;gap:10px;font-size:13px;line-height:1.5"><span style="color:var(--amber);font-weight:700">2</span><div>Nadeesha is at <b>96% capacity</b> across CRM + Payroll, slowing review throughput</div></div>
+                <div style="display:flex;gap:10px;font-size:13px;line-height:1.5"><span style="color:var(--amber);font-weight:700">3</span><div>Scope grew <b>18%</b> after the lead-scoring epic was added mid-sprint</div></div>
+              </div>
+              <div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recommendation</div>
+              <div style="background:var(--accent-soft);border-radius:9px;padding:12px 14px;font-size:13px;line-height:1.6;margin-bottom:14px">Move <span style="font-family:'Geist Mono',monospace;font-size:11.5px">CRM-90</span> &amp; <span style="font-family:'Geist Mono',monospace;font-size:11.5px">CRM-88</span> to next sprint to protect the migration, and reassign 2 review tasks from Nadeesha to Marcus.<div style="margin-top:8px;color:var(--green);font-weight:600">Projected back on track by Oct 3 if actioned this week.</div></div>
+              <div style="display:flex;gap:8px"><button style="{{btnSolid}}" style-hover="background:var(--accent-hover)">Apply these changes</button><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Open CRM board</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:none;border-top:1px solid var(--border);background:var(--surface);padding:14px 24px 18px">
+        <div style="max-width:720px;margin:0 auto">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+            <sc-for list="{{aiChips}}" as="c" hint-placeholder-count="4"><span style="font-size:12px;font-weight:500;color:var(--text-2);border:1px solid var(--border);border-radius:20px;padding:6px 12px;cursor:pointer;background:var(--surface-2)" style-hover="border-color:var(--accent);color:var(--accent-text)">{{c}}</span></sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border-strong);border-radius:12px;padding:10px 14px;background:var(--surface);box-shadow:var(--shadow-sm)">
+            <span style="width:18px;height:18px;display:flex;color:var(--accent-text);flex:none">{{iconAi}}</span>
+            <span style="flex:1;color:var(--text-3);font-size:13.5px">Ask about any project, sprint, or teammate…</span>
+            <button style="width:32px;height:32px;border:none;border-radius:8px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="width:16px;height:16px;display:flex;transform:rotate(90deg)">{{chevDown}}</span></button>
+          </div>
+        </div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isTeam}}"><div style="padding:22px 26px 60px;max-width:1320px;margin:0 auto;animation:fadeUp .3s ease">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div><h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em">Team &amp; Workload</h1><div style="font-size:12.5px;color:var(--text-3);margin-top:2px">7 members · Dcode Cloud</div></div>
+        <div style="display:flex;gap:8px"><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">All departments ▾</button><button style="{{btnSolid}}" style-hover="background:var(--accent-hover)">+ Invite member</button></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:26px">
+        <sc-for list="{{teamMembers}}" as="m" hint-placeholder-count="7">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow-sm)">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+              <span style="flex:none">{{m.avatarEl}}</span>
+              <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{m.name}}</div><div style="font-size:12px;color:var(--text-3)">{{m.role}}</div></div>
+              <span style="font-size:10.5px;font-weight:600;color:{{m.availColor}};background:{{m.availBg}};padding:3px 8px;border-radius:20px;flex:none">{{m.avail}}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-2);margin-bottom:5px"><span>Workload</span><span style="font-weight:600;color:{{m.pctColor}}">{{m.pct}}%</span></div>
+            <div style="height:7px;border-radius:20px;background:var(--surface-3);overflow:hidden;margin-bottom:14px"><div style="height:100%;width:{{m.pctW}};background:{{m.pctColor}};border-radius:20px"></div></div>
+            <div style="display:flex;gap:18px"><div><div style="font-size:16px;font-weight:600">{{m.proj}}</div><div style="font-size:11px;color:var(--text-3)">Projects</div></div><div><div style="font-size:16px;font-weight:600">{{m.tasks}}</div><div style="font-size:11px;color:var(--text-3)">Open tasks</div></div></div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-weight:600;font-size:14px">Workload planner</div>
+          <div style="display:flex;align-items:center;gap:14px;font-size:11px;color:var(--text-3)"><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:3px;background:var(--accent-soft)"></span>Light</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:3px;background:var(--accent)"></span>Normal</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:3px;background:var(--amber)"></span>Busy</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:3px;background:var(--red)"></span>Over capacity</span></div>
+        </div>
+        <div style="overflow-x:auto"><div style="min-width:720px;padding:8px 18px 16px">
+          <div style="display:grid;grid-template-columns:150px 1fr 1fr;gap:2px;margin-bottom:4px">
+            <div></div>
+            <sc-for list="{{teamWeeks}}" as="w" hint-placeholder-count="2"><div style="text-align:center;font-size:11px;font-weight:600;color:var(--text-3);padding:6px 0">{{w}}</div></sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:150px repeat(10,1fr);gap:3px;margin-bottom:6px">
+            <div></div>
+            <sc-for list="{{teamDays}}" as="d" hint-placeholder-count="10"><div style="text-align:center;font-size:10.5px;color:var(--text-3)">{{d}}</div></sc-for>
+          </div>
+          <sc-for list="{{teamMembers}}" as="m" hint-placeholder-count="7">
+            <div style="display:grid;grid-template-columns:150px repeat(10,1fr);gap:3px;margin-bottom:3px;align-items:center">
+              <div style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden"><span style="flex:none">{{m.avatarEl}}</span><span style="overflow:hidden;text-overflow:ellipsis">{{m.name}}</span></div>
+              <sc-for list="{{m.days}}" as="c" hint-placeholder-count="10"><div style="height:30px;border-radius:6px;background:{{c.bg}};color:{{c.fg}};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">{{c.h}}</div></sc-for>
+            </div>
+          </sc-for>
+        </div></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isDocs}}"><div style="display:flex;height:100%;animation:fadeUp .3s ease">
+      <div style="width:236px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:14px 12px 40px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 4px"><span style="font-weight:600;font-size:13.5px">Documents</span><span style="width:22px;height:22px;border-radius:6px;background:var(--surface-3);display:flex;align-items:center;justify-content:center;color:var(--text-2);cursor:pointer;font-size:15px">+</span></div>
+        <sc-for list="{{docSpaces}}" as="sp" hint-placeholder-count="4">
+          <div style="margin-bottom:12px">
+            <div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);padding:4px 6px">{{sp.name}}</div>
+            <sc-for list="{{sp.docs}}" as="d" hint-placeholder-count="3"><div style="{{d.style}}" style-hover="background:var(--surface-3)"><span style="width:14px;height:14px;display:flex;flex:none;color:var(--text-3)">{{iconDoc}}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{d.t}}</span></div></sc-for>
+          </div>
+        </sc-for>
+      </div>
+      <div style="flex:1;min-width:0;overflow-y:auto;padding:28px 40px 60px">
+        <div style="max-width:720px;margin:0 auto">
+          <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">Engineering / Auth &amp; SSO</div>
+          <h1 style="margin:0 0 8px;font-size:28px;font-weight:600;letter-spacing:-.02em">Authentication &amp; SSO — Technical Spec</h1>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;font-size:12.5px;color:var(--text-3)"><span style="display:flex;align-items:center;gap:6px">{{docAuthor}}Nadeesha Kumari</span><span>·</span><span>Updated 2 hours ago</span><span>·</span><span>6 min read</span></div>
+          <div style="background:var(--accent-soft);border-radius:10px;padding:12px 15px;font-size:13px;line-height:1.6;margin-bottom:22px;display:flex;gap:10px"><span style="width:18px;height:18px;display:flex;color:var(--accent-text);flex:none;margin-top:1px">{{iconAi}}</span><div><b>Summary.</b> This spec defines OAuth2 SSO for the payroll app across Google Workspace and Microsoft Entra ID, including token handling, session persistence, and audit requirements.</div></div>
+          <h2 style="font-size:18px;font-weight:600;margin:24px 0 10px">Overview</h2>
+          <p style="font-size:14.5px;line-height:1.7;color:var(--text-2);margin:0 0 14px">Enterprise customers require single sign-on before rolling the payroll app out to their organizations. We support the OAuth2 authorization-code flow with PKCE, linking existing email accounts to a chosen identity provider on first sign-in.</p>
+          <h2 style="font-size:18px;font-weight:600;margin:24px 0 10px">Requirements</h2>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;gap:10px;font-size:14px"><span style="width:17px;height:17px;border-radius:5px;border:1.5px solid var(--green);background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex:none">{{iconCheckSm}}</span>OAuth2 authorization-code flow with PKCE</div>
+            <div style="display:flex;align-items:center;gap:10px;font-size:14px"><span style="width:17px;height:17px;border-radius:5px;border:1.5px solid var(--green);background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex:none">{{iconCheckSm}}</span>Google Workspace &amp; Microsoft Entra ID providers</div>
+            <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-2)"><span style="width:17px;height:17px;border-radius:5px;border:1.5px solid var(--border-strong);flex:none"></span>Audit-log every sign-in event (in progress)</div>
+          </div>
+          <h2 style="font-size:18px;font-weight:600;margin:24px 0 10px">Token exchange</h2>
+          <div style="background:#0E1016;border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.7;color:#C8CDD8;overflow-x:auto;margin-bottom:18px"><span style="color:#7DD3A8">POST</span> /oauth/token<br><span style="color:#8B94A7">grant_type</span>=authorization_code<br><span style="color:#8B94A7">code</span>=&lt;auth_code&gt;&amp;<span style="color:#8B94A7">code_verifier</span>=&lt;pkce&gt;<br><span style="color:#8B94A7">redirect_uri</span>=https://app.dcode.io/callback</div>
+          <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:13px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:var(--surface-2);font-weight:600;border-bottom:1px solid var(--border)"><div style="padding:9px 13px">Provider</div><div style="padding:9px 13px">Status</div><div style="padding:9px 13px">Owner</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)"><div style="padding:9px 13px">Google</div><div style="padding:9px 13px;color:var(--green);font-weight:600">Live</div><div style="padding:9px 13px;color:var(--text-2)">Nadeesha</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)"><div style="padding:9px 13px">Microsoft</div><div style="padding:9px 13px;color:var(--amber);font-weight:600">In review</div><div style="padding:9px 13px;color:var(--text-2)">Rahul</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr"><div style="padding:9px 13px">Okta</div><div style="padding:9px 13px;color:var(--text-3);font-weight:600">Planned</div><div style="padding:9px 13px;color:var(--text-2)">—</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="width:220px;flex:none;border-left:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:18px 16px 40px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px">On this page</div>
+        <div style="display:flex;flex-direction:column;gap:7px;font-size:12.5px;margin-bottom:20px"><span style="color:var(--accent-text);font-weight:600;border-left:2px solid var(--accent);padding-left:9px">Overview</span><span style="color:var(--text-2);padding-left:9px">Requirements</span><span style="color:var(--text-2);padding-left:9px">Token exchange</span><span style="color:var(--text-2);padding-left:9px">Providers</span></div>
+        <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px">Contributors</div>
+        <div style="display:flex;margin-bottom:18px"><sc-for list="{{docContributors}}" as="a" hint-placeholder-count="4"><span style="margin-left:-5px;border:2px solid var(--surface);border-radius:50%;display:flex">{{a}}</span></sc-for></div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px">Linked issues</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:12px"><span style="font-family:'Geist Mono',monospace;color:var(--accent-text)">PAY-142</span><span style="font-family:'Geist Mono',monospace;color:var(--accent-text)">PAY-148</span><span style="font-family:'Geist Mono',monospace;color:var(--accent-text)">PAY-128</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isAutomation}}"><div style="display:flex;height:100%;animation:fadeUp .3s ease">
+      <div style="width:280px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:16px 14px 40px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-weight:600;font-size:14px">Automations</span><button style="{{btnSolid}}" style-hover="background:var(--accent-hover)">+ New</button></div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{autoRules}}" as="r" hint-placeholder-count="5">
+            <div style="{{r.style}}" style-hover="border-color:var(--border-strong)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><span style="width:7px;height:7px;border-radius:50%;background:{{r.dot}};flex:none"></span><span style="font-size:12.5px;font-weight:600;line-height:1.3">{{r.name}}</span></div>
+              <div style="font-size:11.5px;color:var(--text-3);padding-left:15px">When: {{r.on}}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="flex:1;min-width:0;overflow-y:auto;padding:24px 30px 60px">
+        <div style="max-width:560px;margin:0 auto">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">
+            <div><h1 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Escalate overdue high-priority issues</h1><div style="font-size:12.5px;color:var(--text-3);margin-top:2px">Enabled · ran 34 times this month</div></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text-2)">Active</span><span style="width:38px;height:22px;border-radius:20px;background:var(--accent);position:relative;cursor:pointer"><span style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:var(--shadow-sm)"></span></span></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;align-items:stretch;gap:0">
+            <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow-sm)">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--blue);margin-bottom:6px">WHEN · TRIGGER</div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:2px">An issue becomes overdue</div>
+              <div style="font-size:12.5px;color:var(--text-3)">Checked hourly across all Payroll SaaS issues</div>
+            </div>
+            <div style="width:2px;height:20px;background:var(--border-strong);margin:0 auto"></div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--violet);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow-sm)">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--violet);margin-bottom:6px">IF · CONDITION</div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:2px">Priority is High or Urgent</div>
+              <div style="font-size:12.5px;color:var(--text-3)">AND the issue is not in Done or Cancelled</div>
+            </div>
+            <div style="width:2px;height:20px;background:var(--border-strong);margin:0 auto"></div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow-sm)">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--accent-text);margin-bottom:10px">THEN · ACTIONS</div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:10px;font-size:13.5px;background:var(--surface-2);border-radius:8px;padding:9px 11px"><span style="width:22px;height:22px;border-radius:6px;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center;flex:none">{{issPrioEl}}</span>Set priority to Urgent</div>
+                <div style="display:flex;align-items:center;gap:10px;font-size:13.5px;background:var(--surface-2);border-radius:8px;padding:9px 11px"><span style="width:22px;height:22px;border-radius:6px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;flex:none"><span style="width:14px;height:14px;display:flex">{{iconBell}}</span></span>Notify assignee &amp; PM on Slack</div>
+                <div style="display:flex;align-items:center;gap:10px;font-size:13.5px;background:var(--surface-2);border-radius:8px;padding:9px 11px"><span style="width:22px;height:22px;border-radius:6px;background:var(--amber-soft);color:var(--amber);display:flex;align-items:center;justify-content:center;flex:none">{{iconFlag}}</span>Add label “at-risk”</div>
+                <div style="border:1.5px dashed var(--border);border-radius:8px;padding:9px;text-align:center;color:var(--text-3);font-size:12.5px;cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent-text)">+ Add action</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:28px"><div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Start from a template</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px"><sc-for list="{{autoTemplates}}" as="t" hint-placeholder-count="5"><span style="font-size:12px;font-weight:500;color:var(--text-2);border:1px solid var(--border);border-radius:20px;padding:6px 12px;cursor:pointer;background:var(--surface)" style-hover="border-color:var(--accent);color:var(--accent-text)">{{t}}</span></sc-for></div>
+          </div>
+        </div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{isSettings}}"><div style="display:flex;height:100%;animation:fadeUp .3s ease">
+      <div style="width:216px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:18px 12px 40px">
+        <div style="font-weight:600;font-size:15px;padding:0 8px 12px">Settings</div>
+        <div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);padding:6px 8px">Workspace</div>
+        <sc-for list="{{stTabs}}" as="t" hint-placeholder-count="5"><div onClick="{{t.onClick}}" style="{{t.style}}" style-hover="background:var(--surface-3)">{{t.label}}</div></sc-for>
+      </div>
+      <div style="flex:1;min-width:0;overflow-y:auto;padding:26px 32px 60px">
+        <div style="max-width:820px">
+
+          <sc-if value="{{stIsBilling}}"><div>
+            <h1 style="margin:0 0 4px;font-size:20px;font-weight:600;letter-spacing:-.02em">Billing &amp; Plan</h1>
+            <div style="font-size:12.5px;color:var(--text-3);margin-bottom:20px">Manage your subscription, usage, and invoices</div>
+            <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:16px">
+              <div style="background:linear-gradient(135deg,var(--accent),#7C5CF6);border-radius:14px;padding:20px 22px;color:#fff;box-shadow:var(--shadow-md)">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px"><span style="font-size:12px;font-weight:600;opacity:.85;text-transform:uppercase;letter-spacing:.05em">Current plan</span><span style="font-size:11px;font-weight:600;background:rgba(255,255,255,.22);padding:3px 10px;border-radius:20px">Active</span></div>
+                <div style="font-size:30px;font-weight:700;letter-spacing:-.02em;margin-bottom:2px">Business</div>
+                <div style="font-size:13px;opacity:.9;margin-bottom:18px">$14 / user · billed monthly · renews Sep 1, 2026</div>
+                <div style="display:flex;gap:10px"><button style="height:34px;padding:0 16px;border:none;border-radius:8px;background:#fff;color:var(--accent);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Upgrade to Enterprise</button><button style="height:34px;padding:0 14px;border:1px solid rgba(255,255,255,.4);border-radius:8px;background:transparent;color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">Change plan</button></div>
+              </div>
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+                <div style="font-weight:600;font-size:13.5px;margin-bottom:14px">This month</div>
+                <div style="font-size:32px;font-weight:600;letter-spacing:-.02em">$98<span style="font-size:14px;color:var(--text-3);font-weight:500"> / mo</span></div>
+                <div style="font-size:12.5px;color:var(--text-3);margin-bottom:14px">7 seats × $14</div>
+                <div style="font-size:12.5px;color:var(--text-2)">Next charge <b style="color:var(--text)">Sep 1</b> · Visa ···· 4242</div>
+              </div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow-sm);margin-bottom:16px">
+              <div style="font-weight:600;font-size:14px;margin-bottom:16px">Usage</div>
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span style="color:var(--text-2)">Seats</span><span style="font-weight:600">7 / 10</span></div><div style="height:8px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:70%;background:var(--accent);border-radius:20px"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span style="color:var(--text-2)">Storage</span><span style="font-weight:600">42 / 100 GB</span></div><div style="height:8px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:42%;background:var(--teal);border-radius:20px"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span style="color:var(--text-2)">Automation runs</span><span style="font-weight:600">1,240 / 5,000</span></div><div style="height:8px;border-radius:20px;background:var(--surface-3);overflow:hidden"><div style="height:100%;width:25%;background:var(--violet);border-radius:20px"></div></div></div>
+              </div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+              <div style="padding:14px 18px;font-weight:600;font-size:14px;border-bottom:1px solid var(--border)">Invoices</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;padding:10px 18px;font-size:12px;color:var(--text-3);font-weight:600;border-bottom:1px solid var(--border)"><span>Date</span><span>Amount</span><span>Status</span><span>Invoice</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;padding:11px 18px;font-size:13px;border-bottom:1px solid var(--border)"><span>Aug 1, 2026</span><span style="font-weight:600">$98.00</span><span style="color:var(--green);font-weight:600">Paid</span><span style="color:var(--accent-text);font-weight:500;cursor:pointer">Download</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;padding:11px 18px;font-size:13px;border-bottom:1px solid var(--border)"><span>Jul 1, 2026</span><span style="font-weight:600">$84.00</span><span style="color:var(--green);font-weight:600">Paid</span><span style="color:var(--accent-text);font-weight:500;cursor:pointer">Download</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;padding:11px 18px;font-size:13px"><span>Jun 1, 2026</span><span style="font-weight:600">$84.00</span><span style="color:var(--green);font-weight:600">Paid</span><span style="color:var(--accent-text);font-weight:500;cursor:pointer">Download</span></div>
+            </div>
+          </div></sc-if>
+
+          <sc-if value="{{stIsPerms}}"><div>
+            <h1 style="margin:0 0 4px;font-size:20px;font-weight:600;letter-spacing:-.02em">Roles &amp; Permissions</h1>
+            <div style="font-size:12.5px;color:var(--text-3);margin-bottom:20px">What each role can do across the workspace</div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+              <div style="display:grid;grid-template-columns:1fr repeat(6,68px);background:var(--surface-2);border-bottom:1px solid var(--border)">
+                <div style="padding:11px 16px;font-size:12px;font-weight:600;color:var(--text-2)">Permission</div>
+                <sc-for list="{{permRoles}}" as="r" hint-placeholder-count="6"><div style="padding:11px 4px;font-size:11.5px;font-weight:600;color:var(--text-2);text-align:center">{{r}}</div></sc-for>
+              </div>
+              <sc-for list="{{perms}}" as="p" hint-placeholder-count="8">
+                <div style="display:grid;grid-template-columns:1fr repeat(6,68px);border-bottom:1px solid var(--border);align-items:center" style-hover="background:var(--surface-2)">
+                  <div style="padding:11px 16px;font-size:13px;font-weight:500">{{p.name}}</div>
+                  <sc-for list="{{p.cells}}" as="c" hint-placeholder-count="6"><div style="display:flex;align-items:center;justify-content:center;padding:9px 0"><sc-if value="{{c.on}}"><span style="width:20px;height:20px;border-radius:6px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center">{{c.mark}}</span></sc-if><sc-if value="{{c.off}}"><span style="width:8px;height:2px;background:var(--border-strong);border-radius:2px"></span></sc-if></div></sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </div></sc-if>
+
+          <sc-if value="{{stIsAudit}}"><div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+              <div><h1 style="margin:0 0 4px;font-size:20px;font-weight:600;letter-spacing:-.02em">Audit Log</h1><div style="font-size:12.5px;color:var(--text-3)">Every change across the workspace</div></div>
+              <div style="display:flex;gap:8px"><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">All users ▾</button><button style="{{btnGhost}}" style-hover="background:var(--surface-3)">Export CSV</button></div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+              <sc-for list="{{auditRows}}" as="a" hint-placeholder-count="7">
+                <div style="display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid var(--border)" style-hover="background:var(--surface-2)">
+                  <span style="flex:none">{{a.avatarEl}}</span>
+                  <div style="flex:1;min-width:0;font-size:13px;line-height:1.45">
+                    <span style="font-weight:600">{{a.who}}</span> <span style="color:{{a.vc}};font-weight:500">{{a.verb}}</span> <span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--text-2)">{{a.entity}}</span>
+                    <sc-if value="{{a.hasChange}}"><div style="display:flex;align-items:center;gap:7px;margin-top:4px"><span style="font-size:11px;color:var(--text-3);background:var(--surface-3);padding:2px 7px;border-radius:5px;text-decoration:line-through">{{a.before}}</span><span style="color:var(--text-3);font-size:11px">→</span><span style="font-size:11px;color:var(--text);background:var(--accent-soft);padding:2px 7px;border-radius:5px;font-weight:600">{{a.after}}</span></div></sc-if>
+                    <sc-if value="{{a.noChange}}"><div style="font-size:12px;color:var(--text-3);margin-top:2px">{{a.after}}</div></sc-if>
+                  </div>
+                  <div style="flex:none;text-align:right"><div style="font-size:12px;color:var(--text-2);font-weight:500">{{a.time}}</div><div style="font-size:11px;color:var(--text-3);font-family:'Geist Mono',monospace">{{a.ip}}</div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div></sc-if>
+
+          <sc-if value="{{stIsAccount}}"><div>
+            <h1 style="margin:0 0 4px;font-size:20px;font-weight:600;letter-spacing:-.02em">Account</h1>
+            <div style="font-size:12.5px;color:var(--text-3);margin-bottom:20px">Your personal profile and security</div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:var(--shadow-sm);max-width:520px">
+              <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px">{{settingsMe}}<div><div style="font-weight:600;font-size:15px">Dilshan Perera</div><div style="font-size:12.5px;color:var(--text-3)">dilshan@dcode.io · Product Manager</div></div><button style="{{btnGhost}};margin-left:auto" style-hover="background:var(--surface-3)">Change</button></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <div><div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px">Full name</div><div style="height:38px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);display:flex;align-items:center;padding:0 12px;font-size:13.5px">Dilshan Perera</div></div>
+                <div><div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px">Email</div><div style="height:38px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);display:flex;align-items:center;padding:0 12px;font-size:13.5px">dilshan@dcode.io</div></div>
+                <div><div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px">Role</div><div style="height:38px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);display:flex;align-items:center;padding:0 12px;font-size:13.5px">Product Manager</div></div>
+                <div><div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px">Timezone</div><div style="height:38px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);display:flex;align-items:center;padding:0 12px;font-size:13.5px">GMT+5:30 Colombo</div></div>
+              </div>
+            </div>
+          </div></sc-if>
+
+          <sc-if value="{{stIsMembers}}"><div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px"><div><h1 style="margin:0 0 4px;font-size:20px;font-weight:600;letter-spacing:-.02em">Members</h1><div style="font-size:12.5px;color:var(--text-3)">7 members · 3 seats available</div></div><button style="{{btnSolid}}" style-hover="background:var(--accent-hover)">+ Invite</button></div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+              <sc-for list="{{teamMembers}}" as="m" hint-placeholder-count="7">
+                <div style="display:flex;align-items:center;gap:13px;padding:12px 18px;border-bottom:1px solid var(--border)" style-hover="background:var(--surface-2)">
+                  <span style="flex:none">{{m.avatarEl}}</span>
+                  <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">{{m.name}}</div><div style="font-size:12px;color:var(--text-3)">{{m.role}}</div></div>
+                  <span style="font-size:12px;color:var(--text-2);background:var(--surface-3);padding:5px 11px;border-radius:8px">Member ▾</span>
+                </div>
+              </sc-for>
+            </div>
+          </div></sc-if>
+
+        </div>
+      </div>
+    </div></sc-if>
+
+    <!-- MORESCREENS -->
+
+    <sc-if value="{{isStub}}"><div style="padding:60px 26px;display:flex;align-items:center;justify-content:center;height:100%;animation:fadeUp .3s ease">
+      <div style="text-align:center;max-width:340px">
+        <div style="width:56px;height:56px;border-radius:14px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-sm);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;color:var(--text-3)"><span style="width:26px;height:26px;display:flex">{{iconSearch}}</span></div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:6px">{{crumb}}</div>
+        <div style="font-size:13px;color:var(--text-3)">This section is being built next. Use the sidebar to explore the Dashboard and Board.</div>
+      </div>
+    </div></sc-if>
+
+  </div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = { theme:'', collapsed:false, screen:'dashboard', dragId:null, dragOver:null, settingsTab:'billing', issues:null };
+  liveIssues(){ if(!this.state.issues) this.state.issues=this.ISSUES.map(x=>({...x})); return this.state.issues; }
+
+  ic(paths, w=18, sw=1.8){
+    return React.createElement('svg',{width:'100%',height:'100%',viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','strokeWidth':sw,'strokeLinecap':'round','strokeLinejoin':'round'},
+      (Array.isArray(paths)?paths:[paths]).map((d,i)=>React.createElement('path',{key:i,d})));
+  }
+  get ICON(){ return {
+    home:['M3 10.7 12 3l9 7.7','M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5'],
+    mywork:['M9 12.5l2 2 4-4','M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5z'],
+    projects:['M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z'],
+    board:['M4 4.5h4.5v15H4z','M9.75 4.5h4.5v10h-4.5z','M15.5 4.5H20v13h-4.5z'],
+    backlog:['M8 6.5h13','M8 12h13','M8 17.5h13','M3.5 6.5h.01','M3.5 12h.01','M3.5 17.5h.01'],
+    timeline:['M3 6h9','M7 12h11','M5 18h8'],
+    roadmap:['M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4z','M9 4v14','M15 6v14'],
+    goals:['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z','M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z','M12 11.4a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2z'],
+    reports:['M4.5 20V10','M12 20V4','M19.5 20v-7','M3 20h18'],
+    ai:['M12 3l1.5 4.3L18 9l-4.5 1.7L12 15l-1.5-4.3L6 9l4.5-1.7z','M18.5 14.5l.8 2.1 2.1.9-2.1.8-.8 2.2-.8-2.2-2.2-.8 2.2-.9z'],
+    docs:['M6 3h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z','M14 3v4h4','M8.5 12.5h7','M8.5 16h7'],
+    team:['M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z','M3.5 20a5.5 5.5 0 0 1 11 0','M16 11.2a3 3 0 0 0 0-6','M17.5 20a5.2 5.2 0 0 0-3-4.7'],
+    calendar:['M4.5 6.5A1.5 1.5 0 0 1 6 5h12a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 18 20H6a1.5 1.5 0 0 1-1.5-1.5z','M4.5 9.5h15','M8 3.5v3','M16 3.5v3'],
+    settings:['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z','M19.4 13.5a1.6 1.6 0 0 0 .3 1.8 2 2 0 1 1-2.4 2.4 1.6 1.6 0 0 0-2.7 1.1 2 2 0 1 1-4 0 1.6 1.6 0 0 0-2.7-1.1 2 2 0 1 1-2.4-2.4 1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1 2 2 0 1 1 0-4 1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8 2 2 0 1 1 2.4-2.4 1.6 1.6 0 0 0 2.7-1.1 2 2 0 1 1 4 0 1.6 1.6 0 0 0 2.7 1.1 2 2 0 1 1 2.4 2.4 1.6 1.6 0 0 0-.3 1.8'],
+    integrations:['M12 3v6','M12 15v6','M3 12h6','M15 12h6','M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'],
+    template:['M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5z','M4 9.5h16','M9.5 9.5v10'],
+    search:['M11 4.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13z','M20 20l-3.8-3.8'],
+    bell:['M6.5 9a5.5 5.5 0 1 1 11 0c0 4.5 2 5.5 2 5.5H4.5s2-1 2-5.5','M10 19a2 2 0 0 0 4 0'],
+    plus:['M12 5v14','M5 12h14'],
+    chevDown:['M6 9l6 6 6-6'],
+    chevLeft:['M15 6l-6 6 6 6'],
+    sun:['M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z','M12 2v2','M12 20v2','M4.2 4.2l1.4 1.4','M18.4 18.4l1.4 1.4','M2 12h2','M20 12h2','M4.2 19.8l1.4-1.4','M18.4 5.6l1.4-1.4'],
+    moon:['M20 13.5A8 8 0 1 1 10.5 4a6.2 6.2 0 0 0 9.5 9.5z'],
+    branch:['M6 4v10','M6 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z','M6 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4z','M18 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4z','M18 7c0 4-6 2-6 8'],
+    comment:['M20 5.5A1.5 1.5 0 0 0 18.5 4h-13A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8v3.5L12.5 16h6A1.5 1.5 0 0 0 20 14.5z'],
+    flag:['M6 21V4','M6 4h11l-2 4 2 4H6'],
+    fire:['M12 3s5 4 5 9a5 5 0 0 1-10 0c0-2 1-3 1-3s0 2 1.5 2S12 8 12 6s-1-3 0-3z'],
+  };}
+  get TYPE(){ return {
+    story:{c:'var(--green)',bg:'var(--green-soft)',d:['M8 8.5h8','M8 12h8','M8 15.5h5','M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5v15l-6-3-6 3z']},
+    bug:{c:'var(--red)',bg:'var(--red-soft)',d:['M12 8a4 4 0 0 0-4 4v3a4 4 0 0 0 8 0v-3a4 4 0 0 0-4-4z','M9 7l-1-2','M15 7l1-2','M8 12H4','M20 12h-4','M8 16l-3 2','M16 16l3 2']},
+    task:{c:'var(--blue)',bg:'var(--blue-soft)',d:['M5 6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5v11A1.5 1.5 0 0 1 17.5 19h-11A1.5 1.5 0 0 1 5 17.5z','M8.5 12l2.2 2.2L15.5 9.5']},
+    feature:{c:'var(--violet)',bg:'var(--violet-soft)',d:['M12 3l2.3 5.2 5.7.5-4.3 3.8 1.3 5.6L12 15.7 7 18l1.3-5.6L4 8.7l5.7-.5z']},
+    epic:{c:'var(--accent)',bg:'var(--accent-soft)',d:['M13 3 4 14h6l-1 7 9-11h-6z']},
+  };}
+  typeEl(t){ const m=this.TYPE[t]||this.TYPE.task; return React.createElement('span',{style:{width:14,height:14,display:'flex',color:m.c},title:t}, this.ic(m.d,14,1.9)); }
+
+  get LABELS(){ return {
+    auth:{bg:'var(--violet-soft)',color:'var(--violet)'}, backend:{bg:'var(--blue-soft)',color:'var(--blue)'},
+    frontend:{bg:'var(--green-soft)',color:'var(--green)'}, bug:{bg:'var(--red-soft)',color:'var(--red)'},
+    design:{bg:'#FBE9F3',color:'#DB2777'}, finance:{bg:'var(--amber-soft)',color:'var(--amber)'},
+    tax:{bg:'var(--amber-soft)',color:'var(--amber)'}, devops:{bg:'var(--teal-soft)',color:'var(--teal)'},
+    api:{bg:'var(--accent-soft)',color:'var(--accent-text)'},
+  };}
+  labelEls(arr){ return (arr||[]).map(t=>{ const m=this.LABELS[t]||{bg:'var(--surface-3)',color:'var(--text-2)'}; return {text:t,bg:m.bg,color:m.color}; }); }
+
+  get PEOPLE(){ return {
+    DP:{n:'Dilshan Perera',c:'#5B5CF0',r:'Product Manager'}, NK:{n:'Nadeesha Kumari',c:'#0D9488',r:'Senior Engineer'},
+    RS:{n:'Rahul Shetty',c:'#F97316',r:'Backend Engineer'}, AM:{n:'Ayesha Mendis',c:'#DB2777',r:'UI/UX Designer'},
+    TF:{n:'Tomás Ferreira',c:'#8B5CF6',r:'QA Engineer'}, LC:{n:'Lena Chandra',c:'#0284C7',r:'DevOps Engineer'},
+    MJ:{n:'Marcus Jaya',c:'#16A34A',r:'Frontend Engineer'},
+  };}
+  avatar(id,size=22){ const p=this.PEOPLE[id]||{n:id,c:'#888'}; return React.createElement('div',{title:p.n,style:{width:size,height:size,borderRadius:'50%',background:p.c,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:Math.round(size*0.42),fontWeight:600,letterSpacing:'-.02em',flex:'none'}}, id); }
+
+  prioEl(level){ const m={urgent:{c:'var(--red)',n:3},high:{c:'var(--amber)',n:3},medium:{c:'var(--blue)',n:2},low:{c:'var(--text-3)',n:1}}[level]||{c:'var(--text-3)',n:1};
+    const hs=[6,10,14]; return React.createElement('svg',{width:14,height:14,viewBox:'0 0 16 16',title:level+' priority'},
+      hs.map((h,i)=>React.createElement('rect',{key:i,x:1+i*5,y:15-h,width:3.4,height:h,rx:1.3,fill:i< m.n?m.c:'var(--border-strong)'}))); }
+
+  get ISSUES(){ return [
+    {id:'PAY-160',t:'Multi-currency payroll runs for global teams',ty:'story',st:'backlog',pr:'high',pts:8,as:'RS',lb:['backend','finance'],sub:'0/5',c:2},
+    {id:'PAY-161',t:'Tax calc rounding error on bonus payouts',ty:'bug',st:'backlog',pr:'urgent',pts:3,as:'NK',lb:['bug','tax'],c:5},
+    {id:'PAY-162',t:'Provision dedicated staging environment',ty:'task',st:'backlog',pr:'low',pts:2,as:'LC',lb:['devops'],c:1},
+    {id:'PAY-155',t:'Employee self-service portal shell',ty:'story',st:'todo',pr:'high',pts:5,as:'AM',lb:['frontend'],sub:'1/4',c:3},
+    {id:'PAY-156',t:'Design branded payslip PDF template',ty:'task',st:'todo',pr:'medium',pts:3,as:'AM',lb:['design'],c:1},
+    {id:'PAY-157',t:'Bulk import employees via CSV upload',ty:'feature',st:'todo',pr:'medium',pts:5,as:'RS',lb:['backend'],sub:'0/3'},
+    {id:'PAY-142',t:'Implement OAuth2 login (Google & Microsoft)',ty:'story',st:'inprogress',pr:'high',pts:5,as:'NK',lb:['auth','backend'],sub:'3/6',c:4},
+    {id:'PAY-148',t:'Session expires prematurely on token refresh',ty:'bug',st:'inprogress',pr:'urgent',pts:2,as:'NK',lb:['bug','auth'],c:6},
+    {id:'PAY-150',t:'Payroll dashboard summary charts',ty:'task',st:'inprogress',pr:'medium',pts:3,as:'MJ',lb:['frontend'],sub:'2/3',c:2},
+    {id:'PAY-139',t:'Direct deposit ACH integration',ty:'story',st:'inreview',pr:'high',pts:8,as:'RS',lb:['backend','finance'],sub:'5/5',c:7},
+    {id:'PAY-145',t:'Add 2FA enrollment flow',ty:'task',st:'inreview',pr:'medium',pts:3,as:'MJ',lb:['auth','frontend'],c:3},
+    {id:'PAY-133',t:'Automated quarterly tax filing reports',ty:'feature',st:'testing',pr:'high',pts:5,as:'TF',lb:['tax','backend'],c:4},
+    {id:'PAY-140',t:'Timezone mismatch in attendance log',ty:'bug',st:'testing',pr:'medium',pts:2,as:'TF',lb:['bug'],c:2},
+    {id:'PAY-128',t:'Role-based access control (RBAC)',ty:'story',st:'done',pr:'high',pts:5,as:'NK',lb:['auth','backend'],c:8},
+    {id:'PAY-131',t:'CI/CD pipeline for payroll service',ty:'task',st:'done',pr:'low',pts:2,as:'LC',lb:['devops'],c:1},
+    {id:'PAY-135',t:'Onboarding email templates',ty:'task',st:'done',pr:'low',pts:1,as:'AM',lb:['design'],c:2},
+  ];}
+  get STATUS(){ return {backlog:{name:'Backlog',color:'var(--text-3)'},todo:{name:'To Do',color:'var(--text-2)'},inprogress:{name:'In Progress',color:'var(--blue)'},inreview:{name:'In Review',color:'var(--violet)'},testing:{name:'Testing',color:'var(--amber)'},done:{name:'Done',color:'var(--green)'}}; }
+
+  nav(id,label,icon,badge){ return {id,label,icon,badge}; }
+  get NAV(){ return [
+    {title:'',showTitle:false,items:[this.nav('dashboard','Home','home'),this.nav('mywork','My Work','mywork',3),this.nav('projects','Projects','projects')]},
+    {title:'Plan',showTitle:true,items:[this.nav('roadmap','Roadmap','roadmap'),this.nav('goals','Goals & OKRs','goals'),this.nav('timeline','Timeline','timeline'),this.nav('calendar','Calendar','calendar')]},
+    {title:'Work',showTitle:true,items:[this.nav('board','Board','board'),this.nav('backlog','Backlog & Sprints','backlog'),this.nav('reports','Reports','reports')]},
+    {title:'Workspace',showTitle:true,items:[this.nav('ai','AI Assistant','ai'),this.nav('automation','Automation','integrations'),this.nav('team','Team','team'),this.nav('docs','Documents','docs'),this.nav('settings','Settings','settings')]},
+  ];}
+
+  go(s){ return ()=>this.setState({screen:s}); }
+
+  projPill(k){ const m={PAY:['var(--accent-text)','var(--accent-soft)'],CRM:['var(--teal)','var(--teal-soft)'],MOB:['var(--violet)','var(--violet-soft)'],CUS:['var(--amber)','var(--amber-soft)']}[k]||['var(--text-2)','var(--surface-3)']; return {k,color:m[0],bg:m[1]}; }
+
+  barChart(vals,o={}){ const w=o.w||320,h=o.h||150,pad=8,lblH=o.labels?16:2,gap=o.gap||9,n=vals.length,max=o.max||Math.max(...vals)*1.1; const bw=(w-pad*2-gap*(n-1))/n; const plot=h-lblH-6;
+    const els=[]; vals.forEach((v,i)=>{ const bh=Math.max(2,v/max*plot); const x=pad+i*(bw+gap); const col=Array.isArray(o.color)?o.color[i]:(o.color||'var(--accent)');
+      els.push(React.createElement('rect',{key:'b'+i,x,y:6+plot-bh,width:bw,height:bh,rx:4,fill:col}));
+      if(o.vals) els.push(React.createElement('text',{key:'v'+i,x:x+bw/2,y:plot-bh,dy:-3,textAnchor:'middle',fontSize:10,fontWeight:600,fill:'var(--text-2)'},v));
+      if(o.labels) els.push(React.createElement('text',{key:'l'+i,x:x+bw/2,y:h-3,textAnchor:'middle',fontSize:10,fill:'var(--text-3)'},o.labels[i]));
+    });
+    return React.createElement('svg',{width:'100%',height:h,viewBox:'0 0 '+w+' '+h,preserveAspectRatio:'none',style:{display:'block',overflow:'visible'}},els); }
+
+  lineChart(series,o={}){ const w=o.w||320,h=o.h||150,pad=8,plot=h-18; const n=Math.max(...series.map(s=>s.vals.length)); const max=o.max||Math.max(...series.flatMap(s=>s.vals))*1.1;
+    const mx=i=>pad+i/(n-1)*(w-pad*2), my=v=>6+(1-v/max)*(plot-6); const els=[];
+    [0,.5,1].forEach((f,i)=>els.push(React.createElement('line',{key:'g'+i,x1:pad,x2:w-pad,y1:6+f*(plot-6),y2:6+f*(plot-6),stroke:'var(--border)',strokeWidth:1})));
+    series.forEach((s,si)=>{ const pts=s.vals.map((v,i)=>mx(i)+','+my(v)).join(' ');
+      if(s.area) els.push(React.createElement('polygon',{key:'a'+si,points:pts+' '+mx(s.vals.length-1)+','+(6+plot-6)+' '+pad+','+(6+plot-6),fill:s.color,opacity:.12}));
+      els.push(React.createElement('polyline',{key:'p'+si,points:pts,fill:'none',stroke:s.color,strokeWidth:s.dash?2:2.5,strokeDasharray:s.dash?'5 5':'0',strokeLinejoin:'round',strokeLinecap:'round'}));
+    });
+    return React.createElement('svg',{width:'100%',height:h,viewBox:'0 0 '+w+' '+h,preserveAspectRatio:'none',style:{display:'block'}},els); }
+
+  donut(segs,o={}){ const size=o.size||130,thick=o.thick||16,r=(size-thick)/2,C=2*Math.PI*r,cx=size/2; const total=segs.reduce((a,s)=>a+s.v,0); let acc=0; const els=[React.createElement('circle',{key:'bg',cx,cy:cx,r,fill:'none',stroke:'var(--surface-3)',strokeWidth:thick})];
+    segs.forEach((s,i)=>{ const len=s.v/total*C; els.push(React.createElement('circle',{key:i,cx,cy:cx,r,fill:'none',stroke:s.color,strokeWidth:thick,strokeDasharray:len+' '+(C-len),strokeDashoffset:-acc,transform:'rotate(-90 '+cx+' '+cx+')'})); acc+=len; });
+    return React.createElement('svg',{width:size,height:size,viewBox:'0 0 '+size+' '+size},els); }
+
+  backlogVM(){
+    const brow=(i)=>({id:i.id,t:i.t,typeEl:this.typeEl(i.ty),prioEl:this.prioEl(i.pr),pts:i.pts,avatarEl:this.avatar(i.as,22),labels:this.labelEls(i.lb),hasLabels:(i.lb||[]).length>0,st:this.STATUS[i.st],epic:i.epic||''});
+    const sprintIssues=this.ISSUES.filter(i=>['todo','inprogress','inreview','testing'].indexOf(i.st)>=0).map(brow);
+    const backlogIssues=this.ISSUES.filter(i=>i.st==='backlog').map(brow).concat([
+      {id:'PAY-165',t:'Configurable pay schedules (weekly / bi-weekly)',ty:'feature',pr:'medium',pts:5,as:'RS',lb:['backend'],st:'backlog'},
+      {id:'PAY-168',t:'Slack notifications for payroll approvals',ty:'task',pr:'low',pts:2,as:'LC',lb:['devops'],st:'backlog'},
+      {id:'PAY-170',t:'GDPR data-export for employee records',ty:'story',pr:'high',pts:8,as:'NK',lb:['backend'],st:'backlog'},
+    ].map(brow));
+    return { blSprint:sprintIssues, blBacklog:backlogIssues,
+      blSprintPts:sprintIssues.reduce((a,r)=>a+r.pts,0), blSprintCount:sprintIssues.length,
+      blBacklogCount:backlogIssues.length, blCapacity:60, blSprintPct:Math.min(100,Math.round(sprintIssues.reduce((a,r)=>a+r.pts,0)/60*100)),
+      blVelocity:this.barChart([42,38,51,47,55],{w:230,h:96,color:['var(--surface-3)','var(--surface-3)','var(--surface-3)','var(--surface-3)','var(--accent)'],labels:['S20','S21','S22','S23','S24'],max:64}) };
+  }
+
+  reportsVM(){
+    const g='var(--surface-3)', a='var(--accent)';
+    return {
+      rVelocityCommit:this.barChart([44,40,54,50,58],{w:300,h:150,color:g,labels:['S20','S21','S22','S23','S24'],vals:true}),
+      rVelocityDone:this.barChart([42,38,51,47,49],{w:300,h:150,color:a,labels:['S20','S21','S22','S23','S24']}),
+      rBurndown:this.lineChart([{vals:[58,52,46,40,34,28,22,17,11,5],color:'var(--border-strong)',dash:true},{vals:[58,55,50,47,41,34,29],color:a}],{w:300,h:150,max:60}),
+      rFlow:this.lineChart([{vals:[8,12,15,18,22,26,30,34],color:'var(--green)',area:true},{vals:[20,22,25,27,30,33,36,38],color:'var(--blue)',area:true}],{w:300,h:150,max:44}),
+      rCycle:this.barChart([5.2,4.1,3.8,4.6,3.2,2.9],{w:300,h:150,color:'var(--teal)',labels:['W22','W23','W24','W25','W26','W27']}),
+      rDonut:this.donut([{v:38,color:'var(--green)'},{v:24,color:'var(--blue)'},{v:16,color:'var(--red)'},{v:12,color:'var(--violet)'},{v:6,color:'var(--amber)'}],{size:132,thick:18}),
+      rWorkload:[{id:'NK',n:'Nadeesha K.',pct:96,pts:29,over:true},{id:'RS',n:'Rahul S.',pct:78,pts:23},{id:'MJ',n:'Marcus J.',pct:64,pts:19},{id:'AM',n:'Ayesha M.',pct:52,pts:15},{id:'TF',n:'Tomás F.',pct:40,pts:12},{id:'LC',n:'Lena C.',pct:28,pts:8}].map(w=>({n:w.n,pct:w.pct,pts:w.pts,avatarEl:this.avatar(w.id,24),barColor:w.over?'var(--red)':(w.pct>75?'var(--amber)':'var(--accent)'),over:w.over})),
+    };
+  }
+
+  issueVM(){
+    const iss={id:'PAY-142',title:'Implement OAuth2 login with Google & Microsoft',type:'story',status:'inprogress',pr:'high',pts:5,as:'NK',rep:'DP',sprint:'Sprint 24',epic:'Authentication & SSO',due:'Aug 12',start:'Aug 5'};
+    const sub=[
+      {t:'Create OAuth2 client configuration',done:true,as:'NK'},
+      {t:'Google provider integration',done:true,as:'NK'},
+      {t:'Microsoft Entra ID provider integration',done:true,as:'RS'},
+      {t:'Callback handler & token exchange',done:false,as:'NK'},
+      {t:'Session persistence across refresh',done:false,as:'MJ'},
+      {t:'End-to-end sign-in tests',done:false,as:'TF'},
+    ].map(s=>({t:s.t,done:s.done,avatarEl:this.avatar(s.as,22),check:s.done?'var(--green)':'var(--border-strong)',checkBg:s.done?'var(--green)':'transparent',deco:s.done?'line-through':'none',tcolor:s.done?'var(--text-3)':'var(--text)',mark:s.done?this.ic(['M5 12l4 4 10-10'],14,2.4):null}));
+    const done=sub.filter(s=>s.done).length;
+    const comments=[
+      {as:'DP',name:'Dilshan Perera',time:'2 hours ago',text:'Let\u2019s make sure we support both Google Workspace and Microsoft Entra ID from day one \u2014 several enterprise pilots need SSO before onboarding.'},
+      {as:'NK',name:'Nadeesha Kumari',time:'1 hour ago',text:'Google and Microsoft providers are wired up. Working through the token refresh edge case now, tracked in PAY-148. Should have the callback handler ready by EOD.'},
+      {as:'AM',name:'Ayesha Mendis',time:'34 min ago',text:'Attached the updated sign-in screen specs. The provider buttons should follow the new 44px hit-target spacing.'},
+    ].map(c=>({name:c.name,time:c.time,text:c.text,avatarEl:this.avatar(c.as,30)}));
+    const dev=[
+      {icon:'branch',label:'feature/oauth2-login',meta:'1 branch',color:'var(--text-2)'},
+      {icon:'branch',label:'4 commits',meta:'last: \u201cwire up MS provider\u201d',color:'var(--blue)'},
+      {icon:'branch',label:'PR #218 \u00b7 OAuth2 providers',meta:'Open \u00b7 2 approvals',color:'var(--violet)'},
+      {icon:'branch',label:'Deploy \u00b7 staging',meta:'Successful \u00b7 12 min ago',color:'var(--green)'},
+    ].map(d=>({label:d.label,meta:d.meta,color:d.color,iconEl:this.ic(this.ICON.branch,15,1.8)}));
+    const act=[
+      {who:'Nadeesha',as:'NK',text:'changed status',detail:'To Do \u2192 In Progress',time:'5h ago'},
+      {who:'Dilshan',as:'DP',text:'set priority to',detail:'High',time:'1d ago'},
+      {who:'Dilshan',as:'DP',text:'created this issue',detail:'',time:'4d ago'},
+    ].map(a=>({who:a.who,text:a.text,detail:a.detail,hasDetail:!!a.detail,time:a.time,avatarEl:this.avatar(a.as,22)}));
+    return {
+      iss, issTypeEl:this.typeEl(iss.type), issPrioEl:this.prioEl(iss.pr),
+      issStatus:this.STATUS[iss.status], issLabels:this.labelEls(['auth','backend']),
+      issAssignee:this.avatar(iss.as,24), issReporter:this.avatar(iss.rep,24),
+      issSub:sub, issSubDone:done, issSubTotal:sub.length, issSubPct:Math.round(done/sub.length*100),
+      issComments:comments, issDev:dev, issActivity:act, issMe:this.avatar('DP',30),
+    };
+  }
+
+  myWorkVM(){
+    const row=(id,t,proj,pr,due,st,done)=>({id,t,proj:this.projPill(proj),prioEl:this.prioEl(pr),due,st:this.STATUS[st],typeEl:this.typeEl(({bug:'bug',story:'story',feature:'feature'})[st]||'task'),done,
+      checkBd:done?'var(--green)':'var(--border-strong)',checkBg:done?'var(--green)':'transparent',mark:done?this.ic(['M5 12l4 4 10-10'],13,2.6):null,deco:done?'line-through':'none',tcolor:done?'var(--text-3)':'var(--text)',dueColor: due.indexOf('Overdue')>=0?'var(--red)':'var(--text-2)'});
+    const groups=[
+      {label:'Overdue',color:'var(--red)',count:2,rows:[
+        row('CRM-88','Fix broken avatar upload on profile','CRM','urgent','Overdue by 2d','inprogress',false),
+        row('PAY-119','Update API reference for payroll v2','PAY','high','Overdue by 1d','todo',false),
+      ]},
+      {label:'Today',color:'var(--accent-text)',count:5,rows:[
+        row('PAY-142','Implement OAuth2 login (Google & Microsoft)','PAY','high','Today','inprogress',false),
+        row('PAY-148','Session expires prematurely on refresh','PAY','urgent','Today','inprogress',false),
+        row('PAY-150','Payroll dashboard summary charts','PAY','medium','Today','inprogress',false),
+        row('MOB-40','Review push notification spec','MOB','medium','Today','todo',false),
+        row('CRM-90','Sync CRM meeting notes to Confluence','CRM','low','Today','done',true),
+      ]},
+      {label:'This week',color:'var(--text-2)',count:3,rows:[
+        row('PAY-156','Design branded payslip PDF template','PAY','medium','Thu, Aug 14','todo',false),
+        row('MOB-42','Design onboarding walkthrough screens','MOB','high','Fri, Aug 15','todo',false),
+        row('CUS-21','QA portal launch checklist','CUS','medium','Fri, Aug 15','testing',false),
+      ]},
+    ];
+    return { mwGroups:groups, mwMe:this.avatar('DP',44),
+      mwPrio:[{l:'Urgent',n:2,c:'var(--red)',w:20},{l:'High',n:4,c:'var(--amber)',w:40},{l:'Medium',n:5,c:'var(--blue)',w:50},{l:'Low',n:1,c:'var(--text-3)',w:12}] };
+  }
+
+  ring(pct,color,size=52){ return this.donut([{v:pct,color},{v:100-pct,color:'rgba(0,0,0,0)'}],{size,thick:6}); }
+
+  timelineVM(){
+    const weeks=['Aug W1','Aug W2','Aug W3','Aug W4','Sep W1','Sep W2','Sep W3','Sep W4','Oct W1','Oct W2']; const N=weeks.length;
+    const t=(name,as,s,e,color,pct)=>({name,avatarEl:this.avatar(as,20),left:(s/N*100)+'%',width:((e-s)/N*100)+'%',color,pct,pctW:pct+'%'});
+    const ms=(name,at)=>({milestone:true,name,left:(at/N*100)+'%'});
+    const groups=[
+      {name:'Authentication & SSO',rows:[t('OAuth2 login (Google & MS)','NK',0,2,'var(--accent)',60),t('Session refresh fix','NK',1,2,'var(--red)',40),t('Role-based access control','NK',0,1,'var(--green)',100)]},
+      {name:'Payments',rows:[t('Direct deposit ACH','RS',1,3,'var(--blue)',80),t('Multi-currency runs','RS',3,6,'var(--blue)',10),ms('Payroll v2 GA',6)]},
+      {name:'Customer Portal',rows:[t('Self-service portal','AM',2,5,'var(--violet)',25),t('Payslip PDF template','AM',2,3,'#DB2777',30),ms('Portal launch',4)]},
+    ];
+    return { tlWeeks:weeks, tlGroups:groups, tlToday:'13%' };
+  }
+
+  roadmapVM(){
+    const card=(t,pct,status,color)=>({t,pct,pctW:pct+'%',status,hasStatus:!!status,statusColor:{'On track':'var(--green)','At risk':'var(--amber)','Ahead':'var(--blue)','Planned':'var(--text-3)'}[status]||'var(--text-3)',color});
+    const lane=(k,name,color,bg,q3,q4,q1)=>({k,name,color,bg,q3,q4,q1});
+    const lanes=[
+      lane('PAY','Payroll SaaS','var(--accent-text)','var(--accent-soft)',[card('SSO & Authentication',60,'On track'),card('Payroll v2 GA',20,'On track')],[card('Multi-currency',0,'Planned')],[card('Analytics suite',0,'Planned')]),
+      lane('CRM','CRM Platform','var(--teal)','var(--teal-soft)',[card('Lead scoring engine',42,'At risk')],[card('Email campaigns',0,'Planned'),card('Pipeline automation',0,'Planned')],[]),
+      lane('MOB','Mobile App','var(--violet)','var(--violet-soft)',[card('App shell & navigation',25,'On track')],[card('Offline mode',0,'Planned'),card('Push notifications',0,'Planned')],[card('iPad layout',0,'Planned')]),
+      lane('CUS','Customer Portal','var(--amber)','var(--amber-soft)',[card('Portal launch',90,'Ahead')],[card('Knowledge base',0,'Planned')],[]),
+    ];
+    return { rmLanes:lanes, rmQuarters:['Q3 2026','Q4 2026','Q1 2027'] };
+  }
+
+  goalsVM(){
+    const kr=(t,cur,tgt,pct)=>({t,cur,tgt,pct,pctW:pct+'%',color:pct>=70?'var(--green)':pct>=40?'var(--amber)':'var(--red)'});
+    const ob=(scope,scopeColor,title,as,pct,krs)=>({scope,scopeColor,title,ownerEl:this.avatar(as,24),pct,ringEl:this.ring(pct,pct>=70?'var(--green)':pct>=40?'var(--amber)':'var(--red)',54),krs});
+    const objectives=[
+      ob('Company','var(--accent-text)','Become the default payroll platform for APAC SMBs','DP',64,[kr('Reach 500 paying workspaces','342','500',68),kr('Net revenue retention ≥ 120%','114%','120%',80),kr('CSAT ≥ 4.6 / 5','4.4','4.6',60)]),
+      ob('Team · Engineering','var(--blue)','Ship enterprise-grade security & SSO','NK',52,[kr('SSO live for Google & Microsoft','1','2',50),kr('SOC 2 Type II controls in place','18','27',67),kr('Reduce P1 incidents to zero','3','0',40)]),
+      ob('Team · Product','var(--violet)','Launch a self-service customer portal','AM',78,[kr('Portal GA to all customers','90%','100%',90),kr('Onboarding time under 10 min','12m','10m',70),kr('Portal adoption ≥ 60%','44%','60%',73)]),
+    ];
+    return { goalObjectives:objectives };
+  }
+
+  aiVM(){
+    return { aiChips:['Summarize Sprint 24 progress','Draft a status report for Payroll SaaS','Break PAY-157 into subtasks','Who is overloaded this week?'],
+      aiUserAvatar:this.avatar('DP',28) };
+  }
+
+  teamVM(){
+    const m=(id,proj,tasks,pct,avail,days)=>{ const p=this.PEOPLE[id]; const col=pct>90?'var(--red)':pct>=75?'var(--amber)':pct>=50?'var(--accent)':'var(--green)';
+      return {name:p.n,role:p.r,avatarEl:this.avatar(id,42),proj,tasks,pct,pctW:pct+'%',pctColor:col,avail,availColor:pct>90?'var(--red)':pct>=75?'var(--amber)':'var(--green)',availBg:pct>90?'var(--red-soft)':pct>=75?'var(--amber-soft)':'var(--green-soft)',
+        days:days.map(h=>({h:h||'',bg:h===0?'var(--surface-2)':h>8?'var(--red)':h>=6?'var(--amber)':h>=3?'var(--accent)':'var(--accent-soft)',fg:h>=3?'#fff':'var(--accent-text)'})) }; };
+    return { teamMembers:[
+      m('NK',2,9,96,'Overloaded',[8,9,8,7,9,6,8,9,7,8]),
+      m('MJ',2,8,84,'Busy',[7,8,6,8,7,5,8,7,6,8]),
+      m('RS',2,7,78,'Busy',[6,7,8,5,7,6,7,6,5,7]),
+      m('TF',2,6,64,'Available',[5,6,4,6,5,3,6,5,4,5]),
+      m('DP',4,6,55,'Available',[4,5,5,4,6,2,4,5,3,4]),
+      m('AM',3,5,52,'Available',[4,5,3,5,4,2,5,4,3,4]),
+      m('LC',3,4,40,'Available',[3,4,2,4,3,1,3,4,2,3]),
+    ], teamDays:['M','T','W','T','F','M','T','W','T','F'], teamWeeks:['Aug 11 – 15','Aug 18 – 22'] };
+  }
+
+  docsVM(){
+    const doc=(t,active)=>({t,active,style:active?'display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:7px;font-size:12.5px;font-weight:500;background:var(--accent-soft);color:var(--accent-text);cursor:pointer':'display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:7px;font-size:12.5px;color:var(--text-2);cursor:pointer'});
+    return { docSpaces:[
+      {name:'Engineering',docs:[doc('Auth & SSO — Tech Spec',true),doc('API Guidelines'),doc('Deployment Runbook'),doc('Incident Playbook')]},
+      {name:'Product',docs:[doc('PRD — Payroll v2'),doc('Customer Portal Launch Plan'),doc('Q3 Roadmap Notes')]},
+      {name:'Design',docs:[doc('Design System'),doc('Brand Guidelines')]},
+      {name:'Company',docs:[doc('Employee Onboarding'),doc('Security & Compliance')]},
+    ], docContributors:['NK','DP','AM','RS'].map(id=>this.avatar(id,26)), docAuthor:this.avatar('NK',28) };
+  }
+
+  automationVM(){
+    const rule=(name,on,enabled,active)=>({name,on,enabled,active,dot:enabled?'var(--green)':'var(--text-3)',
+      style:active?'padding:11px 13px;border-radius:9px;background:var(--accent-soft);border:1px solid var(--accent);cursor:pointer':'padding:11px 13px;border-radius:9px;background:var(--surface);border:1px solid var(--border);cursor:pointer'});
+    return { autoRules:[
+      rule('Escalate overdue high-priority issues','Issue becomes overdue',true,true),
+      rule('Auto-assign new bugs to QA','Issue created · type Bug',true),
+      rule('Notify PM when issue moves to Done','Status changes to Done',true),
+      rule('Move incomplete issues on sprint end','Sprint completed',false),
+      rule('Weekly status digest to Slack','Every Friday 4pm',true),
+    ], autoTemplates:['New issue → assign','Due date reminder','PR merged → move to Testing','Comment mention → notify','SLA breach → escalate'] };
+  }
+
+  settingsVM(){
+    const tab=this.state.settingsTab;
+    const st=(id)=>({sel:tab===id, onClick:()=>this.setState({settingsTab:id}),
+      style:tab===id?'display:block;padding:8px 11px;border-radius:8px;font-size:13px;font-weight:600;background:var(--accent-soft);color:var(--accent-text);cursor:pointer':'display:block;padding:8px 11px;border-radius:8px;font-size:13px;color:var(--text-2);cursor:pointer'});
+    const roles=['Owner','Admin','PM','Dev','Member','Guest'];
+    const perm=(name,v)=>({name,cells:v.map(x=>({on:!!x,off:!x,mark:x?this.ic(['M5 12l4 4 10-10'],14,2.6):null,color:x?'var(--accent)':'var(--text-3)'}))});
+    const perms=[perm('View projects & issues',[1,1,1,1,1,1]),perm('Create issues',[1,1,1,1,1,0]),perm('Edit any issue',[1,1,1,0,0,0]),perm('Delete issues',[1,1,1,0,0,0]),perm('Manage sprints & backlog',[1,1,1,0,0,0]),perm('Manage members & roles',[1,1,0,0,0,0]),perm('Billing & subscription',[1,0,0,0,0,0]),perm('Workspace administration',[1,1,0,0,0,0])];
+    const arow=(id,verb,vc,entity,before,after,hasChange,time,ip)=>({avatarEl:this.avatar(id,26),who:this.PEOPLE[id]?this.PEOPLE[id].n.split(' ')[0]:id,verb,vc,entity,before,after,hasChange,noChange:!hasChange,time,ip});
+    const audit=[
+      arow('DP','changed status','var(--blue)','PAY-102','In Progress','Done',true,'2 min ago','203.0.113.24 · Chrome / macOS'),
+      arow('NK','raised priority','var(--amber)','PAY-148','Medium','Urgent',true,'24 min ago','203.0.113.51 · Firefox / Linux'),
+      arow('AM','uploaded attachment','var(--violet)','PAY-156','','payslip-v3.fig',false,'1 hour ago','198.51.100.9 · Chrome / Windows'),
+      arow('LC','deployed release','var(--green)','payroll@1.8.0','','production',true,'3 hours ago','198.51.100.2 · CLI / CI runner'),
+      arow('MJ','deleted issue','var(--red)','MOB-33','','Duplicate of MOB-31',false,'5 hours ago','203.0.113.88 · Chrome / macOS'),
+      arow('DP','changed role','var(--accent-text)','Tomás Ferreira','Member','Team Lead',true,'Yesterday','203.0.113.24 · Chrome / macOS'),
+      arow('RS','invited member','var(--teal)','kavya@dcode.io','','Developer',false,'Yesterday','203.0.113.12 · Safari / iOS'),
+    ];
+    return { stTabs:[{id:'account',label:'Account'},{id:'members',label:'Members'},{id:'billing',label:'Billing & Plan'},{id:'permissions',label:'Roles & Permissions'},{id:'audit',label:'Audit Log'}].map(t=>({label:t.label,...st(t.id)})),
+      stIsAccount:tab==='account',stIsMembers:tab==='members',stIsBilling:tab==='billing',stIsPerms:tab==='permissions',stIsAudit:tab==='audit',
+      permRoles:roles, perms, auditRows:audit, stTeamAvatars:['DP','NK','RS','AM','TF','LC','MJ'] };
+  }
+
+  renderVals(){
+    const S=this.state; const expanded=!S.collapsed; const screen=S.screen;
+    const built=['dashboard','board','issue','mywork','backlog','timeline','reports','roadmap','goals','ai','team','docs','automation','settings','audit'];
+    const projPill=(k)=>{ const m={PAY:['var(--accent-text)','var(--accent-soft)'],CRM:['var(--teal)','var(--teal-soft)'],MOB:['var(--violet)','var(--violet-soft)'],CUS:['var(--amber)','var(--amber-soft)']}[k]||['var(--text-2)','var(--surface-3)']; return {k,color:m[0],bg:m[1]}; };
+    const statusPill=(st)=>{ const s=this.STATUS[st]; return {name:s.name,color:s.color}; };
+    const CRUMB={dashboard:'Home',mywork:'My Work',projects:'Projects',roadmap:'Roadmap',goals:'Goals & OKRs',timeline:'Timeline',calendar:'Calendar',board:'Board — Payroll SaaS',backlog:'Backlog & Sprints',reports:'Reports',ai:'AI Assistant',team:'Team & Workload',docs:'Documents',automation:'Automation',integrations:'Integrations',settings:'Settings',audit:'Audit Log'};
+
+    const navSections=this.NAV.map(sec=>({ title:sec.title, showTitle:sec.showTitle&&expanded, items:sec.items.map(it=>{
+      const active=it.id===screen;
+      const base={display:'flex',alignItems:'center',gap:'10px',padding:expanded?'7px 9px':'8px 0',justifyContent:expanded?'flex-start':'center',margin:'1px 0',borderRadius:'8px',cursor:'pointer',fontSize:'13px',fontWeight:active?600:500,color:active?'var(--accent-text)':'var(--text-2)',background:active?'var(--accent-soft)':'transparent'};
+      return { label:it.label, iconEl:this.ic(this.ICON[it.icon]), onClick:this.go(it.id), style:base, hover:active?'':'background:var(--surface-3);color:var(--text)',
+        badgeShow:!!it.badge&&expanded, badge:it.badge, badgeStyle:'font-size:10.5px;font-weight:600;color:var(--text-2);background:var(--surface-3);min-width:18px;text-align:center;padding:1px 6px;border-radius:20px' };
+    })}));
+
+    // board
+    const order=['backlog','todo','inprogress','inreview','testing','done'];
+    const wip={inprogress:4};
+    const allIssues=this.liveIssues();
+    const drop=(st)=>((e)=>{ if(e&&e.preventDefault)e.preventDefault(); this.setState(s=>({issues:(s.issues||[]).map(i=>i.id===s.dragId?{...i,st}:i),dragId:null,dragOver:null})); });
+    const overCol=(st)=>((e)=>{ if(e&&e.preventDefault)e.preventDefault(); if(this.state.dragOver!==st) this.setState({dragOver:st}); });
+    const board=order.map(st=>{ const cards=allIssues.filter(i=>i.st===st).map(i=>({
+        id:i.id,title:i.t,pts:i.pts,sub:i.sub,comments:i.c,hasSub:!!i.sub,hasComments:!!i.c,
+        hasLabels:(i.lb||[]).length>0,labels:this.labelEls(i.lb),
+        typeEl:this.typeEl(i.ty),prioEl:this.prioEl(i.pr),avatarEl:this.avatar(i.as,22),open:this.go('issue'),
+        onDragStart:((id)=>(e)=>{ if(e&&e.dataTransfer){e.dataTransfer.effectAllowed='move';} this.setState({dragId:id}); })(i.id),
+        onDragEnd:()=>this.setState({dragId:null,dragOver:null}),
+        dragging:this.state.dragId===i.id, dragOpacity:this.state.dragId===i.id?'0.4':'1'
+      }));
+      const s=this.STATUS[st]; const over=wip[st]&&cards.length>wip[st];
+      return {name:s.name,color:s.color,count:cards.length,cards,onDrop:drop(st),onDragOver:overCol(st),
+        dropStyle: this.state.dragOver===st?'background:var(--accent-soft);border-color:var(--accent)':'background:transparent;border-color:transparent',
+        wipShow:!!wip[st],wip:(wip[st]?cards.length+'/'+wip[st]:''),wipColor:over?'var(--red)':'var(--text-2)',wipBg:over?'var(--red-soft)':'var(--surface-3)'};
+    });
+    const boardAvatars=['DP','NK','RS','AM','MJ'].map(id=>this.avatar(id,26));
+    const boardTabs=['Board','List','Timeline','Backlog','Sprints','Reports'].map(l=>({label:l,style:'padding:9px 12px;font-size:13px;font-weight:'+(l==='Board'?'600':'500')+';color:'+(l==='Board'?'var(--text)':'var(--text-3)')+';border-bottom:2px solid '+(l==='Board'?'var(--accent)':'transparent')+';margin-bottom:-1px;cursor:pointer'}));
+
+    // dashboard
+    const stat=(label,value,delta,dc,icon,ic,ib)=>({label,value,delta,deltaColor:dc,iconEl:this.ic(this.ICON[icon],16,1.9),iconColor:ic,iconBg:ib});
+    const stats=[
+      stat('Due today','5','2 urgent','var(--red)','calendar','var(--blue)','var(--blue-soft)'),
+      stat('Overdue','2','needs action','var(--red)','bell','var(--red)','var(--red-soft)'),
+      stat('In progress','8','on schedule','var(--text-3)','board','var(--violet)','var(--violet-soft)'),
+      stat('Completed (wk)','23','+18%','var(--green)','mywork','var(--green)','var(--green-soft)'),
+    ];
+    const act=(who,as,action,target,time)=>({who,action,target,time,avatarEl:this.avatar(as,26)});
+    const activity=[
+      act('Nadeesha','NK','moved to In Review','PAY-139',' 8 min ago'),
+      act('Tomás','TF','reported a bug on','PAY-148','24 min ago'),
+      act('Ayesha','AM','commented on','PAY-156','1 hour ago'),
+      act('Marcus','MJ','completed subtask in','PAY-150','2 hours ago'),
+      act('Rahul','RS','opened a pull request for','PAY-142','3 hours ago'),
+    ];
+    const proj=(key,name,meta,health,progress,due,pc)=>{ const hc={green:['var(--green)','var(--green-soft)'],amber:['var(--amber)','var(--amber-soft)'],blue:['var(--blue)','var(--blue-soft)']}[pc]; const kc={PAY:['var(--accent-text)','var(--accent-soft)'],CRM:['var(--teal)','var(--teal-soft)'],MOB:['var(--violet)','var(--violet-soft)'],CUS:['var(--amber)','var(--amber-soft)']}[key];
+      return {key,name,meta,health,progress,due,healthColor:hc[0],healthBg:hc[1],barColor:hc[0],iconColor:kc[0],iconBg:kc[1]}; };
+    const projects=[
+      proj('PAY','Payroll SaaS','24 / 38 issues · Dilshan','On track',68,'Sep 30','green'),
+      proj('CRM','CRM Platform','18 / 44 issues · Nadeesha','At risk',42,'Oct 15','amber'),
+      proj('MOB','Mobile Application','9 / 36 issues · Marcus','On track',25,'Nov 20','blue'),
+      proj('CUS','Customer Portal','31 / 34 issues · Ayesha','Ahead',90,'Aug 25','green'),
+    ];
+    const dl=(mon,day,title,meta,pr)=>({mon,day,title,meta,prioEl:this.prioEl(pr)});
+    const deadlines=[
+      dl('AUG','11','Session refresh bug fix','PAY-148 · Nadeesha','urgent'),
+      dl('AUG','12','OAuth2 login rollout','PAY-142 · Nadeesha','high'),
+      dl('AUG','13','Direct deposit review','PAY-139 · Rahul','high'),
+      dl('AUG','25','Customer Portal launch','Milestone · Ayesha','medium'),
+    ];
+    // burndown svg
+    const W=380,H=132,pad=6; const ideal=[58,52,46,40,34,28,23,17,11,6,0]; const actual=[58,55,50,47,41,34];
+    const mx=v=>pad+ (v/(ideal.length-1))*(W-pad*2); const my=v=>pad+(1-v/58)*(H-pad*2-14);
+    const idPts=ideal.map((v,i)=>mx(i)+','+my(v)).join(' ');
+    const acPts=actual.map((v,i)=>mx(i)+','+my(v)).join(' ');
+    const burndownEl=React.createElement('svg',{width:'100%',height:118,viewBox:'0 0 '+W+' '+H,preserveAspectRatio:'none',style:{display:'block'}},[
+      ...[0,.25,.5,.75,1].map((f,i)=>React.createElement('line',{key:'g'+i,x1:pad,x2:W-pad,y1:pad+f*(H-pad*2-14),y2:pad+f*(H-pad*2-14),stroke:'var(--border)',strokeWidth:1})),
+      React.createElement('polyline',{key:'id',points:idPts,fill:'none',stroke:'var(--border-strong)',strokeWidth:2,strokeDasharray:'5 5'}),
+      React.createElement('polyline',{key:'ac',points:acPts,fill:'none',stroke:'var(--accent)',strokeWidth:2.5,strokeLinejoin:'round',strokeLinecap:'round'}),
+      ...actual.map((v,i)=>React.createElement('circle',{key:'c'+i,cx:mx(i),cy:my(v),r:3,fill:'var(--surface)',stroke:'var(--accent)',strokeWidth:2})),
+    ]);
+
+    const now=new Date(2026,7,9); const h=9;
+    const greeting=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+    const dateStr=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    return {
+      greeting, dateStr,
+      theme:S.theme, sidebarW: expanded?'250px':'64px', expanded, collapseRot: expanded?'none':'rotate(180deg)',
+      chevDown:this.ic(this.ICON.chevDown), chevLeft:this.ic(this.ICON.chevLeft),
+      iconSearch:this.ic(this.ICON.search), iconBell:this.ic(this.ICON.bell), iconPlus:this.ic(this.ICON.plus),
+      iconPlusSmall:this.ic(this.ICON.plus,16,2), iconBranch:this.ic(this.ICON.branch,13,1.8), iconComment:this.ic(this.ICON.comment,13,1.7),
+      themeIcon: S.theme==='dark'?this.ic(this.ICON.sun):this.ic(this.ICON.moon),
+      iconBtn:'width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--text-2);border-radius:8px;cursor:pointer;padding:0',
+      toggleTheme:()=>this.setState(s=>({theme:s.theme==='dark'?'':'dark'})),
+      toggleSidebar:()=>this.setState(s=>({collapsed:!s.collapsed})),
+      openSearch:()=>{}, goCreate:this.go('ai'), goBoard:this.go('board'),
+      crumb:CRUMB[screen]||'Home', navSections,
+      isDashboard:screen==='dashboard', isBoard:screen==='board', isStub: built.indexOf(screen)<0,
+      isIssue:screen==='issue', isMyWork:screen==='mywork', isBacklog:screen==='backlog', isTimeline:screen==='timeline', isReports:screen==='reports', isRoadmap:screen==='roadmap', isGoals:screen==='goals', isAi:screen==='ai',
+      isTeam:screen==='team', isDocs:screen==='docs', isAutomation:screen==='automation', isSettings:screen==='settings', isAudit:screen==='audit',
+      ...this.issueVM(), ...this.myWorkVM(), ...this.backlogVM(), ...this.reportsVM(), ...this.timelineVM(), ...this.roadmapVM(), ...this.goalsVM(), ...this.aiVM(),
+      ...this.teamVM(), ...this.docsVM(), ...this.automationVM(), ...this.settingsVM(),
+      goBack:this.go('board'), goToIssue:this.go('issue'), iconAi:this.ic(this.ICON.ai), iconAiBig:this.ic(this.ICON.ai,26,1.7), iconFlag:this.ic(this.ICON.flag,15,1.8),
+      iconDoc:this.ic(this.ICON.docs,14,1.8), iconCheckSm:this.ic(['M5 12l4 4 10-10'],13,2.8), settingsMe:this.avatar('DP',44),
+      btnGhost:'height:32px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text-2);font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer',
+      btnSolid:'height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm)',
+      stats, activity, projects, deadlines, board, boardAvatars, boardTabs, burndownEl,
+      sprint:{name:'Sprint 24 · Payroll SaaS',day:6,total:10,ends:'Aug 15',pd:34,pt:58,pct:Math.round(34/58*100),done:22,remaining:9,inprog:6,blocked:1},
+    };
+  }
+}
+</script>
+</body>
+</html>

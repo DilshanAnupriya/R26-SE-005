@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Build output
+target/
+build/
+dist/
+out/
+
+# Node / frontend
+node_modules/
+.next/
+.pnpm-store/
+
+# Local environment
+.env
+.env.local
+*.local
+
+# IDE
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/shelf/
+*.iml.local
+.vscode/
+
+# Tooling scratch
+.claude/settings.local.json
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+frontend/.env*.local
+
+# Runtime uploads. The local storage adapter writes here; these are whatever the
+# developer last attached to a test issue, and they have no business in the history.
+backend/data/

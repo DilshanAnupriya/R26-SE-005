@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import Navbar from "@/components/Navbar";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { cn } from "@/lib/utils";
+import { Providers } from "@/components/providers";
+import LayoutWrapper from "@/components/layout-wrapper";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 export const metadata: Metadata = {
   title: "Agile Resource Optimizer | AI-Powered Resource Allocation",
@@ -19,17 +19,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
-        <Navbar />
-        <main className="flex-grow pt-24">
-          {children}
-        </main>
-        <footer className="py-8 border-t border-card-border bg-background/50 backdrop-blur-md">
-          <div className="container mx-auto px-6 text-center text-slate-400 text-sm">
-            © {new Date().getFullYear()} Agile Resource Optimizer. All rights reserved.
-          </div>
-        </footer>
+    <html
+      lang="en"
+      className={cn("h-full", geist.variable, geistMono.variable)}
+      suppressHydrationWarning
+    >
+      <body className="flex min-h-full flex-col font-sans antialiased">
+        <Providers>
+          <LayoutWrapper>
+            {children}
+          </LayoutWrapper>
+        </Providers>
       </body>
     </html>
   );

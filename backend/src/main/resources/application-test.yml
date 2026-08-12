@@ -1,0 +1,10 @@
+spring:
+  flyway:
+    clean-disabled: false
+app:
+  ai:
+    provider: mock
+  rate-limit:
+    enabled: false
+  seed:
+    enabled: false
