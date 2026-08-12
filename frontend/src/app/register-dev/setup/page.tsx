@@ -44,7 +44,7 @@ export default function ProfileSetupPage() {
   useEffect(() => {
     const data = localStorage.getItem("registration_data");
     if (!data) {
-      router.push("/register");
+      router.push("/register-dev");
       return;
     }
     setPrevData(JSON.parse(data));
