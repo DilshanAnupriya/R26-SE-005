@@ -2,49 +2,19 @@
 
 import { use, useState } from "react";
 import { Gauge, Info, Sparkles } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { CostWidget } from "@/features/ai/components/cost-widget";
 import { RiskCard } from "@/features/ai/components/risk-card";
+import { VelocityPanel } from "@/features/ai/components/velocity-panel";
 import { useProjectInsights } from "@/features/ai/hooks";
 import { useProjects } from "@/features/projects/hooks";
-import type { CommitmentVerdict } from "@/lib/api/ai-schemas";
-import { cn } from "@/lib/utils";
 
 const CAPABILITY_LABEL: Record<string, string> = {
   "ai.story_points": "Story point suggestions",
   "ai.risk": "Sprint risk assessment",
   "ai.allocation": "Assignment suggestions",
   "ai.cost": "Cost forecasting",
-};
-
-const VERDICT_COPY: Record<CommitmentVerdict, { label: string; tone: string; hint: string }> = {
-  OVER_COMMITTED: {
-    label: "Over-committed",
-    tone: "bg-destructive/15 text-destructive",
-    hint: "The commitment is well above what this team usually delivers.",
-  },
-  STRETCHED: {
-    label: "Stretched",
-    tone: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-    hint: "Achievable, but there is no room for the discovery that always happens.",
-  },
-  BALANCED: {
-    label: "Balanced",
-    tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-    hint: "The commitment sits comfortably against recent delivery.",
-  },
-  UNDER_COMMITTED: {
-    label: "Under-committed",
-    tone: "bg-sky-500/10 text-sky-700 dark:text-sky-400",
-    hint: "There is capacity for more than has been committed.",
-  },
-  UNKNOWN: {
-    label: "Not enough history",
-    tone: "bg-muted text-muted-foreground",
-    hint: "A few completed sprints are needed before velocity means anything.",
-  },
 };
 
 /**
@@ -127,7 +97,7 @@ export default function AiInsightsPage({ params }: { params: Promise<{ orgSlug: 
 
           <div className="grid gap-4 lg:grid-cols-2">
             {insights.data.velocity ? (
-              <VelocityCard velocity={insights.data.velocity} />
+              <VelocityPanel velocity={insights.data.velocity} />
             ) : null}
 
             {insights.data.cost ? <CostWidget forecast={insights.data.cost} /> : null}
@@ -183,53 +153,6 @@ export default function AiInsightsPage({ params }: { params: Promise<{ orgSlug: 
         </>
       ) : null}
     </div>
-  );
-}
-
-function VelocityCard({
-  velocity,
-}: {
-  velocity: NonNullable<ReturnType<typeof useProjectInsights>["data"]>["velocity"];
-}) {
-  if (!velocity) return null;
-  const verdict = VERDICT_COPY[velocity.commitmentVerdict];
-
-  return (
-    <article className="rounded-lg border p-3" aria-labelledby="velocity-heading">
-      <h3 id="velocity-heading" className="flex items-center gap-1.5 text-sm font-medium">
-        <Gauge className="size-4 text-primary" aria-hidden />
-        Predicted velocity
-      </h3>
-
-      <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums">
-          {velocity.predictedVelocity ?? "—"}
-        </span>
-        <span className="text-xs text-muted-foreground">points</span>
-        {velocity.rollingAverage != null ? (
-          <span className="text-xs text-muted-foreground tabular-nums">
-            rolling average {velocity.rollingAverage}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Badge className={cn("border-0", verdict.tone)}>{verdict.label}</Badge>
-        {velocity.committedPoints != null ? (
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {velocity.committedPoints} points committed
-          </span>
-        ) : null}
-      </div>
-
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{verdict.hint}</p>
-
-      {velocity.prediction?.explanation ? (
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {velocity.prediction.explanation}
-        </p>
-      ) : null}
-    </article>
   );
 }
 
