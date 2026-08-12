@@ -250,6 +250,7 @@ function DevCard({
   approvedId,
   onApprove,
   onDecline,
+  onViewWorkload,
   approving,
 }: {
   rec: DeveloperRec;
