@@ -48,7 +48,7 @@ export default function ProjectPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="animate-fade-up mx-auto max-w-6xl space-y-6">
       <div>
         <Link
           href={`/app/${orgSlug}/projects`}

@@ -36,7 +36,7 @@ export function InitiativeCard({
       type="button"
       onClick={onOpen}
       aria-label={`${initiative.title}: ${Math.round(initiative.progressPct)} percent complete, ${statusLabel(initiative.status)}${pace ? `, ${pace}` : ""}. Open initiative.`}
-      className="w-full rounded-lg border border-line bg-surface p-[10px_11px] text-left shadow-card transition-[background-color,transform] duration-[--duration-press] ease-out-quart hover:bg-surface-2 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="w-full rounded-lg border border-line bg-surface p-[10px_11px] text-left shadow-card transition-colors duration-[var(--duration-press)] ease-[var(--ease-out-quart)] hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       style={{ borderLeft: `3px solid ${laneColour}` }}
     >
       <div className="mb-[7px] flex items-start gap-2">

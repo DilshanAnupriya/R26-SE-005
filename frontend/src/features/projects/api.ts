@@ -9,6 +9,27 @@ import {
 import { z } from "zod";
 
 /**
+ * Statuses that mean a project is finished with.
+ *
+ * <p>Mirrors {@code ProjectStatus.isTerminal()} on the backend. Everything else —
+ * PLANNING, ACTIVE, ON_HOLD — is a project somebody can still open a board or a
+ * backlog for.</p>
+ */
+const FINISHED_STATUSES = new Set(["COMPLETED", "ARCHIVED"]);
+
+/**
+ * The projects a picker should offer.
+ *
+ * <p>Not "ACTIVE only", which is the trap: a project is created as PLANNING, so
+ * filtering on ACTIVE hides every project the moment it is made and tells the user
+ * there are none. That is exactly backwards — a brand-new project is the one you are
+ * most likely to be opening a backlog for.</p>
+ */
+export function workableProjects<T extends { status: string }>(projects: T[]): T[] {
+  return projects.filter((project) => !FINISHED_STATUSES.has(project.status));
+}
+
+/**
  * Workspaces, needed only so the create form can say where a project goes.
  *
  * <p>Lives here rather than in its own feature because this is the only screen that

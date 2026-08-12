@@ -70,7 +70,7 @@ export default function SprintsPage({
   const selected = list.find((sprint) => sprint.id === selectedId) ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="animate-fade-up mx-auto max-w-6xl space-y-6">
       <div>
         <Link
           href={`/app/${orgSlug}/projects/${projectId}`}

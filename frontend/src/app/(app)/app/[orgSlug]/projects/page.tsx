@@ -24,7 +24,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ orgSlug: st
   const [creating, setCreating] = useState(false);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="animate-fade-up mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
@@ -47,7 +47,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ orgSlug: st
       ) : error ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : data && data.content.length > 0 ? (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="stagger-children grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.content.map((project) => (
             <li key={project.id}>
               <ProjectCard project={project} orgSlug={orgSlug} />
