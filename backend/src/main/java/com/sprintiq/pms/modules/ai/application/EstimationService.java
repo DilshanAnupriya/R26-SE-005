@@ -94,10 +94,16 @@ public class EstimationService {
                 .put("sprint_duration_days", project.sprintDurationDays())
                 .put("team_velocity_avg", project.teamVelocityAvg())
                 .put("recent_completion_rate", project.recentCompletionRate())
-                // Derived from what this project already knows, rather than asked for:
-                // acceptance criteria are the closest thing to a component count, and
-                // dependencies are how a story reaches outside itself.
-                .putNumber("num_components", Math.max(1, features.criteriaCount()))
+                // Derived from what this project already knows, rather than asked for.
+                // Acceptance criteria alone made this constant: almost no story has any,
+                // so every story arrived as num_components=1 and the model — for which
+                // this is one of the two strongest structural inputs — had nothing to
+                // tell two stories apart with. Counting the tasks a story has been broken
+                // into, and the areas its labels name, is the same idea ("how many parts
+                // does this touch") measured from data that actually varies.
+                .putNumber("num_components",
+                        Math.max(1, features.criteriaCount() + features.taskCount()
+                                + features.labelCount()))
                 .putNumber("external_apis", features.dependencyCount())
                 .putNumber("similar_task_count", features.comparableCount())
                 .putNumber("task_age_days", features.ageInDays())

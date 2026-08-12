@@ -43,15 +43,33 @@ DRIVER_LABELS = {
 }
 
 
-def _label_for(column: str) -> str:
-    if column in DRIVER_LABELS:
-        return DRIVER_LABELS[column]
-    for prefix, noun in (("task_type_", "task type"), ("domain_", "domain"),
-                         ("tech_stack_", "tech stack"),
-                         ("dev_experience_level_", "team experience")):
+# Columns that are one-hot flags rather than measurements. A contribution from one
+# of these is only meaningful when the flag is actually set: SHAP will happily report
+# what "this is not a bug" did to the estimate, but showing a planner "task type: bug"
+# as a driver of a story that is not a bug is worse than showing nothing.
+ONE_HOT_PREFIXES = (("task_type_", "task type"), ("domain_", "domain"),
+                    ("tech_stack_", "tech stack"),
+                    ("dev_experience_level_", "team experience"))
+
+
+def _is_one_hot(column: str) -> bool:
+    return any(column.startswith(prefix) for prefix, _ in ONE_HOT_PREFIXES)
+
+
+def _label_for(column: str, value: float | None = None) -> str:
+    """A driver's name, carrying the value it had.
+
+    "components touched" does not tell a planner whether the story touched two or
+    twelve, which is the whole reason it moved the estimate. The number goes in the
+    label because the alternative is an explanation that cannot be checked.
+    """
+    for prefix, noun in ONE_HOT_PREFIXES:
         if column.startswith(prefix):
             return f"{noun}: {column[len(prefix):]}"
-    return column.replace("_", " ")
+    label = DRIVER_LABELS.get(column, column.replace("_", " "))
+    if value is None:
+        return label
+    return f"{label} ({value:g})"
 
 
 class StoryPointPredictor:
@@ -93,13 +111,20 @@ class StoryPointPredictor:
             return "MEDIUM"
         return "HIGH"
 
-    def _drivers(self, matrix, limit: int = 5) -> list[dict[str, Any]]:
+    def _drivers(self, matrix, struct_values, limit: int = 5) -> list[dict[str, Any]]:
         """Per-prediction contributions from the trees, not global importances.
 
         ``pred_contribs`` is XGBoost's exact SHAP for tree ensembles: it says what
         moved *this* estimate. Global feature importance would answer a different
         question — what matters on average — and presenting that as "why 8?" is
         the kind of explanation that is worse than none.
+
+        Takes the structural values alongside the contributions so a driver can say
+        what it actually was. Two things depend on that: the label carries the value,
+        and one-hot columns the story does not have are dropped rather than reported
+        as reasons. A bug fix was previously explained as "task type: feature ↓",
+        which is SHAP faithfully describing the absence of a category and the UI
+        presenting it as a property of the story.
         """
         try:
             import xgboost as xgb
@@ -117,21 +142,35 @@ class StoryPointPredictor:
         text_total = float(np.sum(contributions[:text_width]))
 
         ranked = sorted(
-            ((self.struct_columns[i], float(value)) for i, value in enumerate(structural)),
-            key=lambda pair: abs(pair[1]),
+            ((self.struct_columns[i], float(contribution), float(struct_values[i]))
+             for i, contribution in enumerate(structural)),
+            key=lambda row: abs(row[1]),
             reverse=True,
-        )[:limit]
+        )
 
-        drivers = [
-            {"feature": _label_for(column),
-             "contribution": round(value, 3),
-             # INCREASE / DECREASE, matching PredictionDriver in the backend. The UI
-             # compares against those exact strings, so lowercase prose here made
-             # every driver render as a decrease — a silent mismatch, since nothing
-             # validates the vocabulary on the way through.
-             "direction": "INCREASE" if value > 0 else "DECREASE"}
-            for column, value in ranked if abs(value) > 0.01
-        ]
+        drivers: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for column, contribution, value in ranked:
+            if len(drivers) >= limit or abs(contribution) <= 0.01:
+                break
+            # A category the story does not belong to is not a reason for its size.
+            if _is_one_hot(column) and value == 0:
+                continue
+            label = _label_for(column, None if _is_one_hot(column) else value)
+            # word_count and char_count are both "description length"; listing it
+            # twice reads as two independent reasons when it is one.
+            if label.split(" (")[0] in seen:
+                continue
+            seen.add(label.split(" (")[0])
+            drivers.append({
+                "feature": label,
+                "contribution": round(contribution, 3),
+                # INCREASE / DECREASE, matching PredictionDriver in the backend. The UI
+                # compares against those exact strings, so lowercase prose here made
+                # every driver render as a decrease — a silent mismatch, since nothing
+                # validates the vocabulary on the way through.
+                "direction": "INCREASE" if contribution > 0 else "DECREASE",
+            })
         # The wording matters: the text moved the estimate, but which words did it
         # is not something a TF-IDF contribution sum can honestly attribute.
         if abs(text_total) > 0.05:
@@ -146,6 +185,16 @@ class StoryPointPredictor:
         text, struct_row, provenance = build_row(payload, self.struct_columns)
         matrix = to_matrix(text, struct_row, self.tfidf)
 
+        # How much of the story's wording the model can actually read. The vocabulary
+        # is 150 terms fixed at training time, so a story phrased in words it never
+        # saw ("SCIM user provisioning") produces 150 zero columns and contributes
+        # nothing. Two such stories are then indistinguishable to the model and get
+        # the same number — which is how "every story is a 5" happens with nothing
+        # visibly broken. Counted, so the caller can say so instead of implying the
+        # estimate was read off this particular story.
+        text_width = len(self.tfidf.vocabulary_)
+        provenance["text_terms_recognised"] = int(matrix[:, :text_width].nnz)
+
         raw_point = float(self.model.predict(matrix)[0])
         raw_low = float(self.quantiles["P20"].predict(matrix)[0]) - self.cqr_delta
         raw_high = float(self.quantiles["P80"].predict(matrix)[0]) + self.cqr_delta
@@ -156,13 +205,13 @@ class StoryPointPredictor:
         span = self._fib_index[high] - self._fib_index[low]
         risk = self._risk(span)
 
-        drivers = self._drivers(matrix)
+        drivers = self._drivers(matrix, struct_row[0])
 
         return {
             "value": point,
             "lower_bound": low,
             "upper_bound": high,
-            "confidence": self._confidence(span),
+            "confidence": self._confidence(raw_point, raw_low, raw_high, provenance),
             "label": risk,
             "drivers": drivers,
             "explanation": self._explain(point, low, high, risk, drivers, provenance),
@@ -173,15 +222,39 @@ class StoryPointPredictor:
             "provenance": provenance,
         }
 
-    def _confidence(self, span: int) -> float:
-        """Confidence as interval tightness, on the scale the interval is drawn on.
+    # A raw interval this wide relative to the estimate counts as no precision at
+    # all. Set from the model's own held-out spread (mean raw width 4.72 on a median
+    # of 5, so a relative width of 1.5 is already well past typical).
+    WIDEST_USEFUL_RELATIVE_WIDTH = 1.5
 
-        Not a probability. The interval already carries the calibrated
-        probability — it covers the true value about %.0f%% of the time. This is
-        the narrower question a planner asks: how precise is this?
+    def _confidence(self, raw_point: float, raw_low: float, raw_high: float,
+                    provenance: dict) -> float:
+        """How precise this estimate is, from the interval before it was snapped.
+
+        Not a probability. The interval carries the calibrated probability — it
+        covers the true value about 70% of the time. This is the narrower question a
+        planner asks: how precise is this one?
+
+        Measured on the *raw* interval deliberately. Deriving it from the snapped
+        Fibonacci span, as this did, quantised a continuous quantity into six
+        possible values — and since the conformal correction is tuned to a mean of
+        about two Fibonacci steps, essentially every story landed on exactly two and
+        reported 60%. A confidence that reads 60% for a one-line typo fix and for a
+        multi-region migration is not telling anyone anything.
         """
-        widest = len(self.fib) - 1
-        return round(max(0.0, min(1.0, 1.0 - span / widest)), 2)
+        width = max(0.0, raw_high - raw_low)
+        relative = width / max(abs(raw_point), 1.0)
+        confidence = 1.0 - relative / self.WIDEST_USEFUL_RELATIVE_WIDTH
+
+        # An interval computed mostly from training medians is a statement about the
+        # training set, not about this story, and it can look deceptively tight. Each
+        # missing input costs a little certainty; unreadable wording costs more,
+        # because the text is the only per-story signal the structure cannot supply.
+        confidence -= 0.03 * len(provenance.get("defaulted_to_training_median", []))
+        if provenance.get("text_terms_recognised") == 0:
+            confidence -= 0.15
+
+        return round(max(0.0, min(1.0, confidence)), 2)
 
     def _explain(self, point: int, low: int, high: int, risk: str,
                  drivers: list[dict[str, Any]], provenance: dict) -> str:
@@ -189,19 +262,45 @@ class StoryPointPredictor:
         sentence = (f"Estimated {point} points, most likely between {low} and {high} "
                     f"({coverage}% of the time). ")
 
+        # Both directions, not just increases. A small story is small *for reasons*,
+        # and explaining only what pushed an estimate up left every below-average
+        # story with no explanation at all — the case where a planner is most likely
+        # to want to argue with the number.
         if drivers:
-            top = [d for d in drivers if d["direction"] == "INCREASE"][:2]
-            if top:
-                sentence += "Pushed up by " + " and ".join(d["feature"] for d in top) + ". "
+            up = [d for d in drivers if d["direction"] == "INCREASE"][:2]
+            down = [d for d in drivers if d["direction"] == "DECREASE"][:2]
+            if up:
+                sentence += "Pushed up by " + " and ".join(d["feature"] for d in up) + ". "
+            if down and not up:
+                sentence += "Held down by " + " and ".join(d["feature"] for d in down) + ". "
+            elif down and up:
+                sentence += "Held down by " + down[0]["feature"] + ". "
+
+        # Said before anything else about the range, because it changes what the
+        # number means. With no recognised wording and the structural inputs left at
+        # their defaults, this is the model's baseline for a story it cannot read —
+        # not an assessment of this story. Every such story gets the same answer, so
+        # a planner comparing two of them is comparing nothing.
+        unread = provenance.get("text_terms_recognised", 1) == 0
+        if unread and len(provenance["defaulted_to_training_median"]) >= 4:
+            return (sentence + "None of this story's wording matches the vocabulary the model "
+                    f"was trained on, and {len(provenance['defaulted_to_training_median'])} inputs "
+                    "were left at their defaults, so this is the model's baseline rather than a "
+                    "reading of this story. Size it yourself, or fill in the project's domain, "
+                    "tech stack and team details to give the model something to work from.")
+        if unread:
+            sentence += ("The model did not recognise any of this story's wording, so the "
+                         "estimate rests on its structure alone. ")
 
         if risk == "HIGH":
             sentence += ("The range is wide, so treat this as a rough size and split the "
                          "story before committing to it.")
         elif provenance["defaulted_to_training_median"]:
             missing = len(provenance["defaulted_to_training_median"])
-            sentence += (f"{missing} input{'s' if missing != 1 else ''} were not supplied and "
-                         f"fell back to typical values, so the estimate is less specific to "
-                         f"this team than it could be.")
+            plural = missing != 1
+            sentence += (f"{missing} input{'s' if plural else ''} {'were' if plural else 'was'} "
+                         f"not supplied and fell back to typical values, so the estimate is less "
+                         f"specific to this team than it could be.")
         elif high >= low * 2:
             # LOW here is relative to what this model usually produces, not an
             # absolute claim. Calling a 5-to-13 range "tight" would be a plain
