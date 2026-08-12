@@ -49,7 +49,7 @@ export default function ReportsPage({ params }: { params: Promise<{ orgSlug: str
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="animate-fade-up mx-auto max-w-5xl space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
@@ -126,7 +126,7 @@ function VelocityPanel({ projectId }: { projectId: string }) {
 
   return (
     <section className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="stagger-children grid gap-3 sm:grid-cols-3">
         <Stat label="Average velocity" value={report.data.averageVelocity} suffix=" pts" />
         <Stat
           label="Consistency"
@@ -194,7 +194,7 @@ function DurationPanel({ projectId, kind }: { projectId: string; kind: "cycle" |
           : "Created to done — how long a request waits, which is what a stakeholder feels."}
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="stagger-children grid gap-3 sm:grid-cols-4">
         <Stat label="Median" value={data.median} suffix=" d" />
         <Stat label="85th percentile" value={data.p85} suffix=" d" />
         <Stat

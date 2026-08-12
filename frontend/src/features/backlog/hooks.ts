@@ -26,12 +26,34 @@ export function useStory(storyId: string | undefined) {
   });
 }
 
+export function useEpics(projectId: string | undefined) {
+  const { api, status } = useSession();
+  return useQuery({
+    queryKey: [...queryKeys.backlog.all, "epics", projectId ?? ""],
+    queryFn: () => backlogApi.epics(api, projectId!),
+    enabled: status === "authenticated" && Boolean(projectId),
+  });
+}
+
 export function useCreateStory(projectId: string) {
   const { api } = useSession();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { title: string; description?: string | null }) =>
+    mutationFn: (body: Omit<Parameters<typeof backlogApi.createStory>[1], "projectId">) =>
       backlogApi.createStory(api, { projectId, ...body }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.backlog.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.overview(projectId) });
+    },
+  });
+}
+
+export function useCreateEpic(projectId: string) {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { title: string; description?: string | null }) =>
+      backlogApi.createEpic(api, { projectId, ...body }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.backlog.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.overview(projectId) });

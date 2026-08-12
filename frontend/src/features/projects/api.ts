@@ -9,6 +9,48 @@ import {
 import { z } from "zod";
 
 /**
+ * Statuses that mean a project is finished with.
+ *
+ * <p>Mirrors {@code ProjectStatus.isTerminal()} on the backend. Everything else —
+ * PLANNING, ACTIVE, ON_HOLD — is a project somebody can still open a board or a
+ * backlog for.</p>
+ */
+const FINISHED_STATUSES = new Set(["COMPLETED", "ARCHIVED"]);
+
+/**
+ * The projects a picker should offer.
+ *
+ * <p>Not "ACTIVE only", which is the trap: a project is created as PLANNING, so
+ * filtering on ACTIVE hides every project the moment it is made and tells the user
+ * there are none. That is exactly backwards — a brand-new project is the one you are
+ * most likely to be opening a backlog for.</p>
+ */
+export function workableProjects<T extends { status: string }>(projects: T[]): T[] {
+  return projects.filter((project) => !FINISHED_STATUSES.has(project.status));
+}
+
+/**
+ * Workspaces, needed only so the create form can say where a project goes.
+ *
+ * <p>Lives here rather than in its own feature because this is the only screen that
+ * asks: a project must belong to one, and most organizations have exactly the single
+ * default workspace provisioning created.</p>
+ */
+export const workspaceSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  workspaceKey: z.string().nullish(),
+  defaultWorkspace: z.boolean().nullish(),
+});
+export type Workspace = z.infer<typeof workspaceSchema>;
+
+export const workspacesApi = {
+  // A bare array, not a page — the controller returns List<WorkspaceResponse>.
+  list: (api: ApiClient) =>
+    api.request("/workspaces", { schema: z.array(workspaceSchema) }),
+};
+
+/**
  * The projects feature's calls, as plain functions taking the client.
  *
  * <p>They take an {@link ApiClient} rather than reaching for a module-level singleton:
@@ -59,6 +101,17 @@ export const projectsApi = {
       targetDate?: string | null;
       budgetAmount?: number | null;
       currency?: string | null;
+
+      // What the story-point model needs about the team rather than the story.
+      // Optional throughout: omitted, the model falls back to the medians of its
+      // training set and says so. Sending 0 would instead tell it this team has
+      // never delivered anything, so these must stay absent rather than defaulted.
+      domain?: string | null;
+      techStack?: string[];
+      teamSize?: number | null;
+      devExperienceLevel?: "junior" | "mid" | "senior" | null;
+      teamVelocityAvg?: number | null;
+      recentCompletionRate?: number | null;
     },
   ) =>
     api.request("/projects", {

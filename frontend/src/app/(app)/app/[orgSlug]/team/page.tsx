@@ -31,7 +31,7 @@ export default function TeamPage({ params }: { params: Promise<{ orgSlug: string
   const workload = useWorkloadBalanceReport(projectId ?? undefined);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="animate-fade-up mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
@@ -64,7 +64,7 @@ export default function TeamPage({ params }: { params: Promise<{ orgSlug: string
         <ErrorState error={workload.error} onRetry={() => void workload.refetch()} />
       ) : workload.data ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="stagger-children grid gap-3 sm:grid-cols-3">
             <Stat label="Average load" value={`${workload.data.averageLoadPct}%`} />
             <Stat
               label="Imbalance"

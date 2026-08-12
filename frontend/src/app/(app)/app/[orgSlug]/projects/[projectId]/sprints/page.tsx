@@ -2,9 +2,10 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Play, Square } from "lucide-react";
+import { ArrowLeft, Plus, CalendarDays, Play, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CreateSprintDialog } from "@/features/sprints/components/create-sprint-dialog";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +62,7 @@ export default function SprintsPage({
   const sprints = useSprints(projectId);
 
   const [chosenId, setChosenId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const list = sprints.data?.content ?? [];
   // Derived, not stored: the first sprint is a default, and an effect that writes it into
   // state costs a cascading render for nothing.
@@ -68,7 +70,7 @@ export default function SprintsPage({
   const selected = list.find((sprint) => sprint.id === selectedId) ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="animate-fade-up mx-auto max-w-6xl space-y-6">
       <div>
         <Link
           href={`/app/${orgSlug}/projects/${projectId}`}
@@ -77,7 +79,13 @@ export default function SprintsPage({
           <ArrowLeft className="size-3" aria-hidden />
           {project.data?.name ?? "Project"}
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Sprints</h1>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Sprints</h1>
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus className="size-4" aria-hidden />
+            New sprint
+          </Button>
+        </div>
       </div>
 
       {sprints.isPending ? (
@@ -89,6 +97,12 @@ export default function SprintsPage({
           icon={CalendarDays}
           title="No sprints yet"
           description="Create a sprint to start planning against your team's velocity."
+          action={
+            <Button onClick={() => setCreating(true)}>
+              <Plus className="size-4" aria-hidden />
+              Create a sprint
+            </Button>
+          }
         />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
@@ -126,6 +140,15 @@ export default function SprintsPage({
           ) : null}
         </div>
       )}
+
+      <CreateSprintDialog
+        projectId={projectId}
+        defaultSprintDays={project.data?.defaultSprintDays ?? undefined}
+        // "Sprint 4" when three exist — the name people were going to type anyway.
+        suggestedName={`Sprint ${list.length + 1}`}
+        open={creating}
+        onOpenChange={setCreating}
+      />
     </div>
   );
 }

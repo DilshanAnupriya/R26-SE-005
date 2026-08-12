@@ -96,6 +96,41 @@ public class Project extends TenantAwareEntity implements SoftDeletable {
     @Column(name = "default_sprint_days", nullable = false)
     private short defaultSprintDays = 14;
 
+    /**
+     * What the M1 model needs to know about the team rather than the story.
+     *
+     * <p>All nullable, and deliberately so. A project without them still estimates —
+     * the model service falls back to the medians of its training set and says in the
+     * explanation that it did. Defaulting them here instead would be worse: storing
+     * zero velocity claims the team has never delivered anything, and the model would
+     * price every story accordingly.</p>
+     */
+    @Column(name = "team_size")
+    private Short teamSize;
+
+    /** junior, mid or senior — the predominant level, not a per-person record. */
+    @Column(name = "dev_experience_level", length = 16)
+    private String devExperienceLevel;
+
+    /** Average points completed per sprint. Seeded at creation, measured later. */
+    @Column(name = "team_velocity_avg", precision = 6, scale = 2)
+    private BigDecimal teamVelocityAvg;
+
+    /** Proportion of committed work finished recently, 0..1 — not a percentage. */
+    @Column(name = "recent_completion_rate", precision = 4, scale = 3)
+    private BigDecimal recentCompletionRate;
+
+    /**
+     * The one tech stack the model is given, out of the several a project may list.
+     *
+     * <p>The model was trained on a single stack per row, so it has to be told one.
+     * The first entry is the team's own ordering — the primary stack is what people
+     * put first — which is a better answer than picking alphabetically.</p>
+     */
+    public String primaryTechStack() {
+        return techStack == null || techStack.isEmpty() ? null : techStack.get(0);
+    }
+
     @Builder.Default
     @Type(JsonType.class)
     @Column(name = "definition_of_ready", nullable = false, columnDefinition = "jsonb")

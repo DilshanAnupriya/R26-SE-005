@@ -30,7 +30,7 @@ export default function BoardPage({
   useProjectRealtime(projectId);
 
   return (
-    <div className="space-y-4">
+    <div className="animate-fade-up space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Link
