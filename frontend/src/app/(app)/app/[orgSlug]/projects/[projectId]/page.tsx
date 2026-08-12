@@ -8,6 +8,7 @@ import { useProjectMembers } from "@/features/projects/hooks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CreateStoryDialog } from "@/features/backlog/components/create-story-dialog";
+import { StoryPointsField } from "@/features/backlog/components/story-points-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { EstimatePanel } from "@/features/ai/components/estimate-panel";
@@ -174,7 +175,13 @@ export default function ProjectPage({
                   <p className="mt-2 text-xs text-muted-foreground">{selected.description}</p>
                 ) : null}
               </div>
-              <EstimatePanel story={selected} />
+              {/* Sizing by hand comes first: it is the team's own number, and it must
+                  not depend on a model having been asked. */}
+              <StoryPointsField story={selected} projectId={projectId} />
+
+              {/* Keyed by story so no part of the panel — a suggestion, a pending
+                  request, a verdict — can carry over to the next story selected. */}
+              <EstimatePanel key={selected.id} story={selected} />
 
               <div className="rounded-lg border p-3">
                 <CommentThread
