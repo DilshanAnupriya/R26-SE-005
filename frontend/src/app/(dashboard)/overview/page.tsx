@@ -155,7 +155,7 @@ export default function Home() {
               { 
                 title: "AI Allocation", 
                 desc: "Review and approve AI-recommended developer assignments for the sprint.", 
-                href: "/ai-allocation", 
+                href: "/allocation?tab=allocation", 
                 icon: Bot, 
                 color: "bg-blue-500",
                 stat: "85% Optimal" 
@@ -163,7 +163,7 @@ export default function Home() {
               { 
                 title: "Developer Insights", 
                 desc: "Manage developer profiles, skills, and workload intelligence data.", 
-                href: "/developers", 
+                href: "/allocation?tab=developers", 
                 icon: Users, 
                 color: "bg-emerald-500",
                 stat: "24 Profiles"
@@ -179,7 +179,7 @@ export default function Home() {
               { 
                 title: "What-If Simulator", 
                 desc: "Test different allocation scenarios to see impact on velocity and team health.", 
-                href: "/simulator", 
+                href: "/allocation?tab=simulator", 
                 icon: Wand2, 
                 color: "bg-yellow-500",
                 stat: "Live Preview"

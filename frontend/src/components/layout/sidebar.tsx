@@ -7,6 +7,7 @@ import {
   Calendar,
   ChevronLeft,
   ClipboardList,
+  Cpu,
   FileText,
   FolderKanban,
   Gauge,
@@ -17,6 +18,7 @@ import {
   Settings,
   Target,
   Users,
+  Wand2,
   Workflow,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -65,6 +67,8 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
   {
     title: "Workspace",
     items: [
+      { href: "allocation?tab=allocation", label: "Resource Allocation", icon: Cpu },
+      { href: "allocation?tab=simulator", label: "What-If Simulator", icon: Wand2 },
       { href: "ai-insights", label: "AI Assistant", icon: Bot },
       { href: "automation", label: "Automation", icon: Workflow },
       { href: "team", label: "Team", icon: Users },
@@ -104,7 +108,7 @@ export function Sidebar({ orgSlug }: { orgSlug: string }) {
             ) : null}
 
             {group.items.map((item) => {
-              const href = `/app/${orgSlug}/${item.href}`;
+              const href = item.href.startsWith("/") ? item.href : `/app/${orgSlug}/${item.href}`;
               // Prefix match, so a nested route (a project detail page) keeps its
               // section lit instead of leaving the sidebar looking unselected.
               const active = pathname === href || pathname.startsWith(`${href}/`);

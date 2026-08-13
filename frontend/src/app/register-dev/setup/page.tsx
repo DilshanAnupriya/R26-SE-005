@@ -73,7 +73,7 @@ export default function ProfileSetupPage() {
         setSuccess(true);
         localStorage.removeItem("registration_data");
         setTimeout(() => {
-          router.push("/ai-allocation");
+          router.push("/allocation");
         }, 2000);
       } else {
         setError("Registration failed. Please try again.");

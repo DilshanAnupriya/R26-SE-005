@@ -102,7 +102,7 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
       <div className="max-w-5xl mx-auto space-y-8">
         
         <Link 
-          href="/ai-allocation" 
+          href="/allocation?tab=allocation" 
           className="inline-flex items-center text-sm text-slate-400 hover:text-primary transition-colors mb-4"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />

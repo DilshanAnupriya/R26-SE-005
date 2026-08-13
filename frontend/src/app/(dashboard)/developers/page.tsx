@@ -1,6 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getTokenStore } from "@/lib/api/token-store";
+import { getActiveOrganization } from "@/lib/api/org-context";
+
+async function authFetch(url: string, options: RequestInit = {}) {
+  const token = getTokenStore().get();
+  const orgId = getActiveOrganization();
+  const headers = new Headers(options.headers || {});
+  
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (orgId && !headers.has("X-Organization-Id")) {
+    headers.set("X-Organization-Id", orgId);
+  }
+  
+  return fetch(url, { ...options, headers });
+}
 import { motion } from "framer-motion";
 import { 
   Search, 
@@ -62,14 +80,28 @@ const getSkillIcon = (skill: string) => {
   return <Code2 className="w-3 h-3 mr-1" />;
 };
 
-export default function DevelopersPage() {
+export default function DevelopersPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isEmbedded) {
+      router.replace("/allocation?tab=developers");
+    }
+  }, [isEmbedded, router]);
+
   const [developers, setDevelopers] = useState<UIDeveloper[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("http://localhost:8080/api/developers")
+    authFetch("http://localhost:8080/api/developers")
       .then(res => res.json())
       .then((data: DeveloperData[]) => {
+        if (!Array.isArray(data)) {
+          console.error("Invalid developers response:", data);
+          setDevelopers([]);
+          setLoading(false);
+          return;
+        }
         const mapped = data.map(dev => {
           const skills = [];
           if (dev.skill_frontend > 5) skills.push("Frontend");
@@ -118,16 +150,26 @@ export default function DevelopersPage() {
     show: { y: 0, opacity: 1 }
   };
 
+  if (!isEmbedded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background p-6 lg:p-10">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className={isEmbedded ? "w-full space-y-8" : "min-h-screen bg-background p-6 lg:p-10"}>
+      <div className={isEmbedded ? "w-full space-y-8" : "max-w-7xl mx-auto space-y-8"}>
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Developer Intelligence</h1>
-            <p className="text-slate-400 mt-1">Manage team skills, track performance, and monitor workloads.</p>
-          </div>
+        <div className={isEmbedded ? "flex justify-end gap-4 w-full" : "flex flex-col md:flex-row md:items-center justify-between gap-4"}>
+          {!isEmbedded && (
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Developer Intelligence</h1>
+              <p className="text-slate-400 mt-1">Manage team skills, track performance, and monitor workloads.</p>
+            </div>
+          )}
           
           <div className="flex items-center space-x-3">
             <div className="relative">
@@ -146,6 +188,7 @@ export default function DevelopersPage() {
             </Link>
           </div>
         </div>
+
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertTriangle, CalendarDays, LayoutGrid, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CalendarDays, LayoutGrid, CheckCircle2, Cpu, Wand2 } from "lucide-react";
 import { useSession } from "@/components/session-provider";
 import { useProjects } from "@/features/projects/hooks";
 import { Card, CardHeader, ProgressBar } from "@/components/design/surfaces";
@@ -86,6 +86,42 @@ export default function DashboardPage() {
           tint="var(--blue)"
           tintSoft="var(--blue-soft)"
         />
+      </div>
+
+      {/* AI & Resource Optimization Tools */}
+      <div className="mb-6">
+        <h2 className="text-sm font-semibold tracking-[0.06em] text-ink-3 uppercase mb-3">AI & Resource Optimization</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="p-5 flex items-center justify-between hover:bg-surface-2 transition-all duration-200 border border-line">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-violet-500/10 dark:bg-violet-500/15 flex items-center justify-center text-violet-500 shrink-0">
+                <Cpu className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-ink">AI Resource Allocation</h3>
+                <p className="text-sm text-ink-3 mt-0.5 leading-normal">Assign and optimize developers to tasks based on skill matching and capacity.</p>
+              </div>
+            </div>
+            <Button size="sm" asChild className="ml-4 shrink-0">
+              <Link href={`/app/${orgSlug}/allocation?tab=allocation`}>Manage Allocations</Link>
+            </Button>
+          </Card>
+
+          <Card className="p-5 flex items-center justify-between hover:bg-surface-2 transition-all duration-200 border border-line">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 flex items-center justify-center text-amber-500 shrink-0">
+                <Wand2 className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-ink">What-If Sprint Simulator</h3>
+                <p className="text-sm text-ink-3 mt-0.5 leading-normal">Test assignment scenarios and predict sprint velocity and team health.</p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" asChild className="ml-4 shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">
+              <Link href={`/app/${orgSlug}/allocation?tab=simulator`}>Run Simulator</Link>
+            </Button>
+          </Card>
+        </div>
       </div>
 
       <div className="mb-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
