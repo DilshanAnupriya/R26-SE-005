@@ -1,0 +1,108 @@
+package com.sprintiq.pms.modules.ai.application;
+
+import com.sprintiq.pms.modules.ai.domain.Developer;
+import com.sprintiq.pms.modules.ai.domain.DeveloperProfile;
+import com.sprintiq.pms.modules.ai.domain.OptimizerDeveloperProfileRepository;
+import com.sprintiq.pms.modules.ai.domain.OptimizerDeveloperRepository;
+import com.sprintiq.pms.modules.ai.web.dto.OptimizerDtos.DeveloperRegistrationRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@Service
+public class OptimizerDeveloperService {
+
+    @Autowired
+    private OptimizerDeveloperRepository developerRepository;
+
+    @Autowired
+    private OptimizerDeveloperProfileRepository developerProfileRepository;
+
+    public DeveloperProfile addDeveloper(DeveloperRegistrationRequest request) {
+        Developer developer = new Developer();
+        developer.setDev_id(request.getDevId());
+        developer.setExperience_level(request.getExperienceLevel());
+        developer.setSkill_frontend(request.getSkillFrontend());
+        developer.setSkill_backend(request.getSkillBackend());
+        developer.setSkill_db(request.getSkillDb());
+        developer.setCurrent_workload(request.getCurrentWorkload());
+        developer.setAvailability(request.getAvailability());
+        developer.setCurrent_tasks(request.getCurrentTasks());
+        developer.setConsistency(request.getConsistency());
+        developer.setLearning_rate(request.getLearningRate());
+
+        DeveloperProfile profile = new DeveloperProfile();
+        profile.setFirstName(request.getFirstName());
+        profile.setLastName(request.getLastName());
+        profile.setAge(request.getAge());
+        profile.setEmail(request.getEmail());
+        profile.setPassword(request.getPassword()); // In a real system, you'd hash this
+        profile.setPhoneNumber(request.getPhoneNumber());
+        profile.setSpecialization(request.getSpecialization());
+        profile.setBio(request.getBio());
+
+        profile.setDeveloperMetrics(developer); // Link them
+        developer.setProfile(profile);
+
+        return developerProfileRepository.save(profile);
+    }
+
+    public List<DeveloperProfile> getAllDeveloperProfiles() {
+        return developerProfileRepository.findAll();
+    }
+
+    public List<Developer> getAllDevelopers() {
+        return developerRepository.findAll();
+    }
+
+    public Developer getDeveloperById(Long id) {
+        return developerRepository.findById(id).orElseThrow(() -> new RuntimeException("Developer not found"));
+    }
+
+    public DeveloperProfile getDeveloperProfileById(Long id) {
+        return developerProfileRepository.findById(id).orElseThrow(() -> new RuntimeException("Profile not found"));
+    }
+
+    public DeveloperProfile getProfileByDeveloperId(Long developerId) {
+        return developerProfileRepository.findByDeveloperMetricsId(developerId)
+                .orElseThrow(() -> new RuntimeException("Profile for developer " + developerId + " not found"));
+    }
+
+    // =====================================================
+    // UPDATE BEHAVIOR METRICS (FROM ML)
+    // =====================================================
+    public void updateBehaviorMetrics(List<Map<String, Object>> devs) {
+        for (Map<String, Object> dev : devs) {
+            Object devIdObj = dev.get("dev_id");
+            if (devIdObj == null) continue;
+
+            String devId = devIdObj.toString();
+            Optional<Developer> optionalDev = developerRepository.findByDev_id(devId);
+
+            if (optionalDev.isEmpty()) continue;
+
+            Developer developer = optionalDev.get();
+
+            // SAFE parsing (prevents crashes)
+            developer.setConsistency(parseDoubleSafe(dev.get("consistency")));
+            developer.setLearning_rate(parseDoubleSafe(dev.get("learning_rate")));
+
+            developerRepository.save(developer);
+        }
+    }
+
+    // =====================================================
+    // SAFE DOUBLE PARSER
+    // =====================================================
+    private double parseDoubleSafe(Object value) {
+        try {
+            if (value == null) return 0.0;
+            return Double.parseDouble(value.toString());
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+}
