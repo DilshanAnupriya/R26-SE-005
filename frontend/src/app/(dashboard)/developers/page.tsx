@@ -6,18 +6,33 @@ import { getTokenStore } from "@/lib/api/token-store";
 import { getActiveOrganization } from "@/lib/api/org-context";
 
 async function authFetch(url: string, options: RequestInit = {}) {
-  const token = getTokenStore().get();
+  const tokenStore = getTokenStore();
   const orgId = getActiveOrganization();
-  const headers = new Headers(options.headers || {});
   
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  if (orgId && !headers.has("X-Organization-Id")) {
-    headers.set("X-Organization-Id", orgId);
+  const getHeaders = (token: string | null) => {
+    const headers = new Headers(options.headers || {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    if (orgId && !headers.has("X-Organization-Id")) {
+      headers.set("X-Organization-Id", orgId);
+    }
+    return headers;
+  };
+
+  const token = tokenStore.get();
+  let res = await fetch(url, { ...options, headers: getHeaders(token) });
+  
+  if (res.status === 401) {
+    try {
+      const newToken = await tokenStore.refresh();
+      res = await fetch(url, { ...options, headers: getHeaders(newToken) });
+    } catch (err) {
+      console.error("Token refresh failed:", err);
+    }
   }
   
-  return fetch(url, { ...options, headers });
+  return res;
 }
 import { motion } from "framer-motion";
 import { 
