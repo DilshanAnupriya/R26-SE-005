@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'i.pravatar.cc',
+      },
+      {
+        protocol: "https",
+        hostname: "ui-avatars.com",
+      },
+    ],
+  },
   // Standalone emits a self-contained server bundle carrying only the node_modules
   // actually imported — without it the Docker image ships the entire dependency
   // tree, hundreds of megabytes of build tooling that never runs in production.
