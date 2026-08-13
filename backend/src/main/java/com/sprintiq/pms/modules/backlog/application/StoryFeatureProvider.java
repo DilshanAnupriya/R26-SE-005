@@ -12,12 +12,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Describes stories to the AI module, and writes accepted estimates back.
@@ -105,6 +108,75 @@ public class StoryFeatureProvider implements StoryFeatureSource, WorkItemFeature
                 storyRepository.countByProjectIdAndEstimateSourceInAndDeletedAtIsNull(projectId,
                         List.of(EstimateSource.AI_ACCEPTED, EstimateSource.AI_OVERRIDDEN)));
     }
+
+    /**
+     * The same readings the story-point model takes, aggregated over a sprint.
+     *
+     * <p>Uses {@link #countCriteria} rather than its own parser so "how many acceptance
+     * criteria" means one thing across both models. The risk model asking a different
+     * question of the same text than the estimator does is the kind of divergence that
+     * produces two defensible answers and no way to tell which is right.</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public SprintStoryMetrics storyMetricsForSprint(UUID sprintId) {
+        List<Story> stories = storyRepository.findBySprintIdAndDeletedAtIsNull(sprintId);
+        if (stories.isEmpty()) {
+            return SprintStoryMetrics.empty();
+        }
+
+        long totalWords = 0;
+        long totalCriteria = 0;
+        long withoutCriteria = 0;
+        long ambiguity = 0;
+
+        for (Story story : stories) {
+            String text = String.join(" ",
+                    story.getTitle() == null ? "" : story.getTitle(),
+                    story.getDescription() == null ? "" : story.getDescription(),
+                    story.getAcceptanceCriteria() == null ? "" : story.getAcceptanceCriteria());
+            totalWords += text.isBlank() ? 0 : text.trim().split("\\s+").length;
+
+            int criteria = countCriteria(story.getAcceptanceCriteria());
+            totalCriteria += criteria;
+            if (criteria == 0) {
+                withoutCriteria++;
+            }
+            ambiguity += countAmbiguityMarkers(text);
+        }
+
+        BigDecimal count = BigDecimal.valueOf(stories.size());
+        return new SprintStoryMetrics(stories.size(),
+                BigDecimal.valueOf(totalWords).divide(count, 2, RoundingMode.HALF_UP),
+                BigDecimal.valueOf(totalCriteria).divide(count, 2, RoundingMode.HALF_UP),
+                withoutCriteria, ambiguity);
+    }
+
+    /**
+     * The words that leave a requirement open to interpretation.
+     *
+     * <p>Kept in step with {@code AMBIGUITY_MARKERS} in the estimation service's
+     * {@code risk_features.py}. A word list is a poor proxy for ambiguity in general,
+     * but it is exactly the signal the requirement-change model was trained on, and
+     * measuring something subtly different here would feed it a feature it has never
+     * seen under a name it recognises.</p>
+     */
+    private long countAmbiguityMarkers(String text) {
+        if (text == null || text.isBlank()) {
+            return 0;
+        }
+        Matcher matcher = AMBIGUITY_MARKERS.matcher(text);
+        long count = 0;
+        while (matcher.find()) {
+            count++;
+        }
+        return count;
+    }
+
+    private static final Pattern AMBIGUITY_MARKERS = Pattern.compile(
+            "\\b(should|maybe|might|possibly|tbd|tbc|approximately|roughly|etc|"
+                    + "as needed|if required|to be (decided|confirmed|determined))\\b|\\?",
+            Pattern.CASE_INSENSITIVE);
 
     // -------------------------------------------------------- allocation target
 
