@@ -111,4 +111,36 @@ public interface StoryFeatureSource {
     record EstimationCoverage(long totalStories, long estimated, long aiAssisted) {}
 
     EstimationCoverage estimationCoverage(UUID projectId);
+
+    /**
+     * How well specified a sprint's stories are, measured over their own text.
+     *
+     * <p>Every field here is something the story-point model already reads for a single
+     * story; this is the same measurement taken across a sprint. The requirement-change
+     * model asks for exactly these — average story length, acceptance criteria per
+     * story, stories with none, and how many hedging words appear — and deriving them
+     * once rather than twice is the point. Two models disagreeing because they were
+     * shown different readings of the same stories would be a bug nobody would ever
+     * find, because both answers would look reasonable.</p>
+     *
+     * @param storyCount           stories in the sprint
+     * @param averageWords         mean length of title, description and criteria together
+     * @param averageCriteria      mean parsed acceptance criteria per story
+     * @param storiesWithoutCriteria stories with no acceptance criteria at all
+     * @param ambiguityMarkers     occurrences of "should", "maybe", "TBD", "?" and the
+     *                             like — the words that make a requirement negotiable
+     */
+    record SprintStoryMetrics(long storyCount,
+                              BigDecimal averageWords,
+                              BigDecimal averageCriteria,
+                              long storiesWithoutCriteria,
+                              long ambiguityMarkers) {
+
+        /** A sprint with nothing in it, so callers never branch on null. */
+        public static SprintStoryMetrics empty() {
+            return new SprintStoryMetrics(0, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0);
+        }
+    }
+
+    SprintStoryMetrics storyMetricsForSprint(UUID sprintId);
 }

@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .predictor import StoryPointPredictor
+from .risk_predictor import RiskPredictor
 from .velocity_predictor import VelocityPredictor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-5s %(name)s: %(message)s")
@@ -30,6 +31,10 @@ MODEL_PATH = Path(os.getenv("SPRINTIQ_MODEL_PATH",
                             MODELS / "model_xgb_lgbm_uncertainty.pkl"))
 VELOCITY_MODEL_PATH = Path(os.getenv("SPRINTIQ_VELOCITY_MODEL_PATH",
                                      MODELS / "velocity_transfer_bundle.pkl"))
+OVERBUDGET_MODEL_PATH = Path(os.getenv("SPRINTIQ_OVERBUDGET_MODEL_PATH",
+                                       MODELS / "overbudget_model_bundle.pkl"))
+REQCHANGE_MODEL_PATH = Path(os.getenv("SPRINTIQ_REQCHANGE_MODEL_PATH",
+                                      MODELS / "reqchange_model_bundle.pkl"))
 
 app = FastAPI(
     title="SprintIQ estimation service",
@@ -42,11 +47,13 @@ app = FastAPI(
 # it per request would put that on every planning click.
 predictor: StoryPointPredictor | None = None
 velocity: VelocityPredictor | None = None
+over_budget: RiskPredictor | None = None
+requirement_change: RiskPredictor | None = None
 
 
 @app.on_event("startup")
 def load_model() -> None:
-    global predictor, velocity
+    global predictor, velocity, over_budget, requirement_change
     if not MODEL_PATH.exists():
         raise RuntimeError(
             f"No model bundle at {MODEL_PATH}. Set SPRINTIQ_MODEL_PATH or place the "
@@ -61,6 +68,19 @@ def load_model() -> None:
     else:
         log.warning("No velocity bundle at %s — /predict/velocity will answer 503",
                     VELOCITY_MODEL_PATH)
+
+    if OVERBUDGET_MODEL_PATH.exists():
+        over_budget = RiskPredictor(OVERBUDGET_MODEL_PATH, "over_budget")
+    else:
+        log.warning("No over-budget bundle at %s — /predict/risk/over-budget will answer 503. "
+                    "Regenerate with: python -m training.train_risk_models --data <csv folder>",
+                    OVERBUDGET_MODEL_PATH)
+
+    if REQCHANGE_MODEL_PATH.exists():
+        requirement_change = RiskPredictor(REQCHANGE_MODEL_PATH, "requirement_change")
+    else:
+        log.warning("No requirement-change bundle at %s — /predict/risk/requirement-change "
+                    "will answer 503", REQCHANGE_MODEL_PATH)
 
 
 class InferenceRequest(BaseModel):
@@ -91,7 +111,44 @@ def health() -> dict[str, Any]:
         "zero_shot_mae": velocity.zero_shot_mae if velocity else None,
         "fine_tuned_domains": velocity.tuned_domains if velocity else [],
     }
+    body["risk"] = {
+        name: {
+            "loaded": model is not None,
+            "features": len(model.features) if model else None,
+            "test_auc": model.metadata.get("test_auc_binary") if model else None,
+            "cv_auc": model.metadata.get("cv_mean_auc") if model else None,
+        }
+        for name, model in (("over_budget", over_budget),
+                            ("requirement_change", requirement_change))
+    }
     return body
+
+
+def _risk(model: RiskPredictor | None, name: str, request: InferenceRequest) -> dict[str, Any]:
+    if model is None:
+        raise HTTPException(status_code=503, detail=f"{name} model not loaded")
+
+    started = time.perf_counter()
+    try:
+        result = model.predict(request.features)
+    except Exception as error:  # noqa: BLE001
+        log.exception("%s prediction failed", name)
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    log.info("%s risk: %s (%.0f%%) in %sms", name, result["risk_level"],
+             result["probability"] * 100, elapsed_ms)
+    return {**result, "latency_ms": elapsed_ms}
+
+
+@app.post("/predict/risk/over-budget")
+def predict_over_budget(request: InferenceRequest) -> dict[str, Any]:
+    return _risk(over_budget, "over-budget", request)
+
+
+@app.post("/predict/risk/requirement-change")
+def predict_requirement_change(request: InferenceRequest) -> dict[str, Any]:
+    return _risk(requirement_change, "requirement-change", request)
 
 
 @app.post("/predict/velocity")
