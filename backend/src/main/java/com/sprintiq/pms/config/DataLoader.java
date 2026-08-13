@@ -9,6 +9,7 @@ import com.sprintiq.pms.modules.ai.domain.OptimizerDeveloperProfileRepository;
 import com.sprintiq.pms.modules.ai.domain.OptimizerDeveloperRepository;
 import com.sprintiq.pms.modules.ai.domain.OptimizerSprintRepository;
 import com.sprintiq.pms.modules.ai.domain.OptimizerTaskRepository;
+import com.sprintiq.pms.modules.ai.domain.OptimizerAllocationRepository;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -28,9 +29,15 @@ public class DataLoader {
             OptimizerDeveloperProfileRepository profileRepo,
             OptimizerDeveloperRepository devRepo,
             OptimizerTaskRepository taskRepo,
-            OptimizerSprintRepository sprintRepo
+            OptimizerSprintRepository sprintRepo,
+            OptimizerAllocationRepository allocationRepo
     ) {
         return args -> {
+            allocationRepo.deleteAll();
+            taskRepo.deleteAll();
+            profileRepo.deleteAll();
+            devRepo.deleteAll();
+            sprintRepo.deleteAll();
 
             seedDevelopers(profileRepo, devRepo);
 
@@ -56,7 +63,7 @@ public class DataLoader {
 
         Random rand = new Random();
 
-        for (int i = 1; i <= 30; i++) {
+        for (int i = 1; i <= 5; i++) {
 
             Developer dev = new Developer();
 
@@ -115,7 +122,7 @@ public class DataLoader {
             profileRepo.save(profile);
         }
 
-        System.out.println("✅ 30 Developers inserted into database!");
+        System.out.println("✅ 5 Developers inserted into database!");
     }
 
     // =====================================================
@@ -200,7 +207,7 @@ public class DataLoader {
                 {"Add MFA Support", "4", "8", "2", "5", "4"}
         };
 
-        for (int i = 0; i < 300; i++) {
+        for (int i = 0; i < 10; i++) {
 
             String[] data = taskData[rand.nextInt(taskData.length)];
 
