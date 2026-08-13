@@ -20,9 +20,7 @@ import { useState } from "react";
 const navItems = [
   { name: "Overview", href: "/overview", icon: Home },
   { name: "Sprint Board", href: "/sprint-board", icon: Layout },
-  { name: "AI Allocation", href: "/ai-allocation", icon: Bot },
-  { name: "Developers", href: "/developers", icon: Users },
-  { name: "Simulator", href: "/simulator", icon: Wand2 },
+  { name: "Resource Allocation", href: "/allocation", icon: Bot },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Risk Analysis", href: "/risk", icon: ShieldAlert },
 ];

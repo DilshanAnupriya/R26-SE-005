@@ -20,6 +20,24 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { getTokenStore } from "@/lib/api/token-store";
+import { getActiveOrganization } from "@/lib/api/org-context";
+
+async function authFetch(url: string, options: RequestInit = {}) {
+  const token = getTokenStore().get();
+  const orgId = getActiveOrganization();
+  const headers = new Headers(options.headers || {});
+  
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (orgId && !headers.has("X-Organization-Id")) {
+    headers.set("X-Organization-Id", orgId);
+  }
+  
+  return fetch(url, { ...options, headers });
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -126,9 +144,9 @@ function DeveloperWorkloadModal({
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const res = await fetch(`http://localhost:8080/api/tasks/developer/${developerId}`);
+        const res = await authFetch(`http://localhost:8080/api/tasks/developer/${developerId}`);
         const data = await res.json();
-        setTasks(data);
+        setTasks(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Error fetching dev tasks:", err);
       } finally {
@@ -554,7 +572,15 @@ function TaskRow({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function AIAllocationPage() {
+export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isEmbedded) {
+      router.replace("/allocation?tab=allocation");
+    }
+  }, [isEmbedded, router]);
+
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
   const [selectedSprintId, setSelectedSprintId] = useState<number | null>(null);
@@ -565,11 +591,16 @@ export default function AIAllocationPage() {
 
   const fetchSprints = useCallback(async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/sprints");
+      const res = await authFetch("http://localhost:8080/api/sprints");
       const data = await res.json();
-      setSprints(data);
-      if (data.length > 0 && !selectedSprintId) {
-        setSelectedSprintId(data[0].id);
+      if (Array.isArray(data)) {
+        setSprints(data);
+        if (data.length > 0 && !selectedSprintId) {
+          setSelectedSprintId(data[0].id);
+        }
+      } else {
+        console.error("Invalid sprints response:", data);
+        setSprints([]);
       }
     } catch (err) {
       console.error("Error fetching sprints:", err);
@@ -580,9 +611,9 @@ export default function AIAllocationPage() {
     if (!selectedSprintId) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8080/api/allocation/sprint/${selectedSprintId}`);
+      const res = await authFetch(`http://localhost:8080/api/allocation/sprint/${selectedSprintId}`);
       const data = await res.json();
-      setTaskGroups(buildGroups(data));
+      setTaskGroups(buildGroups(Array.isArray(data) ? data : []));
     } catch (error) {
       console.error("Error fetching allocations:", error);
     } finally {
@@ -604,7 +635,7 @@ export default function AIAllocationPage() {
     if (!selectedSprintId) return;
     setGenerating(true);
     try {
-      await fetch(`http://localhost:8080/api/rank/recommendations/sprint/${selectedSprintId}`, {
+      await authFetch(`http://localhost:8080/api/rank/recommendations/sprint/${selectedSprintId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -618,7 +649,7 @@ export default function AIAllocationPage() {
 
   const handleApprove = async (allocationId: number, developerId: number) => {
     try {
-      await fetch(
+      await authFetch(
         `http://localhost:8080/api/allocation/assign?allocationId=${allocationId}&developerId=${developerId}`,
         { method: "PUT" }
       );
@@ -630,7 +661,7 @@ export default function AIAllocationPage() {
 
   const handleDecline = async (allocationId: number) => {
     try {
-      await fetch(`http://localhost:8080/api/allocation/${allocationId}/decline`, {
+      await authFetch(`http://localhost:8080/api/allocation/${allocationId}/decline`, {
         method: "PUT",
       });
       await fetchAllocations();
@@ -643,7 +674,7 @@ export default function AIAllocationPage() {
     if (!selectedSprintId) return;
     setApprovingAll(true);
     try {
-      await fetch(`http://localhost:8080/api/allocation/approve-all/sprint/${selectedSprintId}`, {
+      await authFetch(`http://localhost:8080/api/allocation/approve-all/sprint/${selectedSprintId}`, {
         method: "POST",
       });
       await fetchAllocations();
@@ -657,25 +688,36 @@ export default function AIAllocationPage() {
   const pendingCount = taskGroups.filter((g) => g.overallStatus !== "Approved").length;
   const approvedCount = taskGroups.filter((g) => g.overallStatus === "Approved").length;
 
+  if (!isEmbedded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background p-6 lg:p-10">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className={isEmbedded ? "w-full space-y-8" : "min-h-screen bg-background p-6 lg:p-10"}>
+      <div className={isEmbedded ? "w-full space-y-8" : "max-w-7xl mx-auto space-y-8"}>
 
         {/* ── Header ── */}
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-              <Bot className="w-8 h-8 text-primary" />
-              AI Task Allocation
-            </h1>
-            <p className="text-slate-400 mt-2 max-w-2xl leading-relaxed">
-              Review AI-ranked developer recommendations for each task. Expand any task to see the top&nbsp;5 candidates — select one to approve or decline.
-            </p>
-          </div>
+        <div className={isEmbedded ? "flex flex-col md:flex-row md:items-center justify-between gap-6" : "flex flex-col md:flex-row md:items-start justify-between gap-6"}>
+          {!isEmbedded && (
+            <div>
+              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+                <Bot className="w-8 h-8 text-primary" />
+                AI Task Allocation
+              </h1>
+              <p className="text-slate-400 mt-2 max-w-2xl leading-relaxed">
+                Review AI-ranked developer recommendations for each task. Expand any task to see the top&nbsp;5 candidates — select one to approve or decline.
+              </p>
+            </div>
+          )}
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className={isEmbedded ? "flex items-center gap-3 ml-auto shrink-0" : "flex items-center gap-3 shrink-0"}>
             {/* Sprint Selector */}
             <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
+
               <Layers className="w-4 h-4 text-slate-400" />
               <select
                 value={selectedSprintId || ""}
