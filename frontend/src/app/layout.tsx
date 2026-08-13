@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Providers } from "@/components/providers";
+import LayoutWrapper from "@/components/layout-wrapper";
 
 /*
  * Geist and Geist Mono, as specified by the design. The mono face is not
@@ -18,7 +19,11 @@ export const metadata: Metadata = {
     "Plan, execute and track sprints with AI estimation, risk and cost forecasting attached to the decisions you are actually making.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     // suppressHydrationWarning: the theme provider writes class="dark" onto <html>
     // before React hydrates, which would otherwise be reported as a mismatch.
@@ -28,7 +33,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          <LayoutWrapper>
+            {children}
+          </LayoutWrapper>
+        </Providers>
       </body>
     </html>
   );
