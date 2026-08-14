@@ -95,18 +95,20 @@ public class OptimizerRankingService {
         return rankings;
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> allocateSprint(Long sprintId) {
         // 1. GET SPRINT AND TASKS
         Optional<Sprint> sprintOpt = sprintRepository.findById(sprintId);
         if (sprintOpt.isEmpty()) {
-            throw new RuntimeException("Sprint not found");
+            throw new RuntimeException("Sprint not found with ID: " + sprintId);
         }
         Sprint sprint = sprintOpt.get();
-        List<Task> tasks = sprint.getTasks();
+        List<Task> tasks = taskRepository.findBySprintId(sprintId);
         List<Developer> developers = developerRepository.findAll();
 
         if (tasks == null || tasks.isEmpty()) {
+            System.out.println("⚠️ No tasks found for sprint: " + sprintId);
             return Collections.emptyList();
         }
 
@@ -125,7 +127,7 @@ public class OptimizerRankingService {
             bulkUrl = pythonApiUrl.endsWith("/") ? pythonApiUrl + "allocate-sprint" : pythonApiUrl + "/allocate-sprint";
         }
 
-        System.out.println("Calling ML Bulk Allocation at: " + bulkUrl);
+        System.out.println("🚀 Calling ML Bulk Allocation at: " + bulkUrl);
 
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(bulkUrl, request, Map.class);
@@ -150,7 +152,7 @@ public class OptimizerRankingService {
                             .developer(devOpt.get())
                             .sprint(sprint)
                             .task(taskOpt.get())
-                            .mlScore(0.0) // Optional: add more details if returned by Python
+                            .mlScore(0.0)
                             .finalScore(Double.valueOf(allocData.get("match_score").toString()))
                             .skillMatchScore(Double.valueOf(allocData.get("skill_match").toString()))
                             .status("AUTO_ALLOCATED")
@@ -165,19 +167,20 @@ public class OptimizerRankingService {
         } catch (Exception e) {
             System.err.println("❌ Error during bulk allocation: " + e.getMessage());
             e.printStackTrace();
-            throw new RuntimeException("Failed to allocate sprint: " + e.getMessage());
+            throw new RuntimeException("Failed to allocate sprint: " + e.getMessage(), e);
         }
     }
 
     //get recommendations for tasks in a sprint
+    @org.springframework.transaction.annotation.Transactional
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> getSprintRecommendations(Long sprintId) {
 
         // 1. GET SPRINT AND TASKS
         Sprint sprint = sprintRepository.findById(sprintId)
-                .orElseThrow(() -> new RuntimeException("Sprint not found"));
+                .orElseThrow(() -> new RuntimeException("Sprint not found with ID: " + sprintId));
 
-        List<Task> allTasks = sprint.getTasks();
+        List<Task> allTasks = taskRepository.findBySprintId(sprintId);
         List<Task> tasks = allTasks.stream()
                 .filter(t -> t.getDeveloper() == null)
                 .toList();
@@ -185,6 +188,7 @@ public class OptimizerRankingService {
         List<Developer> developers = developerRepository.findAll();
 
         if (tasks.isEmpty()) {
+            System.out.println("⚠️ No unassigned tasks found for sprint " + sprintId + " (Total tasks in sprint: " + allTasks.size() + ")");
             return Collections.emptyList();
         }
 
@@ -203,11 +207,18 @@ public class OptimizerRankingService {
             rankUrl = pythonApiUrl.endsWith("/") ? pythonApiUrl + "rank-sprint" : pythonApiUrl + "/rank-sprint";
         }
 
+        System.out.println("🚀 Calling ML Service at: " + rankUrl + " with " + tasks.size() + " tasks and " + developers.size() + " developers");
+
         try {
             ResponseEntity<Map> response =
                     restTemplate.postForEntity(rankUrl, request, Map.class);
 
             Map<String, Object> responseBody = response.getBody();
+            if (responseBody == null || !responseBody.containsKey("recommendations")) {
+                System.err.println("⚠️ ML Service returned empty response or missing recommendations: " + responseBody);
+                return Collections.emptyList();
+            }
+
             List<Map<String, Object>> recommendations =
                     (List<Map<String, Object>>) responseBody.get("recommendations");
 
@@ -224,6 +235,8 @@ public class OptimizerRankingService {
                 List<Map<String, Object>> devRecs =
                         (List<Map<String, Object>>) taskRec.get("recommendations");
 
+                if (devRecs == null) continue;
+
                 for (Map<String, Object> devData : devRecs) {
 
                     String devId = devData.get("dev_id").toString();
@@ -236,7 +249,7 @@ public class OptimizerRankingService {
                     Object explanationObj = devData.get("explanation");
                     String explanationJson = new ObjectMapper().writeValueAsString(explanationObj);
 
-                    // ✅ DUPLICATE CHECK (IMPORTANT FIX)
+                    // ✅ DUPLICATE CHECK
                     boolean exists = allocationRepository.existsBySprintAndTaskAndDeveloper(sprint, task, developer);
 
                     if (exists) continue;
@@ -258,9 +271,12 @@ public class OptimizerRankingService {
                 }
             }
 
+            System.out.println("✅ Successfully processed and saved recommendations for sprint " + sprintId);
             return recommendations;
 
         } catch (Exception e) {
+            System.err.println("❌ Error calling ML Service at " + rankUrl + ": " + e.getMessage());
+            e.printStackTrace();
             throw new RuntimeException("Failed to get sprint recommendations: " + e.getMessage(), e);
         }
     }

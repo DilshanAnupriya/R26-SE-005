@@ -207,9 +207,9 @@ public class DataLoader {
                 {"Add MFA Support", "4", "8", "2", "5", "4"}
         };
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < taskData.length; i++) {
 
-            String[] data = taskData[rand.nextInt(taskData.length)];
+            String[] data = taskData[i];
 
             Task task = new Task();
 
@@ -223,8 +223,8 @@ public class DataLoader {
             task.setAmbiguity(rand.nextDouble());
             task.setDependency_risk(rand.nextDouble());
 
-            // assign sprint
-            Sprint sprint = sprints.get(rand.nextInt(sprints.size()));
+            // assign sprint evenly across all sprints
+            Sprint sprint = sprints.get(i % sprints.size());
             task.setSprint(sprint);
 
             // =====================================================
@@ -242,7 +242,7 @@ public class DataLoader {
 
             } else {
 
-                // Sprint 3 (PLANNED)
+                // Active / Planned sprints
                 task.setCompletion_time(0);
                 task.setDefects(0);
                 task.setVelocity_contribution(0);
