@@ -1,9 +1,11 @@
 "use client";
 
 import { use, useState } from "react";
-import { Users } from "lucide-react";
+import Link from "next/link";
+import { Users, UserPlus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useProjects } from "@/features/projects/hooks";
@@ -23,7 +25,8 @@ function initials(name?: string | null) {
  * page exists to find.</p>
  */
 export default function TeamPage({ params }: { params: Promise<{ orgSlug: string }> }) {
-  use(params);
+  const resolvedParams = use(params);
+  const orgSlug = resolvedParams.orgSlug;
   const projects = useProjects();
   const [chosenProjectId, setChosenProjectId] = useState<string | null>(null);
   const projectId = chosenProjectId ?? projects.data?.content[0]?.id ?? null;
@@ -40,22 +43,31 @@ export default function TeamPage({ params }: { params: Promise<{ orgSlug: string
           </p>
         </div>
 
-        {projects.data && projects.data.content.length > 1 ? (
-          <label className="text-xs">
-            <span className="sr-only">Project</span>
-            <select
-              className="h-8 rounded-md border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              value={projectId ?? ""}
-              onChange={(event) => setChosenProjectId(event.target.value)}
-            >
-              {projects.data.content.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+        <div className="flex items-center space-x-2">
+          {projects.data && projects.data.content.length > 1 ? (
+            <label className="text-xs">
+              <span className="sr-only">Project</span>
+              <select
+                className="h-8 rounded-md border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                value={projectId ?? ""}
+                onChange={(event) => setChosenProjectId(event.target.value)}
+              >
+                {projects.data.content.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          <Button asChild size="sm" className="h-8 text-xs flex items-center space-x-1.5 shadow-sm">
+            <Link href={`/app/${orgSlug}/settings`}>
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Invite Developer</span>
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {projects.isPending || (projectId && workload.isPending) ? (

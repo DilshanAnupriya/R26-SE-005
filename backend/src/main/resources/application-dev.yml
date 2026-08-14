@@ -8,6 +8,18 @@ spring:
   devtools:
     restart:
       enabled: true
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: sprintiiq@gmail.com
+    password: ljuhqitrqkzsreyo
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
 app:
   seed:
     enabled: true
@@ -21,3 +33,4 @@ app:
 logging:
   level:
     org.hibernate.SQL: DEBUG
+

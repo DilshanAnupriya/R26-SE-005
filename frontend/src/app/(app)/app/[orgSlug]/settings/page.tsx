@@ -1,12 +1,16 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RotateCcw, ScrollText, Sparkles, Trash2 } from "lucide-react";
+import { RotateCcw, ScrollText, Sparkles, Trash2, Users, UserPlus, Mail, Copy, Check, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useSession } from "@/components/session-provider";
@@ -15,13 +19,12 @@ import { queryKeys } from "@/lib/api/query-keys";
 import { adminApi } from "@/features/admin/api";
 import { aiApi } from "@/features/ai/api";
 import { useAiModels } from "@/features/ai/hooks";
+import { useMembers, useInvitations, useRoles, useInviteMember, useRevokeInvitation, useRemoveMember } from "@/features/organizations/hooks";
 
 /**
  * The admin console.
  *
- * <p>Four things an administrator actually does: switch AI capabilities on and off,
- * check what the models are doing, recover something someone deleted, and read the audit
- * trail. Each is its own tab and loads only when opened.</p>
+ * <p>Team members & invitations, AI capabilities, model health, recovery and the audit trail.</p>
  */
 export default function SettingsPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   use(params);
@@ -32,18 +35,22 @@ export default function SettingsPage({ params }: { params: Promise<{ orgSlug: st
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Administration</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Capabilities, model health, recovery and the audit trail.
+          Team members, invitations, capabilities, model health, and audit logs.
         </p>
       </div>
 
-      <Tabs defaultValue="ai">
+      <Tabs defaultValue="members">
         <TabsList>
+          <TabsTrigger value="members">Team & Invitations</TabsTrigger>
           <TabsTrigger value="ai">AI models</TabsTrigger>
           <TabsTrigger value="flags">Capabilities</TabsTrigger>
           <TabsTrigger value="recycle">Recycle bin</TabsTrigger>
           {hasPermission("audit:read") ? <TabsTrigger value="audit">Audit</TabsTrigger> : null}
         </TabsList>
 
+        <TabsContent value="members" className="mt-4">
+          <MembersPanel />
+        </TabsContent>
         <TabsContent value="ai" className="mt-4">
           <ModelsPanel />
         </TabsContent>
@@ -406,6 +413,337 @@ function AuditPanel() {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function MembersPanel() {
+  const { hasPermission } = useSession();
+  const members = useMembers();
+  const invitations = useInvitations();
+  const roles = useRoles();
+  const inviteMutation = useInviteMember();
+  const revokeMutation = useRevokeInvitation();
+  const removeMutation = useRemoveMember();
+
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [roleId, setRoleId] = useState("");
+  const [createdInviteUrl, setCreatedInviteUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const canInvite = hasPermission("member:invite");
+  const canRemove = hasPermission("member:remove");
+
+  const memberList = members.data?.content ?? [];
+  const inviteList = invitations.data?.content ?? [];
+  const roleList = roles.data ?? [];
+  const defaultRole = roleList.find(r => r.code === "MEMBER") || roleList[0];
+
+  // Auto-select the default role when roles load
+  useEffect(() => {
+    if (!roleId && defaultRole?.id) {
+      setRoleId(defaultRole.id);
+    }
+  }, [roleId, defaultRole]);
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
+    const targetRoleId = roleId || defaultRole?.id;
+    if (!targetRoleId) {
+      toast.error("Please select a role.");
+      return;
+    }
+
+    try {
+      const res = await inviteMutation.mutateAsync({
+        email: email.trim(),
+        roleId: targetRoleId,
+      });
+
+      if (res.inviteToken) {
+        const fullUrl = `${window.location.origin}/accept-invitation?token=${res.inviteToken}`;
+        setCreatedInviteUrl(fullUrl);
+      } else {
+        toast.success(`Invitation sent to ${email}`);
+        setInviteOpen(false);
+        setEmail("");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to invite member.");
+    }
+  };
+
+  const copyToClipboard = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    toast.success("Invitation link copied to clipboard!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRevoke = async (id: string) => {
+    try {
+      await revokeMutation.mutateAsync(id);
+      toast.success("Invitation revoked.");
+    } catch (err: any) {
+      toast.error("Could not revoke invitation.");
+    }
+  };
+
+  const handleRemove = async (userId: string, name?: string | null) => {
+    if (!confirm(`Are you sure you want to remove ${name || "this user"} from the organization?`)) return;
+    try {
+      await removeMutation.mutateAsync(userId);
+      toast.success("Member removed.");
+    } catch (err: any) {
+      toast.error(err?.message || "Could not remove member.");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-card border">
+        <div>
+          <h3 className="font-semibold text-foreground">Team Members & Access</h3>
+          <p className="text-xs text-muted-foreground">
+            Invite developers and team members to collaborate on sprints, tasks, and resource allocation.
+          </p>
+        </div>
+
+        {canInvite ? (
+          <Dialog open={inviteOpen} onOpenChange={(open) => {
+            setInviteOpen(open);
+            if (!open) {
+              setCreatedInviteUrl(null);
+              setEmail("");
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button className="flex items-center space-x-2 font-medium shadow-md">
+                <UserPlus className="w-4 h-4" />
+                <span>Invite Developer / Member</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center space-x-2">
+                  <UserPlus className="w-5 h-5 text-primary" />
+                  <span>Invite to Organization</span>
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  The user will receive an invitation link to set up their account and developer profile.
+                </DialogDescription>
+              </DialogHeader>
+
+              {createdInviteUrl ? (
+                <div className="space-y-4 py-3">
+                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm flex items-center space-x-2">
+                    <Check className="w-4 h-4 flex-shrink-0" />
+                    <span>Invitation created successfully!</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Shareable Invitation Link</Label>
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        readOnly
+                        value={createdInviteUrl}
+                        className="text-xs font-mono"
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => copyToClipboard(createdInviteUrl)}
+                        variant="secondary"
+                        className="shrink-0"
+                      >
+                        {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setInviteOpen(false);
+                      setCreatedInviteUrl(null);
+                      setEmail("");
+                    }}
+                    className="w-full mt-2"
+                  >
+                    Done
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleInvite} className="space-y-4 py-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Email Address</Label>
+                    <Input
+                      type="email"
+                      required
+                      placeholder="developer@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Role</Label>
+                    <select
+                      value={roleId || defaultRole?.id || ""}
+                      onChange={(e) => setRoleId(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      {roles.isLoading ? (
+                        <option value="" disabled>Loading roles...</option>
+                      ) : roleList.length === 0 ? (
+                        <option value="" disabled>No roles available</option>
+                      ) : (
+                        roleList.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name} ({r.code})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={inviteMutation.isPending}
+                    className="w-full mt-3 font-semibold"
+                  >
+                    {inviteMutation.isPending ? "Generating Invitation..." : "Send Invitation"}
+                  </Button>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
+        ) : null}
+      </div>
+
+      {/* Active Members Table */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold">
+          Active Members ({memberList.length})
+        </h4>
+
+        {members.isPending ? (
+          <Skeleton className="h-48 w-full" />
+        ) : memberList.length === 0 ? (
+          <EmptyState icon={Users} title="No members found" />
+        ) : (
+          <div className="rounded-xl border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground bg-muted/40">
+                  <th className="p-3 font-medium">User</th>
+                  <th className="p-3 font-medium">Email</th>
+                  <th className="p-3 font-medium">Role</th>
+                  <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 font-medium">Joined</th>
+                  {canRemove ? <th className="p-3 font-medium text-right">Actions</th> : null}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {memberList.map((m) => (
+                  <tr key={m.userId} className="hover:bg-muted/30 transition-colors">
+                    <td className="p-3 flex items-center space-x-2.5">
+                      <Avatar className="w-7 h-7">
+                        <AvatarImage src={m.avatarUrl || undefined} />
+                        <AvatarFallback className="text-[10px]">
+                          {(m.fullName || "U").slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="font-medium text-xs">{m.fullName || "Unknown"}</span>
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground">{m.email}</td>
+                    <td className="p-3">
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {m.roleCode || "MEMBER"}
+                      </Badge>
+                    </td>
+                    <td className="p-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        {m.status}
+                      </span>
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                      {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : "—"}
+                    </td>
+                    {canRemove ? (
+                      <td className="p-3 text-right">
+                        {m.roleCode !== "OWNER" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemove(m.userId, m.fullName)}
+                            className="text-xs text-destructive hover:bg-destructive/10 h-7 px-2"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
+                            Remove
+                          </Button>
+                        ) : null}
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Pending Invitations */}
+      {inviteList.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <h4 className="text-sm font-semibold">
+            Pending Invitations ({inviteList.length})
+          </h4>
+
+          <div className="rounded-xl border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground bg-muted/40">
+                  <th className="p-3 font-medium">Invited Email</th>
+                  <th className="p-3 font-medium">Assigned Role</th>
+                  <th className="p-3 font-medium">Expires At</th>
+                  <th className="p-3 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {inviteList.map((inv) => (
+                  <tr key={inv.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="p-3 text-xs font-medium flex items-center space-x-2">
+                      <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span>{inv.email}</span>
+                    </td>
+                    <td className="p-3">
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {inv.roleCode || "MEMBER"}
+                      </Badge>
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground">
+                      {new Date(inv.expiresAt).toLocaleDateString()}
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRevoke(inv.id)}
+                        className="text-xs text-destructive hover:bg-destructive/10 h-7 px-2"
+                      >
+                        Revoke
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -113,7 +113,7 @@ public class MembershipService {
         auditService.record(AuditAction.MEMBER_INVITED, "Invitation", invitation.getId(), null,
                 Map.of("email", email, "role", role.getCode()));
 
-        return toInvitationResponse(invitation, role);
+        return toInvitationResponse(invitation, role, rawToken);
     }
 
     @Transactional(readOnly = true)
@@ -126,15 +126,53 @@ public class MembershipService {
         Map<UUID, Role> roles = roleRepository.findAvailableRoles(organizationId).stream()
                 .collect(java.util.stream.Collectors.toMap(Role::getId, r -> r));
         return PageResponse.from(page, invitation -> toInvitationResponse(invitation,
-                roles.get(invitation.getRoleId())));
+                roles.get(invitation.getRoleId()), null));
     }
 
     @Transactional
     public void revokeInvitation(UUID invitationId) {
+        UUID organizationId = TenantContext.requireOrganizationId();
         Invitation invitation = invitationRepository.findById(invitationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invitation", invitationId));
+        if (!invitation.getOrganizationId().equals(organizationId)) {
+            throw new ResourceNotFoundException("Invitation", invitationId);
+        }
         invitation.setStatus(InvitationStatus.REVOKED);
         invitationRepository.save(invitation);
+    }
+
+    /**
+     * Verifies the token and retrieves organization and role details before acceptance.
+     */
+    @Transactional(readOnly = true)
+    public InvitationDetailsResponse verifyInvitation(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new ApplicationException(ErrorCode.TOKEN_INVALID, "Invitation token is required");
+        }
+
+        Invitation invitation = invitationRepository.findByTokenHash(TokenHasher.hash(rawToken))
+                .orElseThrow(() -> new ApplicationException(ErrorCode.TOKEN_INVALID,
+                        "This invitation link is not valid"));
+        if (!invitation.isRedeemable()) {
+            throw new ApplicationException(ErrorCode.TOKEN_EXPIRED,
+                    "This invitation has expired or was revoked. Ask for a new one.");
+        }
+
+        Organization organization = organizationRepository.findById(invitation.getOrganizationId())
+                .orElseThrow(() -> new ApplicationException(ErrorCode.NOT_FOUND, "Organization not found"));
+
+        Role role = roleRepository.findById(invitation.getRoleId()).orElse(null);
+        User inviter = invitation.getInvitedBy() != null ? userRepository.findById(invitation.getInvitedBy()).orElse(null) : null;
+        String inviterName = inviter != null ? inviter.getFullName() : "A team member";
+
+        return new InvitationDetailsResponse(
+                invitation.getEmail(),
+                organization.getName(),
+                role != null ? role.getCode() : "MEMBER",
+                role != null ? role.getName() : "Member",
+                inviterName,
+                invitation.getExpiresAt()
+        );
     }
 
     /**
@@ -260,9 +298,9 @@ public class MembershipService {
                 user != null ? user.getLastLoginAt() : null);
     }
 
-    private InvitationResponse toInvitationResponse(Invitation invitation, Role role) {
+    private InvitationResponse toInvitationResponse(Invitation invitation, Role role, String rawToken) {
         return new InvitationResponse(invitation.getId(), invitation.getEmail(), invitation.getRoleId(),
                 role != null ? role.getCode() : null, invitation.getStatus().name(),
-                invitation.getExpiresAt(), invitation.getCreatedAt(), invitation.getInvitedBy());
+                invitation.getExpiresAt(), invitation.getCreatedAt(), invitation.getInvitedBy(), rawToken);
     }
 }
