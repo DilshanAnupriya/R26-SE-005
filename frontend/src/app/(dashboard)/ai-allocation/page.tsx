@@ -647,13 +647,24 @@ export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: 
   }, [selectedSprintId, fetchAllocations]);
 
   const generateRecommendations = async () => {
-    if (!selectedSprintId) return;
+    if (!selectedSprintId) {
+      console.warn("No sprint selected to generate recommendations for.");
+      return;
+    }
     setGenerating(true);
     try {
-      await authFetch(`http://localhost:8080/api/rank/recommendations/sprint/${selectedSprintId}`, {
+      console.log(`Generating recommendations for sprint ID: ${selectedSprintId}...`);
+      const res = await authFetch(`http://localhost:8080/api/rank/recommendations/sprint/${selectedSprintId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
+      if (!res.ok) {
+        const errorData = await res.text();
+        console.error("Backend error generating recommendations:", res.status, errorData);
+      } else {
+        const data = await res.json();
+        console.log("Recommendations received from ML:", data);
+      }
       await fetchAllocations();
     } catch (error) {
       console.error("Error generating recommendations:", error);
