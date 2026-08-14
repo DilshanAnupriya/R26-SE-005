@@ -73,14 +73,19 @@ public final class OrganizationDtos {
     @Schema(name = "InvitationResponse")
     public record InvitationResponse(
             UUID id, String email, UUID roleId, String roleCode, String status,
-            Instant expiresAt, Instant createdAt, UUID invitedBy) {}
+            Instant expiresAt, Instant createdAt, UUID invitedBy, String inviteToken) {}
+
+    @Schema(name = "InvitationDetailsResponse")
+    public record InvitationDetailsResponse(
+            String email, String organizationName, String roleCode, String roleName,
+            String inviterName, Instant expiresAt) {}
 
     @Schema(name = "AcceptInvitationRequest",
             description = "Existing users omit the password fields; new users supply them to create an account")
     public record AcceptInvitationRequest(
             @NotBlank String token,
             @Size(min = 2, max = 150) String fullName,
-            @Size(min = 12, max = 128) String password) {}
+            @Size(min = 8, max = 128) String password) {}
 
     // ---------------- roles ----------------
 

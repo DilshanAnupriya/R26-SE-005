@@ -106,6 +106,14 @@ public class OrganizationController {
         membershipService.revokeInvitation(invitationId);
     }
 
+    @Operation(summary = "Verify an invitation token",
+            description = "Anonymous: returns organization and role metadata for the invitation link.")
+    @SecurityRequirements
+    @GetMapping("/invitations/verify")
+    public InvitationDetailsResponse verifyInvitation(@RequestParam("token") String token) {
+        return membershipService.verifyInvitation(token);
+    }
+
     @Operation(summary = "Accept an invitation",
             description = "Anonymous: the token in the emailed link is the credential.")
     @SecurityRequirements
@@ -117,7 +125,7 @@ public class OrganizationController {
     // ---------------- roles ----------------
 
     @Operation(summary = "Roles available to this organization")
-    @PreAuthorize("@perm.has('role:read')")
+    @PreAuthorize("@perm.hasAny('role:read', 'member:invite', 'org:read')")
     @GetMapping("/current/roles")
     public List<RoleResponse> listRoles() {
         return roleService.listRoles();
