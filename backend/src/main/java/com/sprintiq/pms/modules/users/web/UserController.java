@@ -70,7 +70,7 @@ public class UserController {
     @Operation(summary = "Developer profile and delivery metrics",
             description = "Declared attributes plus the metrics derived from completed work. "
                     + "These are the Model 3 features; the profile explains a ranking.")
-    @PreAuthorize("@perm.has('member:read')")
+    @PreAuthorize("@perm.isSelf(#userId) or @perm.has('member:read')")
     @GetMapping("/{userId}/developer-profile")
     public DeveloperProfileResponse developerProfile(@PathVariable UUID userId) {
         return developerProfileService.get(userId);
@@ -79,7 +79,7 @@ public class UserController {
     @Operation(summary = "Update declared profile attributes",
             description = "Seniority, experience, rate, capacity and availability. Derived metrics "
                     + "cannot be set — they are measured, not asserted.")
-    @PreAuthorize("@perm.hasAny('member:update','settings:manage')")
+    @PreAuthorize("@perm.isSelf(#userId) or @perm.hasAny('member:update','settings:manage')")
     @PutMapping("/{userId}/developer-profile")
     public DeveloperProfileResponse updateDeveloperProfile(
             @PathVariable UUID userId,
@@ -88,7 +88,7 @@ public class UserController {
     }
 
     @Operation(summary = "A user's skills and proficiencies")
-    @PreAuthorize("@perm.has('member:read')")
+    @PreAuthorize("@perm.isSelf(#userId) or @perm.has('member:read')")
     @GetMapping("/{userId}/skills")
     public List<UserSkillResponse> skills(@PathVariable UUID userId) {
         return developerProfileService.skillsOf(userId);
@@ -97,7 +97,7 @@ public class UserController {
     @Operation(summary = "Replace a user's skills",
             description = "Whole-set replacement so removals are expressible. Unknown skill names "
                     + "are created in the organization's catalogue.")
-    @PreAuthorize("@perm.hasAny('member:update','settings:manage')")
+    @PreAuthorize("@perm.isSelf(#userId) or @perm.hasAny('member:update','settings:manage')")
     @PutMapping("/{userId}/skills")
     public List<UserSkillResponse> replaceSkills(@PathVariable UUID userId,
                                                  @Valid @RequestBody UpdateUserSkillsRequest request) {

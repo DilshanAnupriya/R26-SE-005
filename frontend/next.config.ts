@@ -13,7 +13,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-
   // Standalone emits a self-contained server bundle carrying only the node_modules
   // actually imported — without it the Docker image ships the entire dependency
   // tree, hundreds of megabytes of build tooling that never runs in production.

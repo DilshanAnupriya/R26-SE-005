@@ -1,6 +1,39 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getTokenStore } from "@/lib/api/token-store";
+import { getActiveOrganization } from "@/lib/api/org-context";
+
+async function authFetch(url: string, options: RequestInit = {}) {
+  const tokenStore = getTokenStore();
+  const orgId = getActiveOrganization();
+  
+  const getHeaders = (token: string | null) => {
+    const headers = new Headers(options.headers || {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    if (orgId && !headers.has("X-Organization-Id")) {
+      headers.set("X-Organization-Id", orgId);
+    }
+    return headers;
+  };
+
+  const token = tokenStore.get();
+  let res = await fetch(url, { ...options, headers: getHeaders(token) });
+  
+  if (res.status === 401) {
+    try {
+      const newToken = await tokenStore.refresh();
+      res = await fetch(url, { ...options, headers: getHeaders(newToken) });
+    } catch (err) {
+      console.error("Token refresh failed:", err);
+    }
+  }
+  
+  return res;
+}
 import { motion } from "framer-motion";
 import { 
   Search, 
@@ -62,14 +95,28 @@ const getSkillIcon = (skill: string) => {
   return <Code2 className="w-3 h-3 mr-1" />;
 };
 
-export default function DevelopersPage() {
+export default function DevelopersPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isEmbedded) {
+      router.replace("/allocation?tab=developers");
+    }
+  }, [isEmbedded, router]);
+
   const [developers, setDevelopers] = useState<UIDeveloper[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("http://localhost:8080/api/developers")
+    authFetch("http://localhost:8080/api/developers")
       .then(res => res.json())
       .then((data: DeveloperData[]) => {
+        if (!Array.isArray(data)) {
+          console.error("Invalid developers response:", data);
+          setDevelopers([]);
+          setLoading(false);
+          return;
+        }
         const mapped = data.map(dev => {
           const skills = [];
           if (dev.skill_frontend > 5) skills.push("Frontend");
@@ -118,16 +165,26 @@ export default function DevelopersPage() {
     show: { y: 0, opacity: 1 }
   };
 
+  if (!isEmbedded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background p-6 lg:p-10">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className={isEmbedded ? "w-full space-y-8" : "min-h-screen bg-background p-6 lg:p-10"}>
+      <div className={isEmbedded ? "w-full space-y-8" : "max-w-7xl mx-auto space-y-8"}>
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Developer Intelligence</h1>
-            <p className="text-slate-400 mt-1">Manage team skills, track performance, and monitor workloads.</p>
-          </div>
+        <div className={isEmbedded ? "flex justify-end gap-4 w-full" : "flex flex-col md:flex-row md:items-center justify-between gap-4"}>
+          {!isEmbedded && (
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Developer Intelligence</h1>
+              <p className="text-slate-400 mt-1">Manage team skills, track performance, and monitor workloads.</p>
+            </div>
+          )}
           
           <div className="flex items-center space-x-3">
             <div className="relative">
@@ -141,11 +198,13 @@ export default function DevelopersPage() {
             <button className="p-2 bg-slate-900/50 border border-card-border rounded-lg hover:bg-slate-800 transition-colors text-slate-300">
               <Filter className="w-4 h-4" />
             </button>
-            <Link href="/register" className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-primary/20">
+            <Link href="/register-dev" className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-primary/20">
               Register Developer
             </Link>
+
           </div>
         </div>
+
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -169,6 +228,22 @@ export default function DevelopersPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mr-3"></div>
             Loading developers...
           </div>
+        ) : developers.length === 0 ? (
+          <div className="text-center py-20 border border-dashed border-card-border rounded-2xl bg-slate-950/30 p-8">
+            <Code2 className="w-12 h-12 mx-auto text-primary/60 mb-3" />
+            <h3 className="text-xl font-semibold text-foreground">No developers registered yet</h3>
+            <p className="text-sm mt-2 text-slate-400 max-w-md mx-auto">
+              Add developers to your organization with their skill proficiencies to enable AI resource matching and workload optimization.
+            </p>
+            <div className="mt-6">
+              <Link
+                href="/register-dev"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-primary/20"
+              >
+                Register First Developer
+              </Link>
+            </div>
+          </div>
         ) : (
           <motion.div 
             variants={container}
@@ -178,6 +253,7 @@ export default function DevelopersPage() {
           >
           {developers.map((dev) => (
             <Link key={dev.id} href={`/developers/${dev.id}`}>
+
               <motion.div variants={item} className="glass rounded-xl border border-card-border overflow-hidden group hover:border-primary/50 transition-colors duration-300 h-full">
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4">

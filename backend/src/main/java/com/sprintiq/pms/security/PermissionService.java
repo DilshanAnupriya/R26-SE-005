@@ -4,6 +4,7 @@ import com.sprintiq.pms.common.error.AccessDeniedAppException;
 import com.sprintiq.pms.tenancy.TenantContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import java.util.UUID;
 
 /**
  * Exposed to SpEL as {@code @perm} so controllers and services read declaratively:
@@ -13,6 +14,10 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component("perm")
 public class PermissionService {
+
+    public boolean isSelf(UUID userId) {
+        return userId != null && TenantContext.userId().map(userId::equals).orElse(false);
+    }
 
     public boolean has(String permission) {
         return TenantContext.hasPermission(permission);

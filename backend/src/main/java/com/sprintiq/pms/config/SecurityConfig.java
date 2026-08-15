@@ -39,13 +39,20 @@ public class SecurityConfig {
             "/api/v1/auth/password/reset",
             "/api/v1/auth/email/verify",
             "/api/v1/auth/mfa/challenge",
+            "/api/v1/organizations/invitations/verify",
             "/api/v1/organizations/invitations/accept",
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/actuator/health/**",
             "/actuator/info",
-            "/ws/**"
+            "/ws/**",
+            "/api/rank/**",
+            "/api/sprints/**",
+            "/api/tasks/**",
+            "/api/developers/**",
+            "/api/allocation/**",
+            "/api/simulate/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;

@@ -2,6 +2,38 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { getTokenStore } from "@/lib/api/token-store";
+import { getActiveOrganization } from "@/lib/api/org-context";
+
+async function authFetch(url: string, options: RequestInit = {}) {
+  const tokenStore = getTokenStore();
+  const orgId = getActiveOrganization();
+  
+  const getHeaders = (token: string | null) => {
+    const headers = new Headers(options.headers || {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    if (orgId && !headers.has("X-Organization-Id")) {
+      headers.set("X-Organization-Id", orgId);
+    }
+    return headers;
+  };
+
+  const token = tokenStore.get();
+  let res = await fetch(url, { ...options, headers: getHeaders(token) });
+  
+  if (res.status === 401) {
+    try {
+      const newToken = await tokenStore.refresh();
+      res = await fetch(url, { ...options, headers: getHeaders(newToken) });
+    } catch (err) {
+      console.error("Token refresh failed:", err);
+    }
+  }
+  
+  return res;
+}
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   User, 
@@ -131,14 +163,14 @@ export default function DeveloperProfilePage() {
     const fetchData = async () => {
       try {
         // Fetch profile using the developer ID
-        const profileRes = await fetch(`http://localhost:8080/api/developers/${id}/profile`);
+        const profileRes = await authFetch(`http://localhost:8080/api/developers/${id}/profile`);
         const profileData = await profileRes.json();
         setProfile(profileData);
 
         // Fetch tasks
-        const tasksRes = await fetch(`http://localhost:8080/api/tasks/developer/${id}`);
+        const tasksRes = await authFetch(`http://localhost:8080/api/tasks/developer/${id}`);
         const tasksData = await tasksRes.json();
-        setTasks(tasksData);
+        setTasks(Array.isArray(tasksData) ? tasksData : []);
       } catch (err) {
         console.error("Error fetching developer profile:", err);
       } finally {

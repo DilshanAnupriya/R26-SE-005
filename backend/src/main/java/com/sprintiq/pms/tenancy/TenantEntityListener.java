@@ -24,11 +24,12 @@ public class TenantEntityListener {
             return;
         }
         if (entity.getOrganizationId() == null) {
-            entity.setOrganizationId(TenantContext.requireOrganizationId());
+            TenantContext.organizationId().ifPresent(entity::setOrganizationId);
         } else {
             assertSameTenant(entity.getOrganizationId());
         }
     }
+
 
     @PreUpdate
     public void onUpdate(Object candidate) {

@@ -18,6 +18,9 @@ import {
   Sparkles
 } from "lucide-react";
 
+import { getTokenStore } from "@/lib/api/token-store";
+import { getActiveOrganization } from "@/lib/api/org-context";
+
 export default function ProfileSetupPage() {
   const router = useRouter();
   const [prevData, setPrevData] = useState<any>(null);
@@ -55,17 +58,30 @@ export default function ProfileSetupPage() {
     setLoading(true);
     setError("");
 
+    const tokenStore = getTokenStore();
+    const token = tokenStore.get();
+    const activeOrgId = getActiveOrganization();
+
     const fullRequest = {
       ...prevData,
-      ...formData
+      ...formData,
+      ...(activeOrgId ? { organizationId: activeOrgId } : {})
     };
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json"
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    if (activeOrgId) {
+      headers["X-Organization-Id"] = activeOrgId;
+    }
 
     try {
       const response = await fetch("http://localhost:8080/api/developers", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers,
         body: JSON.stringify(fullRequest)
       });
 
@@ -73,8 +89,8 @@ export default function ProfileSetupPage() {
         setSuccess(true);
         localStorage.removeItem("registration_data");
         setTimeout(() => {
-          router.push("/ai-allocation");
-        }, 2000);
+          router.push("/allocation?tab=developers");
+        }, 1500);
       } else {
         setError("Registration failed. Please try again.");
       }
@@ -84,6 +100,7 @@ export default function ProfileSetupPage() {
       setLoading(false);
     }
   };
+
 
   const SkillSlider = ({ label, value, onChange, icon: Icon, color }: any) => (
     <div className="space-y-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/50">

@@ -44,7 +44,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith(ApiConstants.BEARER_PREFIX)) {
-            chain.doFilter(request, response);
+            String orgHeader = request.getHeader("X-Organization-Id");
+            if (orgHeader != null && !orgHeader.isBlank()) {
+                try {
+                    UUID orgId = UUID.fromString(orgHeader.trim());
+                    TenantContext.set(TenantContext.Context.builder()
+                            .organizationId(orgId)
+                            .systemContext(false)
+                            .build());
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            try {
+                chain.doFilter(request, response);
+            } finally {
+                if (orgHeader != null) {
+                    TenantContext.clear();
+                }
+            }
             return;
         }
 
@@ -57,8 +74,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
+            UUID orgId = principal.organizationId();
+            String orgHeader = request.getHeader("X-Organization-Id");
+            if (orgId == null && orgHeader != null && !orgHeader.isBlank()) {
+                try {
+                    orgId = UUID.fromString(orgHeader.trim());
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+
             TenantContext.set(TenantContext.Context.builder()
-                    .organizationId(principal.organizationId())
+                    .organizationId(orgId)
                     .userId(principal.userId())
                     .userEmail(principal.email())
                     .roleCode(principal.roleCode())
@@ -75,6 +101,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.clearContext();
         }
     }
+
 
     @SuppressWarnings("unchecked")
     private AppPrincipal toPrincipal(Claims claims) {
