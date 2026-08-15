@@ -1,6 +1,39 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getTokenStore } from "@/lib/api/token-store";
+import { getActiveOrganization } from "@/lib/api/org-context";
+
+async function authFetch(url: string, options: RequestInit = {}) {
+  const tokenStore = getTokenStore();
+  const orgId = getActiveOrganization();
+  
+  const getHeaders = (token: string | null) => {
+    const headers = new Headers(options.headers || {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    if (orgId && !headers.has("X-Organization-Id")) {
+      headers.set("X-Organization-Id", orgId);
+    }
+    return headers;
+  };
+
+  const token = tokenStore.get();
+  let res = await fetch(url, { ...options, headers: getHeaders(token) });
+  
+  if (res.status === 401) {
+    try {
+      const newToken = await tokenStore.refresh();
+      res = await fetch(url, { ...options, headers: getHeaders(newToken) });
+    } catch (err) {
+      console.error("Token refresh failed:", err);
+    }
+  }
+  
+  return res;
+}
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   LayoutDashboard, 
@@ -37,7 +70,15 @@ interface Developer {
   capacity: number; // Max story points per sprint
 }
 
-export default function SimulatorPage() {
+export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isEmbedded) {
+      router.replace("/allocation?tab=simulator");
+    }
+  }, [isEmbedded, router]);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
@@ -56,26 +97,36 @@ export default function SimulatorPage() {
     const fetchSprintsAndDevs = async () => {
       try {
         const [sprintsRes, devsRes] = await Promise.all([
-          fetch("http://localhost:8080/api/sprints"),
-          fetch("http://localhost:8080/api/developers")
+          authFetch("http://localhost:8080/api/sprints"),
+          authFetch("http://localhost:8080/api/developers")
         ]);
         
         const sprintsData = await sprintsRes.json();
         const devsData = await devsRes.json();
         
-        setSprints(sprintsData);
-        if (sprintsData.length > 0 && !selectedSprintId) {
-          setSelectedSprintId(sprintsData[0].id);
+        if (Array.isArray(sprintsData)) {
+          setSprints(sprintsData);
+          if (sprintsData.length > 0 && !selectedSprintId) {
+            setSelectedSprintId(sprintsData[0].id);
+          }
+        } else {
+          console.error("Invalid sprints response:", sprintsData);
+          setSprints([]);
         }
 
-        setDevelopers(devsData.map((d: any) => ({
-          id: d.id,
-          firstName: d.profile?.firstName || "Unknown",
-          lastName: d.profile?.lastName || "Dev",
-          specialization: d.profile?.specialization || "Fullstack",
-          efficiency: d.consistency || 1.0,
-          capacity: (d.experience_level || 2) * 10 
-        })));
+        if (Array.isArray(devsData)) {
+          setDevelopers(devsData.map((d: any) => ({
+            id: d.id,
+            firstName: d.profile?.firstName || "Unknown",
+            lastName: d.profile?.lastName || "Dev",
+            specialization: d.profile?.specialization || "Fullstack",
+            efficiency: d.consistency || 1.0,
+            capacity: (d.experience_level || 2) * 10 
+          })));
+        } else {
+          console.error("Invalid developers response:", devsData);
+          setDevelopers([]);
+        }
       } catch (err) {
         console.error("Error fetching initial data:", err);
       } finally {
@@ -91,19 +142,24 @@ export default function SimulatorPage() {
 
     const fetchTasks = async () => {
       try {
-        const tasksRes = await fetch(`http://localhost:8080/api/tasks/sprint/${selectedSprintId}`);
+        const tasksRes = await authFetch(`http://localhost:8080/api/tasks/sprint/${selectedSprintId}`);
         const tasksData = await tasksRes.json();
         
-        // Only include tasks that ARE NOT assigned to a developer yet
-        const unassignedTasks = tasksData.filter((t: any) => t.developer === null);
-        
-        setTasks(unassignedTasks.map((t: any) => ({
-          id: t.id,
-          title: t.task_type || "Unknown Task",
-          storyPoints: t.story_points || 0,
-          type: t.req_frontend > t.req_backend ? "Frontend" : "Backend",
-          priority: t.task_complexity > 4 ? "High" : (t.task_complexity > 2 ? "Medium" : "Low")
-        })));
+        if (Array.isArray(tasksData)) {
+          // Only include tasks that ARE NOT assigned to a developer yet
+          const unassignedTasks = tasksData.filter((t: any) => t.developer === null);
+          
+          setTasks(unassignedTasks.map((t: any) => ({
+            id: t.id,
+            title: t.task_type || "Unknown Task",
+            storyPoints: t.story_points || 0,
+            type: t.req_frontend > t.req_backend ? "Frontend" : "Backend",
+            priority: t.task_complexity > 4 ? "High" : (t.task_complexity > 2 ? "Medium" : "Low")
+          })));
+        } else {
+          console.error("Invalid tasks response:", tasksData);
+          setTasks([]);
+        }
         
         // Reset assignments when switching sprints
         setAssignments({});
@@ -128,16 +184,16 @@ export default function SimulatorPage() {
       }
 
       try {
-        const res = await fetch("http://localhost:8080/api/simulator/calculate", {
+        const res = await authFetch("http://localhost:8080/api/simulator/calculate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(assignmentList)
         });
         const data = await res.json();
         setSimulationMetrics({
-          totalAssignedPoints: data.totalStoryPoints,
-          predictedVelocity: data.predictedVelocity,
-          healthScore: data.healthScore
+          totalAssignedPoints: data.totalStoryPoints || 0,
+          predictedVelocity: data.predictedVelocity || 0,
+          healthScore: data.healthScore || 0
         });
       } catch (err) {
         console.error("Simulation error:", err);
@@ -157,7 +213,7 @@ export default function SimulatorPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8080/api/simulator/apply", {
+      const res = await authFetch("http://localhost:8080/api/simulator/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(assignmentList)
@@ -224,18 +280,20 @@ export default function SimulatorPage() {
         currentAssignments: assignments
       };
 
-      const res = await fetch("http://localhost:8080/api/simulator/auto-optimize", {
+      const res = await authFetch("http://localhost:8080/api/simulator/auto-optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
       
-      const newAssignments: any[] = await res.json();
+      const newAssignments = await res.json();
       const updatedAssignments = { ...assignments };
       
-      newAssignments.forEach(a => {
-        updatedAssignments[a.taskId] = a.developerId;
-      });
+      if (Array.isArray(newAssignments)) {
+        newAssignments.forEach(a => {
+          updatedAssignments[a.taskId] = a.developerId;
+        });
+      }
       
       setAssignments(updatedAssignments);
     } catch (err) {
@@ -253,9 +311,28 @@ export default function SimulatorPage() {
     });
   };
 
+  if (!isEmbedded && loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center space-y-4">
+          <RefreshCw className="w-10 h-10 text-primary animate-spin" />
+          <p className="text-slate-400 font-medium">Initializing Simulator Environment...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isEmbedded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <RefreshCw className="w-10 h-10 text-primary animate-spin" />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="w-full flex items-center justify-center py-20">
         <div className="flex flex-col items-center space-y-4">
           <RefreshCw className="w-10 h-10 text-primary animate-spin" />
           <p className="text-slate-400 font-medium">Initializing Simulator Environment...</p>
@@ -265,11 +342,11 @@ export default function SimulatorPage() {
   }
 
   return (
-    <div className="p-8 max-w-[1600px] mx-auto space-y-8">
+    <div className={isEmbedded ? "w-full space-y-8" : "p-8 max-w-[1600px] mx-auto space-y-8"}>
       {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className={isEmbedded ? "flex flex-col md:flex-row md:items-center justify-between gap-6 w-full" : "flex flex-col md:flex-row md:items-end justify-between gap-6"}>
           <div className="space-y-4">
-            <h1 className="text-4xl font-bold text-white mb-2 italic">What-If <span className="text-gradient">Simulator</span></h1>
+            {!isEmbedded && <h1 className="text-4xl font-bold text-white mb-2 italic">What-If <span className="text-gradient">Simulator</span></h1>}
             
             <div className="flex items-center space-x-4">
               <div className="glass px-4 py-2 rounded-xl border border-card-border flex items-center space-x-3">
@@ -313,6 +390,7 @@ export default function SimulatorPage() {
             </button>
           </div>
         </div>
+
 
       {/* Main Simulation Area - Fixed Height Viewport */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-250px)]">

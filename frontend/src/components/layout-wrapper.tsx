@@ -15,7 +15,8 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     pathname?.startsWith("/verify-email") || 
     (pathname?.startsWith("/register") && !pathname?.startsWith("/register-dev"));
   
-  const hideNavbar = isAppRoute || isAuthRoute;
+  const isMarketingRoute = pathname === "/";
+  const hideNavbar = isAppRoute || isAuthRoute || isMarketingRoute;
 
   if (hideNavbar) {
     return <>{children}</>;

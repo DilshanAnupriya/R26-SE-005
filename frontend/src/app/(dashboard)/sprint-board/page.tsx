@@ -1,6 +1,38 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getTokenStore } from "@/lib/api/token-store";
+import { getActiveOrganization } from "@/lib/api/org-context";
+
+async function authFetch(url: string, options: RequestInit = {}) {
+  const tokenStore = getTokenStore();
+  const orgId = getActiveOrganization();
+  
+  const getHeaders = (token: string | null) => {
+    const headers = new Headers(options.headers || {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    if (orgId && !headers.has("X-Organization-Id")) {
+      headers.set("X-Organization-Id", orgId);
+    }
+    return headers;
+  };
+
+  const token = tokenStore.get();
+  let res = await fetch(url, { ...options, headers: getHeaders(token) });
+  
+  if (res.status === 401) {
+    try {
+      const newToken = await tokenStore.refresh();
+      res = await fetch(url, { ...options, headers: getHeaders(newToken) });
+    } catch (err) {
+      console.error("Token refresh failed:", err);
+    }
+  }
+  
+  return res;
+}
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Layout, 
@@ -66,12 +98,17 @@ export default function SprintBoardPage() {
 
   const fetchSprints = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/sprints");
+      const response = await authFetch("http://localhost:8080/api/sprints");
       if (!response.ok) throw new Error("Failed to fetch sprints");
       const data = await response.json();
-      setSprints(data);
-      if (data.length > 0) {
-        setSelectedSprintId(data[0].id);
+      if (Array.isArray(data)) {
+        setSprints(data);
+        if (data.length > 0) {
+          setSelectedSprintId(data[0].id);
+        }
+      } else {
+        console.error("Invalid sprints response:", data);
+        setSprints([]);
       }
     } catch (err) {
       setError("Failed to fetch sprints");
@@ -84,10 +121,10 @@ export default function SprintBoardPage() {
   const fetchTasks = async (sprintId: number) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/tasks/sprint/${sprintId}`);
+      const response = await authFetch(`http://localhost:8080/api/tasks/sprint/${sprintId}`);
       if (!response.ok) throw new Error("Failed to fetch tasks");
       const data = await response.json();
-      setTasks(data);
+      setTasks(Array.isArray(data) ? data : []);
     } catch (err) {
       setError("Failed to fetch tasks");
       console.error(err);
@@ -101,7 +138,7 @@ export default function SprintBoardPage() {
     
     setIsCompleting(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/tasks/sprint/${selectedSprintId}/complete-all`, {
+      const response = await authFetch(`http://localhost:8080/api/tasks/sprint/${selectedSprintId}/complete-all`, {
         method: 'POST'
       });
       if (!response.ok) throw new Error("Failed to complete tasks");
@@ -118,7 +155,7 @@ export default function SprintBoardPage() {
     
     setIsCompleting(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/sprints/${selectedSprintId}/complete`, {
+      const response = await authFetch(`http://localhost:8080/api/sprints/${selectedSprintId}/complete`, {
         method: 'POST'
       });
       if (!response.ok) {
@@ -136,7 +173,7 @@ export default function SprintBoardPage() {
 
   const handleUpdateStatus = async (taskId: number, newStatus: string) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/tasks/${taskId}/status?status=${newStatus}`, {
+      const response = await authFetch(`http://localhost:8080/api/tasks/${taskId}/status?status=${newStatus}`, {
         method: 'PATCH'
       });
       if (!response.ok) throw new Error("Failed to update status");

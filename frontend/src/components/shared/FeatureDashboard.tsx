@@ -27,25 +27,30 @@ export function FeatureDashboard({ title, description, icon: Icon, children }: F
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Placeholder cards for member metrics */}
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="glass p-6 rounded-2xl space-y-4">
-            <div className="h-4 w-24 bg-slate-800 rounded animate-pulse" />
-            <div className="h-8 w-16 bg-slate-700 rounded animate-pulse" />
-            <div className="h-2 w-full bg-slate-800 rounded" />
+      {!children && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Placeholder cards for member metrics */}
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="glass p-6 rounded-2xl space-y-4">
+                <div className="h-4 w-24 bg-slate-800 rounded animate-pulse" />
+                <div className="h-8 w-16 bg-slate-700 rounded animate-pulse" />
+                <div className="h-2 w-full bg-slate-800 rounded" />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <div className="glass rounded-2xl p-8 min-h-[400px] flex items-center justify-center border-dashed border-2 border-card-border">
-        <div className="text-center space-y-4">
-          <p className="text-slate-500 italic">Component implementation goes here...</p>
-          <p className="text-xs text-slate-600 uppercase tracking-widest font-bold">Member Space</p>
-        </div>
-      </div>
+          <div className="glass rounded-2xl p-8 min-h-[400px] flex items-center justify-center border-dashed border-2 border-card-border">
+            <div className="text-center space-y-4">
+              <p className="text-slate-500 italic">Component implementation goes here...</p>
+              <p className="text-xs text-slate-600 uppercase tracking-widest font-bold">Member Space</p>
+            </div>
+          </div>
+        </>
+      )}
       
       {children}
     </div>
   );
 }
+

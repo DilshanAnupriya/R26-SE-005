@@ -70,7 +70,8 @@ public class AuthNotificationService {
 
     @Async("eventExecutor")
     public void sendInvitation(String email, String organizationName, String inviterName, String rawToken) {
-        String link = "%s/invitations/accept?token=%s".formatted(properties.getBaseUrl(), encode(rawToken));
+        String link = "%s/accept-invitation?token=%s".formatted(properties.getBaseUrl(), encode(rawToken));
+        log.info("📧 [DEV EMAIL] Invitation generated for {}: Link = {}", email, link);
         send(email, "%s invited you to %s on SprintIQ".formatted(inviterName, organizationName),
                 """
                 %s has invited you to collaborate on %s.
@@ -91,7 +92,7 @@ public class AuthNotificationService {
             message.setText(body);
             mailSender.send(message);
         } catch (MailException ex) {
-            log.error("Unable to send '{}' email to {}: {}", subject, to, ex.getMessage());
+            log.warn("Unable to send '{}' email to {} (SMTP server may not be running): {}", subject, to, ex.getMessage());
         }
     }
 

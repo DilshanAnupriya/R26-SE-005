@@ -9,8 +9,9 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 export const metadata: Metadata = {
-  title: "Agile Resource Optimizer | AI-Powered Resource Allocation",
-  description: "Optimize your agile team's performance with AI-driven resource allocation and sprint management.",
+  title: "SprintIQ — AI-powered agile delivery",
+  description:
+    "Plan, execute and track sprints with AI estimation, risk and cost forecasting attached to the decisions you are actually making.",
 };
 
 export default function RootLayout({
