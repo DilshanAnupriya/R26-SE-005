@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Providers } from "@/components/providers";
-import LayoutWrapper from "@/components/layout-wrapper";
 
 /*
  * Geist and Geist Mono, as specified by the design. The mono face is not
@@ -34,9 +33,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col font-sans antialiased">
         <Providers>
-          <LayoutWrapper>
-            {children}
-          </LayoutWrapper>
+          {children}
         </Providers>
       </body>
     </html>
