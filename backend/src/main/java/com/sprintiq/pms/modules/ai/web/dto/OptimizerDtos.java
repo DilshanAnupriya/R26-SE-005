@@ -3,10 +3,14 @@ package com.sprintiq.pms.modules.ai.web.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
+import java.util.UUID;
+
 public class OptimizerDtos {
 
     @Data
     public static class DeveloperRegistrationRequest {
+        private UUID organizationId;
+
         // Personal Details
         private String firstName;
         private String lastName;
@@ -32,6 +36,8 @@ public class OptimizerDtos {
 
     @Data
     public static class TaskRequest {
+        private UUID organizationId;
+
         @JsonProperty("task_id")
         private Long taskId;
 
@@ -46,3 +52,4 @@ public class OptimizerDtos {
         private int req_db;
     }
 }
+

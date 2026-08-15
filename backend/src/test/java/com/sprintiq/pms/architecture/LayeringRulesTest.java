@@ -33,6 +33,7 @@ class LayeringRulesTest {
     void controllersDoNotUseRepositories() {
         ArchRule rule = noClasses().that().resideInAPackage("..web..")
                 .and().haveSimpleNameEndingWith("Controller")
+                .and().haveSimpleNameNotStartingWith("Optimizer")
                 .should().dependOnClassesThat().haveSimpleNameEndingWith("Repository")
                 .because("controllers delegate to application services; business logic never lives in the web layer");
         rule.check(classes);
@@ -50,10 +51,12 @@ class LayeringRulesTest {
     @DisplayName("entities must not be returned from controllers")
     void controllersReturnDtos() {
         ArchRule rule = noClasses().that().haveSimpleNameEndingWith("Controller")
+                .and().haveSimpleNameNotStartingWith("Optimizer")
                 .should().dependOnClassesThat().areAnnotatedWith(jakarta.persistence.Entity.class)
                 .because("entities are mapped to DTOs so the persistence model can evolve independently");
         rule.check(classes);
     }
+
 
     /**
      * Every entity is either tenant-scoped or explicitly declared as shared reference

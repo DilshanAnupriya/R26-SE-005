@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/developers")
 @CrossOrigin("*")
@@ -18,9 +20,15 @@ public class OptimizerDeveloperController {
     private OptimizerDeveloperService developerService;
 
     @PostMapping
-    public DeveloperProfile addDeveloper(@RequestBody DeveloperRegistrationRequest request) {
+    public DeveloperProfile addDeveloper(
+            @RequestHeader(value = "X-Organization-Id", required = false) UUID headerOrgId,
+            @RequestBody DeveloperRegistrationRequest request) {
+        if (request.getOrganizationId() == null && headerOrgId != null) {
+            request.setOrganizationId(headerOrgId);
+        }
         return developerService.addDeveloper(request);
     }
+
 
     @GetMapping
     public List<Developer> getAll() {

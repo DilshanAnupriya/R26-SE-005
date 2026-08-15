@@ -12,6 +12,7 @@ import com.sprintiq.pms.modules.ai.domain.OptimizerTaskRepository;
 import com.sprintiq.pms.modules.ai.domain.OptimizerAllocationRepository;
 
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Random;
 
 @Configuration
+@ConditionalOnProperty(name = "app.seed.optimizer", havingValue = "true")
 public class DataLoader {
 
     @Bean
