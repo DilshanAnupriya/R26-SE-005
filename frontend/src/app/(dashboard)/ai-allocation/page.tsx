@@ -610,17 +610,25 @@ export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: 
       const data = await res.json();
       if (Array.isArray(data)) {
         setSprints(data);
-        if (data.length > 0 && !selectedSprintId) {
-          setSelectedSprintId(data[0].id);
+        if (data.length > 0) {
+          if (!selectedSprintId) {
+            setSelectedSprintId(data[0].id);
+          }
+        } else {
+          setSelectedSprintId(null);
+          setLoading(false);
         }
       } else {
         console.error("Invalid sprints response:", data);
         setSprints([]);
+        setLoading(false);
       }
     } catch (err) {
       console.error("Error fetching sprints:", err);
+      setLoading(false);
     }
   }, [selectedSprintId]);
+
 
   const fetchAllocations = useCallback(async () => {
     if (!selectedSprintId) return;
@@ -806,6 +814,22 @@ export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: 
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-9 h-9 animate-spin text-primary" />
           </div>
+        ) : sprints.length === 0 ? (
+          <div className="text-center py-20 border border-dashed border-card-border rounded-2xl bg-slate-950/30 p-8">
+            <Bot className="w-14 h-14 mx-auto text-primary/60 mb-4" />
+            <h3 className="text-xl font-semibold text-foreground">No active sprints found</h3>
+            <p className="text-sm mt-2 text-slate-400 max-w-md mx-auto">
+              Create a sprint in Backlog & Sprints and register team developers to run AI task allocation.
+            </p>
+            <div className="mt-6 flex justify-center gap-4">
+              <Link
+                href="/register-dev"
+                className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-primary/20"
+              >
+                Register Developer
+              </Link>
+            </div>
+          </div>
         ) : taskGroups.length === 0 ? (
           <div className="text-center py-24 text-slate-400 border border-dashed border-slate-800 rounded-xl">
             <Bot className="w-14 h-14 mx-auto text-slate-600 mb-4" />
@@ -815,6 +839,7 @@ export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: 
             </p>
           </div>
         ) : (
+
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

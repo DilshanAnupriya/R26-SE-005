@@ -198,9 +198,10 @@ export default function DevelopersPage({ isEmbedded = false }: { isEmbedded?: bo
             <button className="p-2 bg-slate-900/50 border border-card-border rounded-lg hover:bg-slate-800 transition-colors text-slate-300">
               <Filter className="w-4 h-4" />
             </button>
-            <Link href="/register" className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-primary/20">
+            <Link href="/register-dev" className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-primary/20">
               Register Developer
             </Link>
+
           </div>
         </div>
 
@@ -227,6 +228,22 @@ export default function DevelopersPage({ isEmbedded = false }: { isEmbedded?: bo
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mr-3"></div>
             Loading developers...
           </div>
+        ) : developers.length === 0 ? (
+          <div className="text-center py-20 border border-dashed border-card-border rounded-2xl bg-slate-950/30 p-8">
+            <Code2 className="w-12 h-12 mx-auto text-primary/60 mb-3" />
+            <h3 className="text-xl font-semibold text-foreground">No developers registered yet</h3>
+            <p className="text-sm mt-2 text-slate-400 max-w-md mx-auto">
+              Add developers to your organization with their skill proficiencies to enable AI resource matching and workload optimization.
+            </p>
+            <div className="mt-6">
+              <Link
+                href="/register-dev"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-primary/20"
+              >
+                Register First Developer
+              </Link>
+            </div>
+          </div>
         ) : (
           <motion.div 
             variants={container}
@@ -236,6 +253,7 @@ export default function DevelopersPage({ isEmbedded = false }: { isEmbedded?: bo
           >
           {developers.map((dev) => (
             <Link key={dev.id} href={`/developers/${dev.id}`}>
+
               <motion.div variants={item} className="glass rounded-xl border border-card-border overflow-hidden group hover:border-primary/50 transition-colors duration-300 h-full">
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4">

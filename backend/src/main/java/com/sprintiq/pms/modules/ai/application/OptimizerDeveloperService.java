@@ -12,6 +12,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.sprintiq.pms.tenancy.TenantContext;
+import java.util.UUID;
+
 @Service
 public class OptimizerDeveloperService {
 
@@ -21,8 +24,46 @@ public class OptimizerDeveloperService {
     @Autowired
     private OptimizerDeveloperProfileRepository developerProfileRepository;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+
     public DeveloperProfile addDeveloper(DeveloperRegistrationRequest request) {
+        UUID orgId = request.getOrganizationId();
+        if (orgId == null) {
+            orgId = TenantContext.organizationId().orElse(null);
+        }
+
+        if (orgId == null && request.getEmail() != null && !request.getEmail().isBlank()) {
+            try {
+                List<UUID> orgs = jdbcTemplate.query(
+                        "SELECT m.organization_id FROM users u JOIN org_members m ON m.user_id = u.id WHERE lower(u.email) = lower(?) LIMIT 1",
+                        (rs, rowNum) -> (UUID) rs.getObject(1),
+                        request.getEmail().trim()
+                );
+                if (!orgs.isEmpty()) {
+                    orgId = orgs.get(0);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (orgId == null) {
+            try {
+                List<UUID> defaultOrgs = jdbcTemplate.query(
+                        "SELECT id FROM organizations ORDER BY created_at ASC LIMIT 1",
+                        (rs, rowNum) -> (UUID) rs.getObject(1)
+                );
+                if (!defaultOrgs.isEmpty()) {
+                    orgId = defaultOrgs.get(0);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+
         Developer developer = new Developer();
+        developer.setOrganizationId(orgId);
         developer.setDev_id(request.getDevId());
         developer.setExperience_level(request.getExperienceLevel());
         developer.setSkill_frontend(request.getSkillFrontend());
@@ -35,6 +76,7 @@ public class OptimizerDeveloperService {
         developer.setLearning_rate(request.getLearningRate());
 
         DeveloperProfile profile = new DeveloperProfile();
+        profile.setOrganizationId(orgId);
         profile.setFirstName(request.getFirstName());
         profile.setLastName(request.getLastName());
         profile.setAge(request.getAge());
@@ -49,6 +91,7 @@ public class OptimizerDeveloperService {
 
         return developerProfileRepository.save(profile);
     }
+
 
     public List<DeveloperProfile> getAllDeveloperProfiles() {
         return developerProfileRepository.findAll();
