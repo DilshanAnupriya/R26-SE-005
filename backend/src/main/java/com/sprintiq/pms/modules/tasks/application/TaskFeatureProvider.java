@@ -59,6 +59,31 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
         return timeTracking.overtimeMinutesInSprint(sprintId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public long sprintTaskCount(UUID sprintId) {
+        return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).size();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> sprintRequiredSkills(UUID sprintId) {
+        return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).stream()
+                .flatMap(task -> task.getRequiredSkills().stream())
+                .map(skill -> skill.toLowerCase(Locale.ROOT).trim())
+                .filter(skill -> !skill.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long concurrentAssignments(UUID projectId) {
+        return taskRepository.openLoadByAssignee(projectId).stream()
+                .mapToLong(TaskRepository.AssigneeLoad::getOpenCount)
+                .sum();
+    }
+
     /**
      * Open, estimated work per assignee as a percentage of one sprint.
      *

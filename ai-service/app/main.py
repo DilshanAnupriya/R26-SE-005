@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from .cost_predictor import CostPredictor
 from .predictor import StoryPointPredictor
 from .risk_predictor import RiskPredictor
 from .velocity_predictor import VelocityPredictor
@@ -35,6 +36,10 @@ OVERBUDGET_MODEL_PATH = Path(os.getenv("SPRINTIQ_OVERBUDGET_MODEL_PATH",
                                        MODELS / "overbudget_model_bundle.pkl"))
 REQCHANGE_MODEL_PATH = Path(os.getenv("SPRINTIQ_REQCHANGE_MODEL_PATH",
                                       MODELS / "reqchange_model_bundle.pkl"))
+COST_INITIAL_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_INITIAL_MODEL_DIR",
+                                        MODELS / "SprintCost-initial_model"))
+COST_MID_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_MID_MODEL_DIR",
+                                    MODELS / "SprintCost-mid_model"))
 
 app = FastAPI(
     title="SprintIQ estimation service",
@@ -49,11 +54,13 @@ predictor: StoryPointPredictor | None = None
 velocity: VelocityPredictor | None = None
 over_budget: RiskPredictor | None = None
 requirement_change: RiskPredictor | None = None
+cost_initial: CostPredictor | None = None
+cost_mid: CostPredictor | None = None
 
 
 @app.on_event("startup")
 def load_model() -> None:
-    global predictor, velocity, over_budget, requirement_change
+    global predictor, velocity, over_budget, requirement_change, cost_initial, cost_mid
     if not MODEL_PATH.exists():
         raise RuntimeError(
             f"No model bundle at {MODEL_PATH}. Set SPRINTIQ_MODEL_PATH or place the "
@@ -81,6 +88,18 @@ def load_model() -> None:
     else:
         log.warning("No requirement-change bundle at %s — /predict/risk/requirement-change "
                     "will answer 503", REQCHANGE_MODEL_PATH)
+
+    if (COST_INITIAL_MODEL_DIR / "model.joblib").exists():
+        cost_initial = CostPredictor(COST_INITIAL_MODEL_DIR, "initial")
+    else:
+        log.warning("No initial cost model in %s — /predict/cost/initial will answer 503",
+                    COST_INITIAL_MODEL_DIR)
+
+    if (COST_MID_MODEL_DIR / "model.joblib").exists():
+        cost_mid = CostPredictor(COST_MID_MODEL_DIR, "mid")
+    else:
+        log.warning("No mid-sprint cost model in %s — /predict/cost/mid-sprint will answer 503",
+                    COST_MID_MODEL_DIR)
 
 
 class InferenceRequest(BaseModel):
@@ -121,6 +140,20 @@ def health() -> dict[str, Any]:
         for name, model in (("over_budget", over_budget),
                             ("requirement_change", requirement_change))
     }
+    body["cost"] = {
+        "initial": {
+            "loaded": cost_initial is not None,
+            "features": len(cost_initial.raw_features) if cost_initial else None,
+            "test_mape": cost_initial.test_mape if cost_initial else None,
+            "test_r2": cost_initial.test_r2 if cost_initial else None,
+        },
+        "mid_sprint": {
+            "loaded": cost_mid is not None,
+            "features": len(cost_mid.raw_features) if cost_mid else None,
+            "test_mape": cost_mid.test_mape if cost_mid else None,
+            "test_r2": cost_mid.test_r2 if cost_mid else None,
+        },
+    }
     return body
 
 
@@ -149,6 +182,33 @@ def predict_over_budget(request: InferenceRequest) -> dict[str, Any]:
 @app.post("/predict/risk/requirement-change")
 def predict_requirement_change(request: InferenceRequest) -> dict[str, Any]:
     return _risk(requirement_change, "requirement-change", request)
+
+
+def _cost(model: CostPredictor | None, name: str, request: InferenceRequest) -> dict[str, Any]:
+    if model is None:
+        raise HTTPException(status_code=503, detail=f"{name} cost model not loaded")
+
+    started = time.perf_counter()
+    try:
+        result = model.predict(request.features)
+    except Exception as error:  # noqa: BLE001
+        log.exception("%s cost prediction failed", name)
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    log.info("%s cost forecast: %s [%s, %s] in %sms", name, result["value"],
+             result["lower_bound"], result["upper_bound"], elapsed_ms)
+    return {**result, "latency_ms": elapsed_ms}
+
+
+@app.post("/predict/cost/initial")
+def predict_initial_cost(request: InferenceRequest) -> dict[str, Any]:
+    return _cost(cost_initial, "initial", request)
+
+
+@app.post("/predict/cost/mid-sprint")
+def predict_mid_sprint_cost(request: InferenceRequest) -> dict[str, Any]:
+    return _cost(cost_mid, "mid-sprint", request)
 
 
 @app.post("/predict/velocity")
@@ -228,5 +288,29 @@ def contract() -> dict[str, Any]:
             "fine_tuned_domains": velocity.tuned_domains,
             "defaults": VELOCITY_MEDIANS,
             "metrics": velocity.metrics,
+        }
+    if cost_initial is not None:
+        contract["cost_initial"] = {
+            "features": cost_initial.raw_features,
+            "engineered_features": cost_initial.contract.get("engineered_features", []),
+            "defaults": {
+                "team_size": 1,
+                "developer_availability_rate": 1.0,
+                "skill_match_ratio": 1.0,
+                "avg_seniority_level": 2.0,
+            },
+            "metrics": cost_initial.metrics,
+        }
+    if cost_mid is not None:
+        contract["cost_mid_sprint"] = {
+            "features": cost_mid.raw_features,
+            "engineered_features": cost_mid.contract.get("engineered_features", []),
+            "defaults": {
+                "team_size": 1,
+                "developer_availability_rate": 1.0,
+                "skill_match_ratio": 1.0,
+                "avg_seniority_level": 2.0,
+            },
+            "metrics": cost_mid.metrics,
         }
     return contract
