@@ -7,6 +7,7 @@ import {
   Calendar,
   ChevronLeft,
   ClipboardList,
+  CircleDollarSign,
   Cpu,
   FileText,
   FolderKanban,
@@ -69,6 +70,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
     items: [
       { href: "allocation?tab=allocation", label: "Resource Allocation", icon: Cpu },
       { href: "allocation?tab=simulator", label: "What-If Simulator", icon: Wand2 },
+      { href: "sprint-cost", label: "Sprint Cost", icon: CircleDollarSign },
       { href: "ai-insights", label: "AI Assistant", icon: Bot },
       { href: "automation", label: "Automation", icon: Workflow },
       { href: "team", label: "Team", icon: Users },

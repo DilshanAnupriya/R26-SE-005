@@ -2,8 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, DollarSign, History, LineChart, Loader2, Wallet } from "lucide-react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import {
+  Activity,
+  CalendarDays,
+  CircleDollarSign,
+  Gauge,
+  History,
+  LineChart,
+  ListChecks,
+  Loader2,
+  Users,
+  Wallet,
+} from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,17 +26,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { CostWidget } from "@/features/ai/components/cost-widget";
 import { aiApi } from "@/features/ai/api";
 import { useForecastCost } from "@/features/ai/hooks";
+import { useTaskBoard } from "@/features/board/hooks";
 import { useProjects } from "@/features/projects/hooks";
+import { useVelocityReport } from "@/features/reports/hooks";
 import { useSprintCapacity, useSprints } from "@/features/sprints/hooks";
 import { useSession } from "@/components/session-provider";
 import { queryKeys } from "@/lib/api/query-keys";
 import type { CostForecast, CostTrendPoint } from "@/lib/api/ai-schemas";
-import type { Sprint } from "@/lib/api/delivery-schemas";
+import type { Sprint, Task } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
+import {
+  sprintCostApi,
+  type SprintCostMember,
+  type SprintCostProfile,
+  type SprintCostSkill,
+  type SprintTimeEntry,
+} from "../api";
 
 const STATUS_TONE: Record<Sprint["status"], string> = {
   PLANNED: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
@@ -33,8 +55,30 @@ const STATUS_TONE: Record<Sprint["status"], string> = {
   CANCELLED: "bg-destructive/15 text-destructive",
 };
 
+const TASK_STATUS_TONE: Record<Task["status"], string> = {
+  TODO: "bg-muted text-muted-foreground",
+  IN_PROGRESS: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+  IN_REVIEW: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  BLOCKED: "bg-destructive/10 text-destructive",
+  DONE: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  CANCELLED: "bg-muted text-muted-foreground",
+};
+
+type TeamRow = {
+  member: SprintCostMember;
+  profile?: SprintCostProfile;
+  skills: SprintCostSkill[];
+  capacity?: {
+    availableHours?: number | null;
+    absenceDays?: number | null;
+    effectiveHours?: number | null;
+  };
+  tasks: Task[];
+  loadPct: number | null;
+};
+
 function money(amount?: number | null, currency = "USD") {
-  if (amount == null) return "-";
+  if (amount == null || !Number.isFinite(amount)) return "-";
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
@@ -43,8 +87,12 @@ function money(amount?: number | null, currency = "USD") {
 }
 
 function number(value?: number | null, suffix = "") {
-  if (value == null) return "-";
+  if (value == null || !Number.isFinite(value)) return "-";
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)}${suffix}`;
+}
+
+function hours(minutes?: number | null) {
+  return minutes == null ? "-" : number(minutes / 60, "h");
 }
 
 function dateLabel(value?: string | null) {
@@ -67,8 +115,31 @@ function stageLabel(stage: CostTrendPoint["stage"] | CostForecast["stage"]) {
   return stage === "MID_SPRINT" ? "Mid-sprint" : "Initial";
 }
 
+function enumLabel(value?: string | null) {
+  if (!value) return "Not set";
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function initials(name?: string | null) {
+  if (!name) return "?";
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
 function forecastError(error: unknown) {
   return error instanceof Error ? error.message : "Could not generate the cost forecast.";
+}
+
+function costForMinutes(minutes: number, rate?: number | null, overtime = false) {
+  if (rate == null || !Number.isFinite(rate)) return null;
+  return (minutes / 60) * rate * (overtime ? 1.5 : 1);
 }
 
 export default function CostDashboard() {
@@ -89,8 +160,41 @@ export default function CostDashboard() {
     ? chosenSprintId!
     : (sprintList[0]?.id ?? "");
   const selectedSprint = sprintList.find((sprint) => sprint.id === sprintId) ?? null;
+
   const capacity = useSprintCapacity(selectedSprint?.id);
+  const taskBoard = useTaskBoard(projectId || undefined, selectedSprint?.id);
+  const velocity = useVelocityReport(projectId || undefined);
   const forecast = useForecastCost();
+
+  const members = useQuery({
+    queryKey: ["sprint-cost", "members", projectId],
+    queryFn: () => sprintCostApi.members(api, projectId),
+    enabled: status === "authenticated" && Boolean(projectId),
+  });
+
+  const deliveryMembers = (members.data ?? []).filter((member) => !member.stakeholder);
+  const profileQueries = useQueries({
+    queries: deliveryMembers.map((member) => ({
+      queryKey: ["sprint-cost", "profile", member.userId],
+      queryFn: () => sprintCostApi.developerProfile(api, member.userId),
+      enabled: status === "authenticated",
+      staleTime: 5 * 60_000,
+    })),
+  });
+  const skillQueries = useQueries({
+    queries: deliveryMembers.map((member) => ({
+      queryKey: ["sprint-cost", "skills", member.userId],
+      queryFn: () => sprintCostApi.developerSkills(api, member.userId),
+      enabled: status === "authenticated",
+      staleTime: 5 * 60_000,
+    })),
+  });
+
+  const timeEntries = useQuery({
+    queryKey: ["sprint-cost", "time-entries", selectedSprint?.id ?? ""],
+    queryFn: () => sprintCostApi.timeEntries(api, projectId, selectedSprint!.id),
+    enabled: status === "authenticated" && Boolean(projectId && selectedSprint),
+  });
 
   const history = useQuery({
     queryKey: queryKeys.ai.costHistory(selectedSprint?.id ?? ""),
@@ -98,15 +202,130 @@ export default function CostDashboard() {
     enabled: status === "authenticated" && Boolean(selectedSprint),
   });
 
+  const sprintTasks = taskBoard.data?.columns.flatMap((column) => column.tasks) ?? [];
+  const capacityByUser = new Map(
+    (capacity.data?.members ?? []).map((entry) => [entry.userId, entry]),
+  );
+  const memberDetails = deliveryMembers.map((member, index) => ({
+    member,
+    profile: profileQueries[index]?.data,
+    skills: skillQueries[index]?.data ?? [],
+  }));
+  const rates = memberDetails
+    .map((entry) => entry.profile?.hourlyRate)
+    .filter((rate): rate is number => rate != null && rate > 0);
+  const averageHourlyRate = rates.length > 0
+    ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length
+    : null;
+  const rateByUser = new Map(
+    memberDetails
+      .filter((entry) => entry.profile?.hourlyRate != null)
+      .map((entry) => [entry.member.userId, entry.profile!.hourlyRate!]),
+  );
+  const rateFor = (userId?: string | null) =>
+    (userId ? rateByUser.get(userId) : null) ?? averageHourlyRate;
+
+  const plannedEffortMinutes = sprintTasks.reduce(
+    (sum, task) => sum + (task.estimateMinutes ?? 0),
+    0,
+  );
+  const loggedEffortMinutes = sprintTasks.reduce(
+    (sum, task) => sum + (task.spentMinutes ?? 0),
+    0,
+  );
+  const plannedLaborCost = averageHourlyRate == null
+    ? null
+    : sprintTasks.reduce(
+        (sum, task) =>
+          sum + (costForMinutes(task.estimateMinutes ?? 0, rateFor(task.assigneeId)) ?? 0),
+        0,
+      );
+
+  const sprintTimeEntries = timeEntries.data?.content ?? [];
+  const actualCostFromEntries = averageHourlyRate == null
+    ? null
+    : sprintTimeEntries.reduce(
+        (sum, entry) =>
+          sum + (costForMinutes(entry.minutes, rateFor(entry.userId), entry.overtime) ?? 0),
+        0,
+      );
+  const actualCostFromTasks = averageHourlyRate == null
+    ? null
+    : sprintTasks.reduce(
+        (sum, task) =>
+          sum + (costForMinutes(task.spentMinutes ?? 0, rateFor(task.assigneeId)) ?? 0),
+        0,
+      );
+  const actualLaborCost = timeEntries.isSuccess ? actualCostFromEntries : actualCostFromTasks;
+  const overtimeMinutes = sprintTimeEntries
+    .filter((entry) => entry.overtime)
+    .reduce((sum, entry) => sum + entry.minutes, 0);
+
+  const timeEntriesByTask = new Map<string, SprintTimeEntry[]>();
+  for (const entry of sprintTimeEntries) {
+    timeEntriesByTask.set(entry.entityId, [
+      ...(timeEntriesByTask.get(entry.entityId) ?? []),
+      entry,
+    ]);
+  }
+
+  const requiredSkillNames = new Map<string, string>();
+  for (const task of sprintTasks) {
+    for (const skill of task.requiredSkills) {
+      requiredSkillNames.set(skill.toLowerCase(), skill);
+    }
+  }
+  const coveredSkills = new Set(
+    memberDetails.flatMap((entry) =>
+      entry.skills
+        .filter((skill) => skill.proficiency >= 3)
+        .map((skill) => skill.skillName.toLowerCase()),
+    ),
+  );
+  const requiredSkills = [...requiredSkillNames.entries()];
+  const coveredSkillCount = requiredSkills.filter(([key]) => coveredSkills.has(key)).length;
+  const skillCoverage = requiredSkills.length > 0
+    ? (coveredSkillCount / requiredSkills.length) * 100
+    : null;
+
+  const availabilityRates = memberDetails
+    .map((entry) => entry.profile?.availabilityRate)
+    .filter((rate): rate is number => rate != null);
+  const availabilityPct = availabilityRates.length > 0
+    ? (availabilityRates.reduce((sum, rate) => sum + rate, 0) / availabilityRates.length) * 100
+    : null;
+
+  const teamRows: TeamRow[] = memberDetails.map((entry) => {
+    const memberTasks = sprintTasks.filter((task) => task.assigneeId === entry.member.userId);
+    const openEstimatedMinutes = memberTasks
+      .filter((task) => task.status !== "DONE" && task.status !== "CANCELLED")
+      .reduce((sum, task) => sum + (task.estimateMinutes ?? 0), 0);
+    const memberCapacity = capacityByUser.get(entry.member.userId);
+    const effectiveHours = memberCapacity?.effectiveHours ?? 0;
+    return {
+      ...entry,
+      capacity: memberCapacity,
+      tasks: memberTasks,
+      loadPct: effectiveHours > 0 ? (openEstimatedMinutes / 60 / effectiveHours) * 100 : null,
+    };
+  });
+
   const visibleForecast = forecast.data?.sprintId === selectedSprint?.id ? forecast.data : null;
   const currency = visibleForecast?.currency ?? selectedProject?.currency ?? "USD";
   const remainingPoints = selectedSprint
     ? Math.max(0, selectedSprint.committedPoints - selectedSprint.completedPoints)
     : null;
+  const completionRate = selectedSprint
+    ? selectedSprint.committedPoints > 0
+      ? (selectedSprint.completedPoints / selectedSprint.committedPoints) * 100
+      : (selectedSprint.completionRate ?? 0)
+    : null;
   const totalAbsenceDays = capacity.data?.members.reduce(
     (sum, member) => sum + (member.absenceDays ?? 0),
     0,
   );
+  const latestHistory = history.data?.at(-1) ?? null;
+  const sprintBudget = selectedSprint?.budgetAmount ?? selectedProject?.budgetAmount ?? null;
   const pendingStage = forecast.isPending ? forecast.variables?.stage : null;
 
   const runForecast = (stage: "initial" | "mid-sprint") => {
@@ -117,22 +336,20 @@ export default function CostDashboard() {
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-              <DollarSign className="size-5 text-primary" aria-hidden />
-            </span>
-            <div>
-              <h1 className="text-3xl font-bold">Cost Estimation</h1>
-              <p className="text-sm text-muted-foreground">
-                Forecast sprint cost from the selected project and sprint plan.
-              </p>
-            </div>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+            <CircleDollarSign className="size-5 text-primary" aria-hidden />
+          </span>
+          <div>
+            <h1 className="text-3xl font-bold">Sprint Cost</h1>
+            <p className="text-sm text-muted-foreground">
+              Planning, live effort, team capacity, and forecast history for one sprint.
+            </p>
           </div>
         </div>
       </header>
 
-      <section className="rounded-lg border bg-card p-4 shadow-card" aria-label="Forecast scope">
+      <section className="rounded-lg border bg-card p-4 shadow-card" aria-label="Sprint cost scope">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-60 flex-1 space-y-1.5">
             <label htmlFor="cost-project" className="text-xs font-medium text-muted-foreground">
@@ -190,7 +407,9 @@ export default function CostDashboard() {
             >
               {pendingStage === "initial" ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : null}
+              ) : (
+                <LineChart className="size-4" aria-hidden />
+              )}
               Initial forecast
             </Button>
             <Button
@@ -200,7 +419,9 @@ export default function CostDashboard() {
             >
               {pendingStage === "mid-sprint" ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : null}
+              ) : (
+                <Activity className="size-4" aria-hidden />
+              )}
               Mid-sprint forecast
             </Button>
           </div>
@@ -210,11 +431,11 @@ export default function CostDashboard() {
       {status === "anonymous" ? (
         <EmptyState
           icon={Wallet}
-          title="Sign in to forecast costs"
-          description="Cost forecasting uses your project and sprint data, so it needs an active session."
+          title="Sign in to view sprint costs"
+          description="Sprint cost data belongs to your active organization."
           action={
             <Button asChild>
-              <Link href="/login?next=/cost">Sign in</Link>
+              <Link href="/login?next=/app">Sign in</Link>
             </Button>
           }
         />
@@ -223,129 +444,179 @@ export default function CostDashboard() {
       ) : projects.error ? (
         <ErrorState error={projects.error} onRetry={() => void projects.refetch()} />
       ) : projectList.length === 0 ? (
-        <EmptyState
-          icon={Wallet}
-          title="No projects yet"
-          description="Create a project first, then come back here to forecast sprint cost."
-        />
+        <EmptyState icon={Wallet} title="No projects yet" description="Create a project before planning sprint cost." />
       ) : sprints.error ? (
         <ErrorState error={sprints.error} onRetry={() => void sprints.refetch()} />
       ) : !selectedSprint ? (
-        <EmptyState
-          icon={CalendarDays}
-          title="No sprint selected"
-          description="Choose a project with at least one sprint to generate a forecast."
-        />
+        <EmptyState icon={CalendarDays} title="No sprint selected" description="Choose a project with at least one sprint." />
       ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard
-              label="Committed points"
-              value={number(selectedSprint.committedPoints)}
-              hint={`${number(selectedSprint.completedPoints)} delivered`}
-            />
-            <MetricCard
-              label="Remaining points"
-              value={number(remainingPoints)}
-              hint={`${number(selectedSprint.completionRate, "%")} complete`}
-            />
-            <MetricCard
-              label="Team capacity"
-              value={number(capacity.data?.totalEffectiveHours ?? selectedSprint.capacityHours, "h")}
-              hint={`${number(totalAbsenceDays)} absence days`}
-            />
-            <MetricCard
-              label="Sprint budget"
-              value={money(selectedSprint.budgetAmount ?? selectedProject?.budgetAmount, currency)}
-              hint={selectedSprint.plannedCostAmount != null
-                ? `${money(selectedSprint.plannedCostAmount, currency)} planned`
-                : "Budget variance appears after forecast"}
-            />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-            <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="forecast-result">
-              <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h2 id="forecast-result" className="text-lg font-semibold">
-                    Forecast result
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedSprint.name} · {dateLabel(selectedSprint.startDate)} to{" "}
-                    {dateLabel(selectedSprint.endDate)}
-                  </p>
-                </div>
+        <Tabs defaultValue="overview" className="gap-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-lg font-semibold">{selectedSprint.name}</h2>
                 <Badge className={cn("border-0", STATUS_TONE[selectedSprint.status])}>
-                  {selectedSprint.status.toLowerCase()}
+                  {enumLabel(selectedSprint.status)}
                 </Badge>
               </div>
-
-              {forecast.isError ? (
-                <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  {forecastError(forecast.error)}
-                </p>
-              ) : visibleForecast ? (
-                <CostWidget forecast={visibleForecast} />
-              ) : (
-                <EmptyState
-                  icon={LineChart}
-                  title="No forecast generated"
-                  description="Run an initial forecast during planning, then run a mid-sprint forecast after effort is logged."
-                />
-              )}
-            </section>
-
-            <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="sprint-inputs">
-              <h2 id="sprint-inputs" className="text-lg font-semibold">
-                Sprint inputs
-              </h2>
-              <dl className="mt-3 space-y-3 text-sm">
-                <InputRow label="Sprint number" value={selectedSprint.sequenceNo} />
-                <InputRow label="Team size" value={selectedSprint.teamSize ?? "-"} />
-                <InputRow label="Capacity points" value={number(selectedSprint.capacityPoints)} />
-                <InputRow label="Capacity hours" value={number(selectedSprint.capacityHours, "h")} />
-                <InputRow label="Story count" value={selectedSprint.storyCount ?? "-"} />
-                <InputRow
-                  label="Utilisation"
-                  value={capacity.data?.utilisationPct != null
-                    ? `${capacity.data.utilisationPct}%`
-                    : "-"}
-                />
-              </dl>
-            </section>
+              <p className="text-xs text-muted-foreground">
+                {dateLabel(selectedSprint.startDate)} to {dateLabel(selectedSprint.endDate)}
+              </p>
+            </div>
+            <TabsList className="max-w-full overflow-x-auto" variant="line">
+              <TabsTrigger value="overview"><Gauge data-icon="inline-start" /> Overview</TabsTrigger>
+              <TabsTrigger value="team"><Users data-icon="inline-start" /> Team</TabsTrigger>
+              <TabsTrigger value="tasks"><ListChecks data-icon="inline-start" /> Tasks</TabsTrigger>
+              <TabsTrigger value="history"><History data-icon="inline-start" /> History</TabsTrigger>
+            </TabsList>
           </div>
 
-          <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="forecast-history">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 id="forecast-history" className="flex items-center gap-2 text-lg font-semibold">
-                  <History className="size-4 text-primary" aria-hidden />
-                  Prediction history
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Stored forecasts for the selected sprint.
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={history.isFetching}
-                onClick={() => void history.refetch()}
-              >
-                Refresh
-              </Button>
+          <TabsContent value="overview" className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+              <MetricCard
+                label="Story points"
+                value={number(selectedSprint.committedPoints)}
+                hint={`${number(selectedSprint.completedPoints)} done · ${number(remainingPoints)} remaining`}
+              />
+              <MetricCard
+                label="Team capacity"
+                value={number(capacity.data?.totalEffectiveHours ?? selectedSprint.capacityHours, "h")}
+                hint={`${number(totalAbsenceDays)} absence days`}
+              />
+              <MetricCard
+                label="Average rate"
+                value={averageHourlyRate == null ? "-" : `${money(averageHourlyRate, currency)}/h`}
+                hint={`${teamRows.length} delivery member${teamRows.length === 1 ? "" : "s"}`}
+              />
+              <MetricCard
+                label="Planned labor"
+                value={money(plannedLaborCost, currency)}
+                hint={`${hours(plannedEffortMinutes)} estimated effort`}
+              />
+              <MetricCard
+                label="Actual labor"
+                value={money(actualLaborCost, currency)}
+                hint={`${hours(loggedEffortMinutes)} logged · ${hours(overtimeMinutes)} overtime`}
+              />
+              <MetricCard
+                label="Sprint budget"
+                value={money(sprintBudget, currency)}
+                hint={latestHistory ? `${money(latestHistory.forecastAmount, currency)} latest forecast` : "No forecast yet"}
+              />
             </div>
 
-            <HistoryTable
-              history={history.data ?? []}
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+              <section className="min-w-0 space-y-3" aria-labelledby="forecast-result">
+                <div>
+                  <h3 id="forecast-result" className="font-semibold">Forecast result</h3>
+                  <p className="text-xs text-muted-foreground">Planning estimate, not an invoice.</p>
+                </div>
+
+                {forecast.isError ? (
+                  <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                    {forecastError(forecast.error)}
+                  </p>
+                ) : visibleForecast ? (
+                  <CostWidget forecast={visibleForecast} />
+                ) : latestHistory ? (
+                  <StoredForecast forecast={latestHistory} currency={currency} />
+                ) : (
+                  <EmptyState icon={LineChart} title="No forecast generated" description="Use the forecast actions above for this sprint." />
+                )}
+              </section>
+
+              <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="planning-signals">
+                <h3 id="planning-signals" className="font-semibold">Planning signals</h3>
+                <div className="mt-4 space-y-4">
+                  <SignalRow
+                    label="Sprint completion"
+                    value={completionRate}
+                    detail={`${number(selectedSprint.completedPoints)} of ${number(selectedSprint.committedPoints)} points`}
+                    tone="bg-blue-500"
+                  />
+                  <SignalRow
+                    label="Developer availability"
+                    value={availabilityPct}
+                    detail={`${number(totalAbsenceDays)} planned absence days`}
+                    tone="bg-emerald-500"
+                  />
+                  <SignalRow
+                    label="Capacity utilisation"
+                    value={capacity.data?.utilisationPct}
+                    detail={`${number(capacity.data?.plannedPoints)} of ${number(capacity.data?.capacityPoints)} points`}
+                    tone={(capacity.data?.utilisationPct ?? 0) > 100 ? "bg-destructive" : "bg-amber-500"}
+                  />
+                  <SignalRow
+                    label="Skill coverage"
+                    value={skillCoverage}
+                    detail={requiredSkills.length > 0
+                      ? `${coveredSkillCount} of ${requiredSkills.length} required skills`
+                      : "No required skills listed"}
+                    tone="bg-teal-500"
+                  />
+                </div>
+                <dl className="mt-4 border-t pt-3 text-xs">
+                  <InputRow label="Average velocity" value={`${number(velocity.data?.averageVelocity)} points`} />
+                  <InputRow label="Sprint number" value={selectedSprint.sequenceNo} />
+                  <InputRow label="Tasks" value={sprintTasks.length} />
+                </dl>
+              </section>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="team">
+            <TeamTable
+              rows={teamRows}
               currency={currency}
-              isPending={history.isPending}
-              error={history.error}
-              onRetry={() => void history.refetch()}
+              isPending={members.isPending || profileQueries.some((query) => query.isPending)}
+              error={members.error}
+              onRetry={() => void members.refetch()}
             />
-          </section>
-        </>
+          </TabsContent>
+
+          <TabsContent value="tasks">
+            <TaskTable
+              tasks={sprintTasks}
+              currency={currency}
+              isPending={taskBoard.isPending}
+              error={taskBoard.error}
+              rateFor={rateFor}
+              timeEntriesByTask={timeEntriesByTask}
+            />
+          </TabsContent>
+
+          <TabsContent value="history">
+            <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="forecast-history">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 id="forecast-history" className="flex items-center gap-2 font-semibold">
+                    <History className="size-4 text-primary" aria-hidden />
+                    Prediction history
+                  </h3>
+                  <p className="text-xs text-muted-foreground">Every stored forecast for this sprint.</p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={history.isFetching}
+                  onClick={() => void history.refetch()}
+                >
+                  {history.isFetching ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                  Refresh
+                </Button>
+              </div>
+              <HistoryTable
+                history={history.data ?? []}
+                currency={currency}
+                budget={sprintBudget}
+                isPending={history.isPending}
+                error={history.error}
+                onRetry={() => void history.refetch()}
+              />
+            </section>
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );
@@ -363,42 +634,275 @@ function MetricCard({ label, value, hint }: { label: string; value: string; hint
 
 function InputRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b pb-2 last:border-b-0">
+    <div className="flex items-center justify-between gap-4 border-b py-2 first:pt-0 last:border-b-0 last:pb-0">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="font-medium tabular-nums">{value}</dd>
     </div>
   );
 }
 
+function SignalRow({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value?: number | null;
+  detail: string;
+  tone: string;
+}) {
+  const bounded = Math.max(0, Math.min(100, value ?? 0));
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium">{label}</span>
+        <span className="tabular-nums text-muted-foreground">
+          {value == null ? "-" : `${number(value)}%`}
+        </span>
+      </div>
+      <div
+        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"
+        role="meter"
+        aria-label={label}
+        aria-valuenow={value == null ? undefined : Math.round(value)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div className={cn("h-full rounded-full", tone)} style={{ width: `${bounded}%` }} />
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function StoredForecast({ forecast, currency }: { forecast: CostTrendPoint; currency: string }) {
+  return (
+    <div className="rounded-lg border bg-card p-4 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Latest stored forecast</p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums">
+            {money(forecast.forecastAmount, currency)}
+          </p>
+        </div>
+        <Badge variant="outline">{stageLabel(forecast.stage)}</Badge>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground tabular-nums">
+        {forecast.lowerBound != null && forecast.upperBound != null
+          ? `Likely ${money(forecast.lowerBound, currency)} to ${money(forecast.upperBound, currency)}`
+          : "No prediction interval stored"}
+      </p>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Generated {dateTimeLabel(forecast.snapshotAt)}
+      </p>
+    </div>
+  );
+}
+
+function TeamTable({
+  rows,
+  currency,
+  isPending,
+  error,
+  onRetry,
+}: {
+  rows: TeamRow[];
+  currency: string;
+  isPending: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  if (isPending) return <Skeleton className="h-64 w-full" />;
+  if (error) return <ErrorState error={error} onRetry={onRetry} />;
+  if (rows.length === 0) {
+    return <EmptyState icon={Users} title="No delivery team" description="Add delivery members to the selected project." />;
+  }
+
+  return (
+    <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="team-cost-plan">
+      <div className="mb-4">
+        <h3 id="team-cost-plan" className="font-semibold">Team cost and workload</h3>
+        <p className="text-xs text-muted-foreground">Rates, availability, capacity, allocation, and sprint load.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[70rem] text-left text-sm">
+          <thead className="border-b text-xs text-muted-foreground">
+            <tr>
+              <th className="py-2 pr-3 font-medium">Developer</th>
+              <th className="px-3 py-2 font-medium">Role</th>
+              <th className="px-3 py-2 font-medium">Availability</th>
+              <th className="px-3 py-2 font-medium">Capacity</th>
+              <th className="px-3 py-2 font-medium">Allocation</th>
+              <th className="px-3 py-2 font-medium">Workload</th>
+              <th className="px-3 py-2 font-medium">Hourly rate</th>
+              <th className="py-2 pl-3 font-medium">Skills</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.member.userId} className="border-b align-top last:border-b-0">
+                <td className="py-3 pr-3">
+                  <div className="flex items-center gap-2">
+                    <Avatar className="size-8">
+                      <AvatarImage src={row.member.avatarUrl ?? undefined} alt="" />
+                      <AvatarFallback className="text-xs">{initials(row.member.fullName)}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="max-w-44 truncate font-medium">{row.member.fullName ?? "Unnamed member"}</p>
+                      <p className="max-w-44 truncate text-[11px] text-muted-foreground">{row.member.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                  <p>{enumLabel(row.member.projectRole)}</p>
+                  <p className="text-[11px] text-muted-foreground">{enumLabel(row.profile?.seniority)}</p>
+                </td>
+                <td className="px-3 py-3 tabular-nums">
+                  {row.profile ? `${number(row.profile.availabilityRate * 100)}%` : "-"}
+                </td>
+                <td className="px-3 py-3 tabular-nums">
+                  <p>{number(row.capacity?.effectiveHours, "h")}</p>
+                  <p className="text-[11px] text-muted-foreground">{number(row.capacity?.absenceDays)} days absent</p>
+                </td>
+                <td className="px-3 py-3 tabular-nums">{row.member.allocationPct}%</td>
+                <td className="px-3 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-10 tabular-nums">{row.loadPct == null ? "-" : `${number(row.loadPct)}%`}</span>
+                    {row.loadPct != null ? (
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn("h-full rounded-full", row.loadPct > 100 ? "bg-destructive" : "bg-primary")}
+                          style={{ width: `${Math.min(100, row.loadPct)}%` }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{row.tasks.length} assigned tasks</p>
+                </td>
+                <td className="px-3 py-3 font-medium tabular-nums">
+                  {row.profile?.hourlyRate == null ? "-" : `${money(row.profile.hourlyRate, currency)}/h`}
+                </td>
+                <td className="py-3 pl-3">
+                  <div className="flex max-w-72 flex-wrap gap-1">
+                    {row.skills.length > 0 ? row.skills.slice(0, 5).map((skill) => (
+                      <Badge key={skill.skillId} variant="outline" className="font-normal">
+                        {skill.skillName} · L{skill.proficiency}
+                      </Badge>
+                    )) : <span className="text-muted-foreground">No skills listed</span>}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function TaskTable({
+  tasks,
+  currency,
+  isPending,
+  error,
+  rateFor,
+  timeEntriesByTask,
+}: {
+  tasks: Task[];
+  currency: string;
+  isPending: boolean;
+  error: unknown;
+  rateFor: (userId?: string | null) => number | null | undefined;
+  timeEntriesByTask: Map<string, SprintTimeEntry[]>;
+}) {
+  if (isPending) return <Skeleton className="h-64 w-full" />;
+  if (error) return <ErrorState error={error} />;
+  if (tasks.length === 0) {
+    return <EmptyState icon={ListChecks} title="No sprint tasks" description="Tasks assigned to this sprint appear here." />;
+  }
+
+  return (
+    <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="sprint-cost-tasks">
+      <div className="mb-4">
+        <h3 id="sprint-cost-tasks" className="font-semibold">Sprint task costs</h3>
+        <p className="text-xs text-muted-foreground">Planned hours, logged effort, required skills, and labor cost.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[66rem] text-left text-sm">
+          <thead className="border-b text-xs text-muted-foreground">
+            <tr>
+              <th className="py-2 pr-3 font-medium">Task</th>
+              <th className="px-3 py-2 font-medium">Assignee</th>
+              <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Required skills</th>
+              <th className="px-3 py-2 font-medium">Planned</th>
+              <th className="px-3 py-2 font-medium">Logged</th>
+              <th className="py-2 pl-3 text-right font-medium">Actual cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tasks.map((task) => {
+              const entries = timeEntriesByTask.get(task.id) ?? [];
+              const entryCost = entries.reduce(
+                (sum, entry) =>
+                  sum + (costForMinutes(entry.minutes, rateFor(entry.userId), entry.overtime) ?? 0),
+                0,
+              );
+              const taskCost = entries.length > 0
+                ? entryCost
+                : costForMinutes(task.spentMinutes ?? 0, rateFor(task.assigneeId));
+              return (
+                <tr key={task.id} className="border-b align-top last:border-b-0">
+                  <td className="py-3 pr-3">
+                    <p className="max-w-64 font-medium">{task.title}</p>
+                    <p className="text-[11px] text-muted-foreground">{task.itemKey} · {enumLabel(task.type)}</p>
+                  </td>
+                  <td className="px-3 py-3">{task.assigneeName ?? "Unassigned"}</td>
+                  <td className="px-3 py-3">
+                    <Badge className={cn("border-0 font-normal", TASK_STATUS_TONE[task.status])}>
+                      {enumLabel(task.status)}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex max-w-56 flex-wrap gap-1">
+                      {task.requiredSkills.length > 0 ? task.requiredSkills.map((skill) => (
+                        <Badge key={skill} variant="outline" className="font-normal">{skill}</Badge>
+                      )) : <span className="text-muted-foreground">None</span>}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 tabular-nums">{hours(task.estimateMinutes)}</td>
+                  <td className="px-3 py-3 tabular-nums">{hours(task.spentMinutes)}</td>
+                  <td className="py-3 pl-3 text-right font-medium tabular-nums">{money(taskCost, currency)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function HistoryTable({
   history,
   currency,
+  budget,
   isPending,
   error,
   onRetry,
 }: {
   history: CostTrendPoint[];
   currency: string;
+  budget?: number | null;
   isPending: boolean;
   error: unknown;
   onRetry: () => void;
 }) {
-  if (isPending) {
-    return <Skeleton className="mt-4 h-32 w-full" />;
-  }
-
-  if (error) {
-    return <ErrorState error={error} onRetry={onRetry} />;
-  }
-
+  if (isPending) return <Skeleton className="mt-4 h-32 w-full" />;
+  if (error) return <ErrorState error={error} onRetry={onRetry} />;
   if (history.length === 0) {
-    return (
-      <EmptyState
-        icon={History}
-        title="No history yet"
-        description="Every forecast you generate for this sprint will be stored here."
-      />
-    );
+    return <EmptyState icon={History} title="No prediction history" description="Forecast records for this sprint appear here." />;
   }
 
   return (
@@ -417,19 +921,15 @@ function HistoryTable({
           {history.map((point) => (
             <tr key={`${point.stage}-${point.snapshotAt}`} className="border-b last:border-b-0">
               <td className="py-2 pr-3 text-muted-foreground">{dateTimeLabel(point.snapshotAt)}</td>
-              <td className="px-3 py-2">
-                <Badge variant="outline">{stageLabel(point.stage)}</Badge>
-              </td>
-              <td className="px-3 py-2 font-medium tabular-nums">
-                {money(point.forecastAmount, currency)}
-              </td>
+              <td className="px-3 py-2"><Badge variant="outline">{stageLabel(point.stage)}</Badge></td>
+              <td className="px-3 py-2 font-medium tabular-nums">{money(point.forecastAmount, currency)}</td>
               <td className="px-3 py-2 text-muted-foreground tabular-nums">
                 {point.lowerBound != null && point.upperBound != null
                   ? `${money(point.lowerBound, currency)} to ${money(point.upperBound, currency)}`
                   : "-"}
               </td>
               <td className="py-2 pl-3 text-muted-foreground tabular-nums">
-                {money(point.budgetAmount, currency)}
+                {money(point.budgetAmount ?? budget, currency)}
               </td>
             </tr>
           ))}

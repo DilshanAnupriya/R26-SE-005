@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertTriangle, CalendarDays, LayoutGrid, CheckCircle2, Cpu, Wand2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  CircleDollarSign,
+  Cpu,
+  LayoutGrid,
+  Wand2,
+} from "lucide-react";
 import { useSession } from "@/components/session-provider";
 import { useProjects } from "@/features/projects/hooks";
 import { Card, CardHeader, ProgressBar } from "@/components/design/surfaces";
@@ -119,6 +127,23 @@ export default function DashboardPage() {
             </div>
             <Button size="sm" variant="outline" asChild className="ml-4 shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">
               <Link href={`/app/${orgSlug}/allocation?tab=simulator`}>Run Simulator</Link>
+            </Button>
+          </Card>
+
+          <Card className="p-5 flex items-center justify-between hover:bg-surface-2 transition-all duration-200 border border-line">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 flex items-center justify-center text-emerald-500 shrink-0">
+                <CircleDollarSign className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-ink">Sprint Cost Forecast</h3>
+                <p className="text-sm text-ink-3 mt-0.5 leading-normal">
+                  Estimate sprint cost from team rates, capacity, workload, and live progress.
+                </p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" asChild className="ml-4 shrink-0">
+              <Link href={`/app/${orgSlug}/sprint-cost`}>View Forecast</Link>
             </Button>
           </Card>
         </div>
