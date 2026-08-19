@@ -28,6 +28,9 @@ public class OptimizerRankingService {
     private OptimizerAllocationRepository allocationRepository;
 
     @Autowired
+    private OptimizerTaskService taskService;
+
+    @Autowired
     private RestTemplate restTemplate;
 
     @Value("${python.api.url:http://localhost:8000/predict}")
@@ -180,6 +183,7 @@ public class OptimizerRankingService {
         Sprint sprint = sprintRepository.findById(sprintId)
                 .orElseThrow(() -> new RuntimeException("Sprint not found with ID: " + sprintId));
 
+        taskService.syncSprintStories(sprintId);
         List<Task> allTasks = taskRepository.findBySprintId(sprintId);
         List<Task> tasks = allTasks.stream()
                 .filter(t -> t.getDeveloper() == null)

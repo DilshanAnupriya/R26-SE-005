@@ -60,6 +60,7 @@ interface DeveloperRec {
   id: number;           // allocation id
   developerId: number;
   devId: string;
+  name: string;
   rankPosition: number;
   finalScore: number;
   skillMatchScore: number;
@@ -95,11 +96,16 @@ function buildGroups(data: any[]): TaskGroup[] {
 
   data.forEach((alloc: any) => {
     const taskRawId: number = alloc.task.id;
+    const profile = alloc.developer?.profile;
+    const fullName = profile
+      ? `${profile.firstName ?? profile.first_name ?? ''} ${profile.lastName ?? profile.last_name ?? ''}`.trim()
+      : (alloc.developer?.name || alloc.developer?.dev_id);
 
     const rec: DeveloperRec = {
       id: alloc.id,
       developerId: alloc.developer.id,
       devId: alloc.developer.dev_id,
+      name: fullName || alloc.developer.dev_id,
       rankPosition: alloc.rankPosition,
       finalScore: Math.round(alloc.finalScore ?? 0),
       skillMatchScore: alloc.skillMatchScore ?? 0,
@@ -182,7 +188,7 @@ function DeveloperWorkloadModal({
           <div className="flex items-center gap-3">
             <div className="relative w-10 h-10 rounded-full overflow-hidden border border-slate-700">
               <Image
-                src={`https://ui-avatars.com/api/?name=${devId}&background=random`}
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(devId)}&background=random`}
                 alt={devId}
                 fill
                 unoptimized
@@ -239,7 +245,7 @@ function DeveloperWorkloadModal({
 
         <button
           onClick={onClose}
-          className="w-full mt-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+          className="w-full mt-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium transition-colors"
         >
           Close
         </button>
@@ -342,21 +348,25 @@ function DevCard({
       <div className="flex items-center gap-3 mb-3">
         <div 
           className="relative w-9 h-9 rounded-full overflow-hidden border border-slate-700 shrink-0 hover:ring-2 ring-primary/40 transition-all"
-          onClick={(e) => { e.stopPropagation(); onViewWorkload(rec.developerId, rec.devId); }}
+          onClick={(e) => { e.stopPropagation(); onViewWorkload(rec.developerId, rec.name || rec.devId); }}
           title="Click to view developer workload"
         >
           <Image
-            src={`https://ui-avatars.com/api/?name=${rec.devId}&background=random`}
-            alt={`Developer ${rec.devId}`}
+            src={`https://ui-avatars.com/api/?name=${encodeURIComponent(rec.name || rec.devId)}&background=random`}
+            alt={rec.name || rec.devId}
             fill
             unoptimized
             className="object-cover"
           />
         </div>
-        <div className="min-w-0 flex-1" onClick={(e) => { e.stopPropagation(); onViewWorkload(rec.developerId, rec.devId); }}>
-          <div className="text-sm font-semibold text-foreground truncate hover:text-primary transition-colors">{rec.devId}</div>
-          <div className="text-xs text-slate-400">
-            Avail: {rec.availability.toFixed(0)}%
+        <div className="min-w-0 flex-1" onClick={(e) => { e.stopPropagation(); onViewWorkload(rec.developerId, rec.name || rec.devId); }}>
+          <div className="text-sm font-semibold text-foreground truncate hover:text-primary transition-colors">
+            {rec.name || rec.devId}
+          </div>
+          <div className="text-xs text-slate-400 flex items-center gap-1.5">
+            <span className="text-[10px] text-muted-foreground font-mono">{rec.devId}</span>
+            <span>•</span>
+            <span>Avail: {rec.availability.toFixed(0)}%</span>
           </div>
         </div>
         <div className="ml-auto text-right shrink-0">

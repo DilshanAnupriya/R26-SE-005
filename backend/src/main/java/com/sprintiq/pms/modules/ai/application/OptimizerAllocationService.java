@@ -19,6 +19,9 @@ public class OptimizerAllocationService {
     @Autowired
     private OptimizerTaskRepository taskRepository;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     public Allocation getAllocationById(Long id) {
         return allocationRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Allocation not found with id: " + id));
@@ -75,7 +78,63 @@ public class OptimizerAllocationService {
         developer.setAvailability(newAvailability);
         developerRepository.save(developer);
 
-        // 5. Persist and return the approved allocation
+        // 5. Also update core story assignee in PostgreSQL if task_type corresponds to an itemKey
+        try {
+            String taskType = task.getTask_type();
+            if (taskType != null && taskType.contains(":")) {
+                String itemKey = taskType.substring(0, taskType.indexOf(":")).trim();
+                String devEmail = (developer.getProfile() != null && developer.getProfile().getEmail() != null) ? developer.getProfile().getEmail() : "";
+                String devFullName = "";
+                if (developer.getProfile() != null) {
+                    String fn = developer.getProfile().getFirstName() != null ? developer.getProfile().getFirstName() : "";
+                    String ln = developer.getProfile().getLastName() != null ? developer.getProfile().getLastName() : "";
+                    devFullName = (fn + " " + ln).trim();
+                }
+
+                List<java.util.UUID> userIds = jdbcTemplate.query(
+                        "SELECT u.id FROM users u " +
+                        "WHERE (u.email IS NOT NULL AND LOWER(u.email) = LOWER(?)) " +
+                        "   OR (u.full_name IS NOT NULL AND LOWER(u.full_name) = LOWER(?)) " +
+                        "   OR (? != '' AND LOWER(u.full_name) LIKE LOWER(?)) LIMIT 1",
+                        (rs, rowNum) -> (java.util.UUID) rs.getObject(1),
+                        devEmail,
+                        devFullName,
+                        devFullName,
+                        "%" + devFullName + "%"
+                );
+                if (userIds.isEmpty() && task.getOrganizationId() != null) {
+                    userIds = jdbcTemplate.query(
+                            "SELECT m.user_id FROM org_members m WHERE m.organization_id = ? LIMIT 1",
+                            (rs, rowNum) -> (java.util.UUID) rs.getObject(1),
+                            task.getOrganizationId()
+                    );
+                }
+                if (!userIds.isEmpty()) {
+                    java.util.UUID assigneeUid = userIds.get(0);
+                    jdbcTemplate.update(
+                            "UPDATE stories SET assignee_id = ?, updated_at = NOW() WHERE item_key = ?",
+                            assigneeUid,
+                            itemKey
+                    );
+                    try {
+                        jdbcTemplate.update(
+                                "INSERT INTO project_members (id, organization_id, project_id, user_id, project_role, is_stakeholder, allocation_pct, created_at, updated_at, version) " +
+                                "SELECT gen_random_uuid(), s.organization_id, s.project_id, ?, 'DEVELOPER', false, 100, NOW(), NOW(), 0 " +
+                                "FROM stories s WHERE s.item_key = ? " +
+                                "ON CONFLICT DO NOTHING",
+                                assigneeUid,
+                                itemKey
+                        );
+                    } catch (Exception memberEx) {
+                        // Project member insert fallback
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Note: Core story assignee update: " + e.getMessage());
+        }
+
+        // 6. Persist and return the approved allocation
         return allocationRepository.save(allocation);
     }
 

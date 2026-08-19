@@ -1,8 +1,8 @@
 "use client";
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { FeatureDashboard } from "@/components/shared/FeatureDashboard";
-import { Users, Bot, Wand2 } from "lucide-react";
+import Link from "next/link";
+import { Users, Bot, Wand2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AIAllocationPage from "@/app/(dashboard)/ai-allocation/page";
 import DevelopersPage from "@/app/(dashboard)/developers/page";
@@ -26,84 +26,80 @@ export default function AllocationDashboard() {
     router.replace(`${pathname}?${params.toString()}`);
   };
 
-  // Dynamic header configuration based on the active tab
-  const getTabConfig = () => {
-    switch (activeTab) {
-      case "allocation":
-        return {
-          title: "AI Task Allocation",
-          description: "Review and approve AI-ranked developer recommendations for each task.",
-          icon: Bot,
-        };
-      case "developers":
-        return {
-          title: "Developer Intelligence",
-          description: "Manage team skills, track performance metrics, and monitor workloads.",
-          icon: Users,
-        };
-      case "simulator":
-        return {
-          title: "What-If Simulator",
-          description: "Simulate and test allocation scenarios to predict sprint velocity and team health.",
-          icon: Wand2,
-        };
-    }
-  };
-
-  const { title, description, icon } = getTabConfig();
-
   return (
-    <FeatureDashboard title={title} description={description} icon={icon}>
-      <div className="space-y-6">
+    <div className="min-h-screen bg-background text-foreground antialiased p-6 lg:p-10">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div>
+          <Link
+            href="/app"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back to Workspace & Projects
+          </Link>
+          
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+                <Bot className="w-7 h-7 text-primary" />
+                Resource Allocation Intelligence
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Intelligent developer ranking, skill-task matching, and what-if simulation for agile delivery.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Navigation Tabs Bar */}
-        <div className="flex border-b border-card-border pb-px">
-          <div className="flex space-x-1 bg-slate-950/40 p-1.5 rounded-xl border border-card-border/50">
+        <div className="flex border-b border-border pb-px">
+          <div className="flex space-x-1 bg-muted/40 p-1 rounded-xl border border-border">
             <button
               onClick={() => handleTabChange("allocation")}
               className={cn(
-                "flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200",
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200",
                 activeTab === "allocation"
-                  ? "bg-primary text-white shadow-lg shadow-primary/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
-              <Bot className="w-4 h-4" />
+              <Bot className="w-3.5 h-3.5" />
               AI Allocation
             </button>
             <button
               onClick={() => handleTabChange("developers")}
               className={cn(
-                "flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200",
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200",
                 activeTab === "developers"
-                  ? "bg-primary text-white shadow-lg shadow-primary/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
-              <Users className="w-4 h-4" />
-              Developers
+              <Users className="w-3.5 h-3.5" />
+              Developer Intelligence
             </button>
             <button
               onClick={() => handleTabChange("simulator")}
               className={cn(
-                "flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200",
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200",
                 activeTab === "simulator"
-                  ? "bg-primary text-white shadow-lg shadow-primary/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
-              <Wand2 className="w-4 h-4" />
+              <Wand2 className="w-3.5 h-3.5" />
               What-If Simulator
             </button>
           </div>
         </div>
 
         {/* Active View Content Area */}
-        <div className="mt-6">
+        <div className="pt-2">
           {activeTab === "allocation" && <AIAllocationPage isEmbedded={true} />}
           {activeTab === "developers" && <DevelopersPage isEmbedded={true} />}
           {activeTab === "simulator" && <SimulatorPage isEmbedded={true} />}
         </div>
       </div>
-    </FeatureDashboard>
+    </div>
   );
 }

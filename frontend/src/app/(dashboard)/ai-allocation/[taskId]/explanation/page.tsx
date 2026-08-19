@@ -93,9 +93,11 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
   const mlPred = explanation.breakdown.ml_prediction;
   const skillMatch = explanation.breakdown.skill_match;
   const workloadBal = explanation.breakdown.workload_balance;
-
-  const devName = `${allocation.developer.dev_id}`;
-  const avatar = `https://ui-avatars.com/api/?name=${allocation.developer.dev_id}&background=random`;
+  const profile = allocation.developer?.profile;
+  const devName = profile
+    ? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim()
+    : allocation.developer?.dev_id;
+  const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(devName || allocation.developer.dev_id)}&background=random`;
 
   return (
     <div className="min-h-screen bg-background p-6 lg:p-10">
@@ -276,28 +278,34 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
           <motion.div variants={item} className="mt-8 pt-8 border-t border-slate-800">
             <h3 className="text-xl font-semibold text-foreground mb-4">Alternative Recommendations</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {alternatives.map((alt: any) => (
-                <div key={alt.id} className="bg-slate-900/40 p-4 rounded-xl border border-slate-800 hover:border-slate-700 transition-colors">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="relative w-10 h-10 rounded-full overflow-hidden border border-slate-700">
-                      <Image 
-                        src={`https://ui-avatars.com/api/?name=${alt.developer.dev_id}&background=random`} 
-                        alt={`Developer ${alt.developer.dev_id}`} 
-                        fill 
-                        unoptimized 
-                        className="object-cover" 
-                      />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-foreground flex items-center gap-2">
-                        Developer {alt.developer.dev_id}
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                          #{alt.rankPosition}
-                        </span>
+              {alternatives.map((alt: any) => {
+                const altProfile = alt.developer?.profile;
+                const altName = altProfile
+                  ? `${altProfile.firstName ?? altProfile.first_name ?? ''} ${altProfile.lastName ?? altProfile.last_name ?? ''}`.trim()
+                  : alt.developer?.dev_id;
+
+                return (
+                  <div key={alt.id} className="bg-slate-900/40 p-4 rounded-xl border border-slate-800 hover:border-slate-700 transition-colors">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="relative w-10 h-10 rounded-full overflow-hidden border border-slate-700">
+                        <Image 
+                          src={`https://ui-avatars.com/api/?name=${encodeURIComponent(altName || alt.developer.dev_id)}&background=random`} 
+                          alt={altName || alt.developer.dev_id} 
+                          fill 
+                          unoptimized 
+                          className="object-cover" 
+                        />
                       </div>
-                      <div className="text-xs text-emerald-400 font-semibold">{alt.finalScore}% Match Score</div>
+                      <div>
+                        <div className="text-sm font-medium text-foreground flex items-center gap-2">
+                          {altName || alt.developer.dev_id}
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                            #{alt.rankPosition}
+                          </span>
+                        </div>
+                        <div className="text-xs text-emerald-400 font-semibold">{alt.finalScore}% Match Score</div>
+                      </div>
                     </div>
-                  </div>
                   <div className="text-xs text-slate-400 space-y-1">
                     <div className="flex justify-between">
                       <span>Skill Match:</span>
@@ -319,9 +327,10 @@ export default function ExplanationPage({ params }: { params: Promise<{ taskId: 
                     View Details
                   </Link>
                 </div>
-              ))}
-            </div>
-          </motion.div>
+              );
+            })}
+          </div>
+        </motion.div>
         )}
 
       </div>

@@ -225,12 +225,19 @@ function TaskCard({
         </div>
 
         {task.assigneeId ? (
-          <Avatar className="size-6 shrink-0">
-            <AvatarImage src={task.assigneeAvatarUrl ?? undefined} alt="" />
-            <AvatarFallback className="text-[10px]">
-              {initials(task.assigneeName)}
-            </AvatarFallback>
-          </Avatar>
+          <div className="flex items-center gap-1.5 shrink-0 bg-primary/10 border border-primary/20 rounded-full py-0.5 px-2" title={task.assigneeName ?? undefined}>
+            <Avatar className="size-4 shrink-0">
+              <AvatarImage src={task.assigneeAvatarUrl ?? undefined} alt={task.assigneeName ?? ""} />
+              <AvatarFallback className="text-[8px] bg-primary text-white font-medium">
+                {initials(task.assigneeName)}
+              </AvatarFallback>
+            </Avatar>
+            {task.assigneeName ? (
+              <span className="text-[11px] font-medium max-w-[90px] truncate text-foreground">
+                {task.assigneeName}
+              </span>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

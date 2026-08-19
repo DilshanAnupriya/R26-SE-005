@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Radio } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,16 @@ export default function BoardPage({
 
   const project = useProject(projectId);
   const sprints = useSprints(projectId);
+
+  useEffect(() => {
+    if (!sprintFilter && sprints.data?.content) {
+      const active = sprints.data.content.find((s) => s.status === "ACTIVE");
+      if (active) {
+        setSprintFilter(active.id);
+      }
+    }
+  }, [sprints.data, sprintFilter]);
+
   const board = useTaskBoard(projectId, sprintFilter || undefined);
   const move = useMoveTask(projectId);
   const { connected } = useRealtime();

@@ -117,8 +117,8 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
         if (Array.isArray(devsData)) {
           setDevelopers(devsData.map((d: any) => ({
             id: d.id,
-            firstName: d.profile?.firstName || "Unknown",
-            lastName: d.profile?.lastName || "Dev",
+            firstName: d.profile?.firstName || d.profile?.first_name || d.dev_id || "Developer",
+            lastName: d.profile?.lastName || d.profile?.last_name || "",
             specialization: d.profile?.specialization || "Fullstack",
             efficiency: d.consistency || 1.0,
             capacity: (d.experience_level || 2) * 10 

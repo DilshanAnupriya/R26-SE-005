@@ -129,11 +129,14 @@ export default function DevelopersPage({ isEmbedded = false }: { isEmbedded?: bo
           else if (dev.experience_level >= 3) role = "Mid-level Engineer";
           else role = "Junior Engineer";
 
-          const fullName = dev.profile ? `${dev.profile.firstName} ${dev.profile.lastName}` : dev.dev_id;
+          const profile = dev.profile;
+          const fullName = profile
+            ? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim()
+            : dev.dev_id;
 
           return {
             id: dev.id,
-            name: fullName,
+            name: fullName || dev.dev_id,
             role,
             avatar: `https://ui-avatars.com/api/?name=${fullName}&background=random`,
             skills,
@@ -252,8 +255,7 @@ export default function DevelopersPage({ isEmbedded = false }: { isEmbedded?: bo
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
           {developers.map((dev) => (
-            <Link key={dev.id} href={`/developers/${dev.id}`}>
-
+            <div key={dev.id}>
               <motion.div variants={item} className="glass rounded-xl border border-card-border overflow-hidden group hover:border-primary/50 transition-colors duration-300 h-full">
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4">
@@ -325,7 +327,7 @@ export default function DevelopersPage({ isEmbedded = false }: { isEmbedded?: bo
                   </div>
                 </div>
               </motion.div>
-            </Link>
+            </div>
           ))}
         </motion.div>
         )}
