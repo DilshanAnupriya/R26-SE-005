@@ -23,8 +23,57 @@ public class OptimizerSprintService {
     @Autowired
     private OptimizerDeveloperRepository developerRepository;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     public List<Sprint> getAllSprints() {
+        syncFromCoreSprints();
         return sprintRepository.findAll();
+    }
+
+    public Sprint createSprint(Sprint sprint) {
+        return sprintRepository.save(sprint);
+    }
+
+    public void syncFromCoreSprints() {
+        try {
+            List<java.util.Map<String, Object>> coreSprints = jdbcTemplate.queryForList(
+                    "SELECT s.id, s.name, s.status, s.start_date, s.end_date, s.organization_id, p.project_key " +
+                    "FROM sprints s JOIN projects p ON p.id = s.project_id " +
+                    "WHERE s.deleted_at IS NULL"
+            );
+            for (java.util.Map<String, Object> cs : coreSprints) {
+                String sprintName = cs.get("name") != null ? cs.get("name").toString() : "Sprint";
+                String projKey = cs.get("project_key") != null ? cs.get("project_key").toString() : "";
+                String displayId = sprintName + (!projKey.isEmpty() ? " (" + projKey + ")" : "");
+                java.util.UUID orgId = cs.get("organization_id") != null ? (java.util.UUID) cs.get("organization_id") : null;
+                String status = cs.get("status") != null ? cs.get("status").toString() : "PLANNED";
+                java.sql.Date startD = (java.sql.Date) cs.get("start_date");
+                java.sql.Date endD = (java.sql.Date) cs.get("end_date");
+
+                java.util.Optional<Sprint> existing = sprintRepository.findBySprintId(displayId);
+                if (existing.isEmpty()) {
+                    existing = sprintRepository.findBySprintId(sprintName);
+                }
+                if (existing.isEmpty()) {
+                    Sprint newSprint = Sprint.builder()
+                            .sprintId(displayId)
+                            .status(status)
+                            .startDate(startD != null ? startD.toLocalDate() : null)
+                            .endDate(endD != null ? endD.toLocalDate() : null)
+                            .organizationId(orgId)
+                            .build();
+                    sprintRepository.save(newSprint);
+                } else {
+                    Sprint s = existing.get();
+                    s.setStatus(status);
+                    s.setSprintId(displayId);
+                    sprintRepository.save(s);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Note: Core sprint sync: " + e.getMessage());
+        }
     }
 
     public Sprint getSprintById(Long id) {

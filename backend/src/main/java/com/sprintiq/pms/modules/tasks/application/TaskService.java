@@ -53,6 +53,7 @@ public class TaskService {
     private final ActivityService activityService;
     private final NotificationService notifications;
     private final RealtimePublisher realtime;
+    private final com.sprintiq.pms.modules.backlog.domain.StoryRepository storyRepository;
 
     // ------------------------------------------------------------------ queries
 
@@ -174,6 +175,70 @@ public class TaskService {
 
     @Transactional
     public TaskResponse changeStatus(UUID taskId, UpdateTaskStatusRequest request) {
+        Optional<Task> optTask = taskRepository.findByIdAndDeletedAtIsNull(taskId);
+        if (optTask.isEmpty()) {
+            Optional<com.sprintiq.pms.modules.backlog.domain.Story> optStory = storyRepository.findByIdAndDeletedAtIsNull(taskId);
+            if (optStory.isPresent()) {
+                com.sprintiq.pms.modules.backlog.domain.Story story = optStory.get();
+                if (request.workflowStateId() != null) {
+                    story.setWorkflowStateId(request.workflowStateId());
+                }
+                com.sprintiq.pms.modules.backlog.domain.StoryStatus newStatus = switch (request.status()) {
+                    case IN_PROGRESS -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_PROGRESS;
+                    case DONE -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.DONE;
+                    case CANCELLED -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.CANCELLED;
+                    default -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.BACKLOG;
+                };
+                story.setStatus(newStatus);
+                story = storyRepository.save(story);
+
+                int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+                var assignee = story.getAssigneeId() == null ? null
+                        : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
+
+                realtime.projectEvent(story.getProjectId(), "task.status_changed",
+                        java.util.Map.of("taskId", String.valueOf(story.getId()), "status", request.status().name()));
+
+                return new TaskResponse(
+                        story.getId(),
+                        story.getProjectId(),
+                        story.getId(),
+                        null,
+                        story.getSprintId(),
+                        story.getWorkflowStateId(),
+                        story.getItemKey(),
+                        story.getTitle(),
+                        story.getDescription(),
+                        TaskType.TASK,
+                        request.status(),
+                        story.getPriority(),
+                        com.sprintiq.pms.common.domain.Severity.MINOR,
+                        story.getAssigneeId(),
+                        assignee != null ? assignee.fullName() : null,
+                        assignee != null ? assignee.avatarUrl() : null,
+                        com.sprintiq.pms.modules.tasks.domain.AssignmentSource.MANUAL,
+                        null,
+                        story.getReporterId(),
+                        estimateMins > 0 ? estimateMins : null,
+                        0,
+                        null,
+                        false,
+                        java.math.BigDecimal.valueOf(3.0),
+                        List.of(),
+                        null,
+                        story.getRank(),
+                        story.isBlocked(),
+                        story.getBlockedReason(),
+                        (short) 0,
+                        0,
+                        null,
+                        null,
+                        story.getCreatedAt(),
+                        story.getUpdatedAt()
+                );
+            }
+        }
+
         Task task = require(taskId);
         TaskStatus previous = task.getStatus();
 

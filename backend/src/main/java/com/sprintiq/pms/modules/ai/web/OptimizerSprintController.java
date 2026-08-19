@@ -25,6 +25,11 @@ public class OptimizerSprintController {
         return sprintService.getSprintById(id);
     }
 
+    @PostMapping
+    public Sprint createSprint(@RequestBody Sprint sprint) {
+        return sprintService.createSprint(sprint);
+    }
+
     @PostMapping("/{id}/complete")
     public Sprint completeSprint(@PathVariable Long id) {
         return sprintService.completeSprint(id);

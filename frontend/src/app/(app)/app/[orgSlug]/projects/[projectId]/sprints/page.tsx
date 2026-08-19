@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, CalendarDays, Play, Square } from "lucide-react";
+import { ArrowLeft, Plus, CalendarDays, Play, Square, Bot, Sparkles, Check, Trash2, ListTodo } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CreateSprintDialog } from "@/features/sprints/components/create-sprint-dialog";
@@ -22,6 +22,7 @@ import { LineChart, chartPalette } from "@/components/charts";
 import { CostWidget } from "@/features/ai/components/cost-widget";
 import { RiskCard } from "@/features/ai/components/risk-card";
 import { VelocityPanel } from "@/features/ai/components/velocity-panel";
+import { useBacklog } from "@/features/backlog/hooks";
 import {
   useAssessSprintRisk,
   useForecastCost,
@@ -35,6 +36,8 @@ import {
   useSprintCapacity,
   useSprints,
   useStartSprint,
+  useAddSprintItems,
+  useRemoveSprintItem,
 } from "@/features/sprints/hooks";
 import type { Sprint } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
@@ -166,9 +169,12 @@ function SprintDetail({
   const burndown = useBurndown(sprint.id);
   const capacity = useSprintCapacity(sprint.id);
   const risk = useSprintRisk(sprint.id);
+  const backlog = useBacklog(projectId, { size: 50 });
 
   const start = useStartSprint(projectId);
   const complete = useCompleteSprint(projectId);
+  const addItems = useAddSprintItems(projectId);
+  const removeItem = useRemoveSprintItem(projectId);
   const assessRisk = useAssessSprintRisk();
   const forecastCost = useForecastCost();
   const predictVelocity = usePredictVelocity();
@@ -176,8 +182,13 @@ function SprintDetail({
   const [closing, setClosing] = useState(false);
   const [strategy, setStrategy] = useState<"BACKLOG" | "NEXT_SPRINT">("BACKLOG");
   const [summary, setSummary] = useState("");
+  const [addingFromBacklog, setAddingFromBacklog] = useState(false);
+  const [selectedStoryIds, setSelectedStoryIds] = useState<string[]>([]);
 
   const points = burndown.data?.points ?? [];
+  const allStories = backlog.data?.content ?? [];
+  const sprintStories = allStories.filter((s) => s.sprintId === sprint.id);
+  const unassignedStories = allStories.filter((s) => !s.sprintId);
 
   return (
     <div className="space-y-4">
@@ -194,6 +205,13 @@ function SprintDetail({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm" className="bg-primary hover:bg-primary/90 text-white gap-1.5 shadow-md shadow-primary/20">
+            <Link href="/allocation?tab=allocation">
+              <Bot className="size-3.5" />
+              AI Resource Allocation
+            </Link>
+          </Button>
+
           <Button asChild size="sm" variant="secondary">
             <Link href={`/app/${orgSlug}/projects/${projectId}/board?sprint=${sprint.id}`}>
               Open board
@@ -230,6 +248,151 @@ function SprintDetail({
           hint={sprint.endDate ? `Ends ${sprint.endDate}` : undefined}
         />
       </div>
+
+      {/* Stories committed to this Sprint */}
+      <section className="rounded-lg border p-4 space-y-3" aria-labelledby="sprint-stories-heading">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 id="sprint-stories-heading" className="text-sm font-medium">
+              Committed Stories & Tasks ({sprintStories.length})
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              These items are scheduled for this sprint and analyzed by the AI Resource Allocation engine.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setSelectedStoryIds([]);
+              setAddingFromBacklog(true);
+            }}
+            disabled={unassignedStories.length === 0}
+          >
+            <Plus className="size-3.5 mr-1" />
+            Add from Backlog ({unassignedStories.length})
+          </Button>
+        </div>
+
+        {sprintStories.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            <ListTodo className="size-8 mx-auto text-muted-foreground/40 mb-2" />
+            <p>No stories committed to this sprint yet.</p>
+            {unassignedStories.length > 0 ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-3"
+                onClick={() => {
+                  setSelectedStoryIds([]);
+                  setAddingFromBacklog(true);
+                }}
+              >
+                <Plus className="size-3.5 mr-1" />
+                Select stories from backlog
+              </Button>
+            ) : (
+              <p className="text-xs mt-1">Create stories in the Backlog tab first.</p>
+            )}
+          </div>
+        ) : (
+          <ul className="divide-y rounded-lg border">
+            {sprintStories.map((story) => (
+              <li key={story.id} className="flex items-center justify-between p-3 text-sm hover:bg-muted/40 transition-colors">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="w-16 shrink-0 text-xs text-muted-foreground font-mono">{story.itemKey}</span>
+                  <span className="truncate font-medium">{story.title}</span>
+                  {story.blocked && (
+                    <Badge variant="destructive" className="shrink-0 text-2xs">blocked</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <Badge variant="outline" className="tabular-nums">
+                    {story.storyPoints ? `${story.storyPoints} pts` : "Unsized"}
+                  </Badge>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 text-muted-foreground hover:text-destructive"
+                    title="Return to Backlog"
+                    disabled={removeItem.isPending}
+                    onClick={() => removeItem.mutate({ sprintId: sprint.id, storyId: story.id })}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Add from Backlog Dialog */}
+      <Dialog open={addingFromBacklog} onOpenChange={setAddingFromBacklog}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Add Stories to {sprint.name}</DialogTitle>
+            <DialogDescription>
+              Select unassigned backlog items to commit to this sprint.
+            </DialogDescription>
+          </DialogHeader>
+
+          {unassignedStories.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">No unassigned backlog stories available.</p>
+          ) : (
+            <div className="space-y-2 py-2 max-h-[50vh] overflow-y-auto pr-1">
+              {unassignedStories.map((story) => {
+                const isSelected = selectedStoryIds.includes(story.id);
+                return (
+                  <div
+                    key={story.id}
+                    onClick={() => {
+                      setSelectedStoryIds((prev) =>
+                        isSelected ? prev.filter((id) => id !== story.id) : [...prev, story.id]
+                      );
+                    }}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all",
+                      isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:bg-muted/40"
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={cn(
+                        "size-4 rounded border flex items-center justify-center text-white text-xs",
+                        isSelected ? "bg-primary border-primary" : "border-muted-foreground"
+                      )}>
+                        {isSelected && <Check className="size-3" />}
+                      </div>
+                      <span className="text-xs font-mono text-muted-foreground">{story.itemKey}</span>
+                      <span className="text-sm font-medium truncate">{story.title}</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs shrink-0">
+                      {story.storyPoints ? `${story.storyPoints} pts` : "—"}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAddingFromBacklog(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={selectedStoryIds.length === 0 || addItems.isPending}
+              onClick={() => {
+                addItems.mutate(
+                  { sprintId: sprint.id, storyIds: selectedStoryIds },
+                  { onSuccess: () => setAddingFromBacklog(false) }
+                );
+              }}
+            >
+              {addItems.isPending ? "Adding…" : `Add ${selectedStoryIds.length} Story${selectedStoryIds.length === 1 ? "" : "s"}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <section className="rounded-lg border p-4" aria-labelledby="burndown-heading">
         <h3 id="burndown-heading" className="text-sm font-medium">
