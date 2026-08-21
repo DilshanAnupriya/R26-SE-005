@@ -47,9 +47,22 @@ public class CostForecastService {
         ProjectContextSource.ProjectContext project = projects.contextFor(sprint.projectId());
 
         BigDecimal blendedRate = developers.averageHourlyRate(sprint.projectId());
+        List<DeveloperFeatureSource.DeveloperFeatures> team = developers.candidatesFor(sprint.projectId());
         long effortMinutes = effort.sprintEffortMinutes(sprintId);
         long overtimeMinutes = effort.sprintOvertimeMinutes(sprintId);
+        long sprintTaskCount = effort.sprintTaskCount(sprintId);
+        long totalTasks = sprintTaskCount > 0 ? sprintTaskCount : Math.max(sprint.storyCount(), 1L);
+        long concurrentAssignments = effort.concurrentAssignments(sprint.projectId());
         BigDecimal budget = sprint.budgetAmount() != null ? sprint.budgetAmount() : project.budgetAmount();
+        BigDecimal overtimeHours = BigDecimal.valueOf(overtimeMinutes)
+                .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
+        BigDecimal actualCostSoFar = actualCost(effortMinutes, overtimeHours, blendedRate);
+        BigDecimal availabilityRate = averageAvailability(team);
+        BigDecimal skillMatchRatio = skillMatchRatio(effort.sprintRequiredSkills(sprintId), team);
+        BigDecimal avgSeniority = averageSeniority(team);
+        int modelTeamSize = sprint.teamSize() != null && sprint.teamSize() > 0
+                ? sprint.teamSize()
+                : Math.max(team.size(), 1);
 
         // A mid-sprint forecast asked for on day one has nothing to extrapolate from;
         // answering it with the initial model is more honest than dividing by a rounding
@@ -60,14 +73,28 @@ public class CostForecastService {
                 : stage;
 
         FeatureVector vector = FeatureVector.create()
+                // Features used by the trained SprintCost initial and mid-sprint bundles.
+                .put("team_id", project.key())
+                .putNumber("total_tasks", totalTasks)
+                .putNumber("planned_story_points", sprint.committedPoints())
+                .putNumber("completed_story_points", sprint.completedPoints())
+                .putNumber("total_effort_minutes", effortMinutes)
+                .putNumber("sprint_number", sprint.sequenceNo())
+                .putNumber("historical_velocity_avg", sprint.rollingVelocity())
+                .putNumber("developer_availability_rate", availabilityRate)
+                .putNumber("absence_days_total", sprint.absenceDays())
+                .putNumber("overtime_hours_total", overtimeHours)
+                .putNumber("concurrent_assignments", concurrentAssignments)
+                .putNumber("skill_match_ratio", skillMatchRatio)
+                .putNumber("avg_seniority_level", avgSeniority)
+                // Compatibility and audit fields used by the existing mock provider and UI.
                 .putNumber("capacity_hours", sprint.capacityHours())
                 .putNumber("capacity_points", sprint.capacityPoints())
-                .putNumber("team_size", sprint.teamSize())
+                .putNumber("team_size", modelTeamSize)
                 .putNumber("duration_days", sprint.durationDays())
                 .putNumber("blended_hourly_rate", blendedRate)
                 .putNumber("effort_minutes", effortMinutes)
-                .putNumber("overtime_hours", BigDecimal.valueOf(overtimeMinutes)
-                        .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP))
+                .putNumber("overtime_hours", overtimeHours)
                 .putNumber("absence_days", sprint.absenceDays())
                 .putNumber("elapsed_fraction", sprint.elapsedFraction())
                 .putNumber("committed_points", sprint.committedPoints())
@@ -76,6 +103,7 @@ public class CostForecastService {
                 .putNumber("story_count", sprint.storyCount())
                 .putNumber("budget_amount", budget)
                 .putNumber("planned_cost_amount", sprint.plannedCostAmount())
+                .putNumber("actual_cost_so_far", actualCostSoFar)
                 .put("currency", project.currency() == null ? "USD" : project.currency());
 
         AiPrediction prediction = inference.infer(new AiInferenceService.InferenceCommand(
@@ -182,5 +210,65 @@ public class CostForecastService {
 
     private BigDecimal scaled(BigDecimal value) {
         return value == null ? null : value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal actualCost(long effortMinutes, BigDecimal overtimeHours, BigDecimal hourlyRate) {
+        BigDecimal hours = BigDecimal.valueOf(effortMinutes)
+                .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
+        BigDecimal base = hours.multiply(hourlyRate);
+        BigDecimal overtimePremium = overtimeHours.multiply(hourlyRate).multiply(BigDecimal.valueOf(0.5));
+        return base.add(overtimePremium).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal averageAvailability(List<DeveloperFeatureSource.DeveloperFeatures> team) {
+        if (team.isEmpty()) {
+            return BigDecimal.ONE;
+        }
+        BigDecimal total = team.stream()
+                .map(member -> member.availabilityRate() == null ? BigDecimal.ONE : member.availabilityRate())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return total.divide(BigDecimal.valueOf(team.size()), 4, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal skillMatchRatio(List<String> requiredSkills,
+                                       List<DeveloperFeatureSource.DeveloperFeatures> team) {
+        List<String> distinct = requiredSkills == null ? List.of() : requiredSkills.stream()
+                .filter(skill -> skill != null && !skill.isBlank())
+                .map(skill -> skill.toLowerCase(java.util.Locale.ROOT))
+                .distinct()
+                .toList();
+        if (distinct.isEmpty()) {
+            return BigDecimal.ONE;
+        }
+        long covered = distinct.stream()
+                .filter(skill -> team.stream()
+                        .anyMatch(member -> member.skills().getOrDefault(skill, (short) 0) >= 3))
+                .count();
+        return BigDecimal.valueOf(covered)
+                .divide(BigDecimal.valueOf(distinct.size()), 4, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal averageSeniority(List<DeveloperFeatureSource.DeveloperFeatures> team) {
+        if (team.isEmpty()) {
+            return BigDecimal.valueOf(2);
+        }
+        BigDecimal total = team.stream()
+                .map(member -> BigDecimal.valueOf(seniorityLevel(member.seniority())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return total.divide(BigDecimal.valueOf(team.size()), 2, RoundingMode.HALF_UP);
+    }
+
+    private int seniorityLevel(String seniority) {
+        if (seniority == null) {
+            return 2;
+        }
+        return switch (seniority) {
+            case "INTERN", "JUNIOR" -> 1;
+            case "MID" -> 2;
+            case "SENIOR" -> 3;
+            case "LEAD" -> 4;
+            case "PRINCIPAL" -> 5;
+            default -> 2;
+        };
     }
 }
