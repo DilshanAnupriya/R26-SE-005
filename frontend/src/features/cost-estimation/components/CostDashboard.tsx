@@ -327,6 +327,10 @@ export default function CostDashboard() {
   const latestHistory = history.data?.at(-1) ?? null;
   const sprintBudget = selectedSprint?.budgetAmount ?? selectedProject?.budgetAmount ?? null;
   const pendingStage = forecast.isPending ? forecast.variables?.stage : null;
+  const maxLoadPct = teamRows.reduce(
+    (max, row) => Math.max(max, row.loadPct ?? 0),
+    0,
+  );
 
   const runForecast = (stage: "initial" | "mid-sprint") => {
     if (!selectedSprint) return;
@@ -517,9 +521,41 @@ export default function CostDashboard() {
                     {forecastError(forecast.error)}
                   </p>
                 ) : visibleForecast ? (
-                  <CostWidget forecast={visibleForecast} />
+                  <div className="space-y-4">
+                    <CostWidget forecast={visibleForecast} />
+                    <CostExplanationPanel
+                      forecast={visibleForecast}
+                      plannedLaborCost={plannedLaborCost}
+                      actualLaborCost={actualLaborCost}
+                      overtimeMinutes={overtimeMinutes}
+                      availabilityPct={availabilityPct}
+                      totalAbsenceDays={totalAbsenceDays}
+                      skillCoverage={skillCoverage}
+                      coveredSkillCount={coveredSkillCount}
+                      requiredSkillCount={requiredSkills.length}
+                      maxLoadPct={maxLoadPct}
+                      budget={sprintBudget}
+                      currency={currency}
+                    />
+                  </div>
                 ) : latestHistory ? (
-                  <StoredForecast forecast={latestHistory} currency={currency} />
+                  <div className="space-y-4">
+                    <StoredForecast forecast={latestHistory} currency={currency} />
+                    <CostExplanationPanel
+                      forecast={latestHistory}
+                      plannedLaborCost={plannedLaborCost}
+                      actualLaborCost={actualLaborCost}
+                      overtimeMinutes={overtimeMinutes}
+                      availabilityPct={availabilityPct}
+                      totalAbsenceDays={totalAbsenceDays}
+                      skillCoverage={skillCoverage}
+                      coveredSkillCount={coveredSkillCount}
+                      requiredSkillCount={requiredSkills.length}
+                      maxLoadPct={maxLoadPct}
+                      budget={sprintBudget}
+                      currency={currency}
+                    />
+                  </div>
                 ) : (
                   <EmptyState icon={LineChart} title="No forecast generated" description="Use the forecast actions above for this sprint." />
                 )}
@@ -618,6 +654,152 @@ export default function CostDashboard() {
           </TabsContent>
         </Tabs>
       )}
+    </div>
+  );
+}
+
+function CostExplanationPanel({
+  forecast,
+  plannedLaborCost,
+  actualLaborCost,
+  overtimeMinutes,
+  availabilityPct,
+  totalAbsenceDays,
+  skillCoverage,
+  coveredSkillCount,
+  requiredSkillCount,
+  maxLoadPct,
+  budget,
+  currency,
+}: {
+  forecast: CostForecast | CostTrendPoint;
+  plannedLaborCost?: number | null;
+  actualLaborCost?: number | null;
+  overtimeMinutes: number;
+  availabilityPct?: number | null;
+  totalAbsenceDays?: number | null;
+  skillCoverage?: number | null;
+  coveredSkillCount: number;
+  requiredSkillCount: number;
+  maxLoadPct: number;
+  budget?: number | null;
+  currency: string;
+}) {
+  const budgetVariance = budget != null ? forecast.forecastAmount - budget : null;
+  const drivers = "drivers" in forecast ? forecast.drivers : [];
+  const explanation = "explanation" in forecast ? forecast.explanation : null;
+  const confidence = "confidence" in forecast ? forecast.confidence : null;
+  const variancePct = "varianceVsBudgetPct" in forecast ? forecast.varianceVsBudgetPct : null;
+  const errorMarginAmount = "errorMarginAmount" in forecast ? forecast.errorMarginAmount : null;
+  const topDrivers = drivers
+    .slice()
+    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+    .slice(0, 4);
+
+  return (
+    <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="cost-explanation">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id="cost-explanation" className="font-semibold">Cost explanation</h3>
+          <p className="text-xs text-muted-foreground">
+            Breakdown of the planning signals behind this forecast.
+          </p>
+        </div>
+        <Badge variant="outline">{stageLabel(forecast.stage)}</Badge>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ExplanationMetric label="Forecast amount" value={money(forecast.forecastAmount, currency)} />
+        <ExplanationMetric label="Planned labor" value={money(plannedLaborCost, currency)} />
+        <ExplanationMetric label="Actual labor so far" value={money(actualLaborCost, currency)} />
+        <ExplanationMetric label="Overtime signal" value={hours(overtimeMinutes)} detail="Logged as overtime" />
+        <ExplanationMetric
+          label="Availability signal"
+          value={availabilityPct == null ? "-" : `${number(availabilityPct)}%`}
+          detail={`${number(totalAbsenceDays)} planned absence days`}
+        />
+        <ExplanationMetric
+          label="Skill coverage"
+          value={skillCoverage == null ? "-" : `${number(skillCoverage)}%`}
+          detail={requiredSkillCount > 0
+            ? `${coveredSkillCount} of ${requiredSkillCount} required skills covered`
+            : "No required skills listed"}
+        />
+        <ExplanationMetric
+          label="Workload pressure"
+          value={maxLoadPct > 0 ? `${number(maxLoadPct)}%` : "-"}
+          detail="Highest developer load"
+        />
+        <ExplanationMetric
+          label="Budget variance"
+          value={budgetVariance == null ? "-" : money(budgetVariance, currency)}
+          detail={variancePct == null ? "Set budget for variance" : `${variancePct}% vs budget`}
+          tone={budgetVariance != null && budgetVariance > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}
+        />
+        <ExplanationMetric
+          label="Prediction interval"
+          value={forecast.lowerBound != null && forecast.upperBound != null
+            ? `${money(forecast.lowerBound, currency)} - ${money(forecast.upperBound, currency)}`
+            : "-"}
+          detail={errorMarginAmount == null ? "No margin stored" : `± ${money(errorMarginAmount, currency)}`}
+        />
+        <ExplanationMetric
+          label="Confidence"
+          value={confidence == null ? "-" : `${number(confidence * 100)}%`}
+          detail={confidence == null ? "History rows do not expose confidence" : "Model confidence"}
+        />
+      </div>
+
+      {explanation ? (
+        <p className="mt-4 rounded-md bg-muted/50 p-3 text-sm leading-relaxed text-muted-foreground">
+          {explanation}
+        </p>
+      ) : null}
+
+      <div className="mt-4 border-t pt-3">
+        <h4 className="text-sm font-medium">Top model drivers</h4>
+        {topDrivers.length > 0 ? (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {topDrivers.map((driver) => (
+              <div key={`${driver.feature}-${driver.label}`} className="rounded-md border bg-background/40 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium">{driver.label ?? driver.feature}</p>
+                  <Badge variant="outline" className="shrink-0 tabular-nums">
+                    {driver.contribution > 0 ? "+" : ""}{number(driver.contribution)}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {driver.detail ?? enumLabel(driver.direction)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Detailed model drivers are available after generating a fresh forecast. Stored history keeps the cost trend and interval.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ExplanationMetric({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: string;
+}) {
+  return (
+    <div className="rounded-md border bg-background/40 p-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={cn("mt-1 text-lg font-semibold tabular-nums", tone)}>{value}</p>
+      {detail ? <p className="mt-1 text-[11px] text-muted-foreground">{detail}</p> : null}
     </div>
   );
 }
