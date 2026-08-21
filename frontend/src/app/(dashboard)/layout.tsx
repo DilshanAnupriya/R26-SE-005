@@ -8,8 +8,8 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen bg-background text-foreground antialiased">
       <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <header className="h-16 border-b border-card-border bg-background/50 backdrop-blur-md sticky top-0 z-10 px-8 flex items-center justify-between">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-card-border bg-background/50 px-4 backdrop-blur-md lg:px-8">
           <h2 className="text-lg font-semibold text-slate-400">Dashboard</h2>
           <div className="flex items-center space-x-4">
             <div className="px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-accent text-xs font-medium">
@@ -17,7 +17,7 @@ export default function DashboardLayout({
             </div>
           </div>
         </header>
-        <main className="p-8 overflow-auto">
+        <main className="min-w-0 overflow-x-hidden p-4 pb-24 lg:p-8">
           {children}
         </main>
       </div>
