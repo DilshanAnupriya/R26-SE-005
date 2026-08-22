@@ -1,0 +1,14 @@
+# Everything the default install has, plus what is only needed to (re)train the
+# communication-collaboration classifier or to serve its fine-tuned weights.
+#
+# Kept apart from requirements.txt because torch is about 2.5GB and the service
+# runs without it: CollaborationRiskPredictor falls back to the composite
+# equation its corpus was labelled with and reports scorer=composite_rules.
+-r requirements.txt
+
+# Install torch first so pip resolves the right CPU/GPU wheel for the machine:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.4
+transformers>=4.46
+datasets>=2.19
+accelerate>=0.30

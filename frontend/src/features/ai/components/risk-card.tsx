@@ -17,7 +17,23 @@ const SEVERITY_TONE: Record<RiskSeverity, string> = {
 const RISK_LABEL = {
   OVER_BUDGET: "Over-budget risk",
   REQUIREMENT_CHANGE: "Requirement change risk",
+  COMMUNICATION_COLLABORATION: "Communication & collaboration risk",
 } as const;
+
+/**
+ * What each model is actually reading, for the tooltip on the heading.
+ *
+ * <p>Over-budget and requirement change are self-describing; the third is not. "High
+ * collaboration risk" invites the reading that somebody has judged the team, when what
+ * happened is that five things were counted.</p>
+ */
+const RISK_BASIS: Record<keyof typeof RISK_LABEL, string> = {
+  OVER_BUDGET: "Planned effort against capacity, velocity history and carry-over.",
+  REQUIREMENT_CHANGE: "Story detail, acceptance criteria and this project's churn history.",
+  COMMUNICATION_COLLABORATION:
+    "Reply time on task comments, comments per task, days with nothing recorded, " +
+    "blocked tasks and reopened tasks.",
+};
 
 /**
  * One Model 2 verdict.
@@ -56,7 +72,9 @@ export function RiskCard({
               className={cn("size-4", assessment.atRisk ? "text-amber-600" : "text-emerald-600")}
               aria-hidden
             />
-            {RISK_LABEL[assessment.riskType]}
+            <span title={RISK_BASIS[assessment.riskType]}>
+              {RISK_LABEL[assessment.riskType]}
+            </span>
           </h3>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-2xl font-semibold tabular-nums">{pct}%</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
-import { Gauge, Info, Sparkles } from "lucide-react";
+import { Gauge, Info, MessageSquare, Sparkles } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { CostWidget } from "@/features/ai/components/cost-widget";
@@ -45,7 +45,8 @@ export default function AiInsightsPage({ params }: { params: Promise<{ orgSlug: 
             AI insights
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Velocity, risk and cost for the current sprint — each with the reasoning behind it.
+            Velocity, cost, and the three risk models — effort, requirements and how the
+            team is coordinating — each with the reasoning behind it.
           </p>
         </div>
 
@@ -109,6 +110,27 @@ export default function AiInsightsPage({ params }: { params: Promise<{ orgSlug: 
             {insights.data.risk?.requirementChange ? (
               <RiskCard assessment={insights.data.risk.requirementChange} />
             ) : null}
+
+            {insights.data.risk?.communicationCollaboration ? (
+              <RiskCard assessment={insights.data.risk.communicationCollaboration} />
+            ) : insights.data.risk ? (
+              // Named rather than omitted. The other two panels disappear when their
+              // model fails; this one is absent when the sprint genuinely has nothing
+              // to read, and a team that sees two risk cards where there were three
+              // assumes something broke.
+              <article className="rounded-lg border border-dashed p-3">
+                <h3 className="flex items-center gap-1.5 text-sm font-medium">
+                  <MessageSquare className="size-4 text-muted-foreground" aria-hidden />
+                  Communication &amp; collaboration risk
+                </h3>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Nothing to read yet. This model works from task comments, blocked
+                  tasks and reopened work — with none of those recorded, a score would
+                  say the team is coordinating well when what it means is that the
+                  sprint has not started.
+                </p>
+              </article>
+            ) : null}
           </div>
 
           {insights.data.estimationCoverage ? (
@@ -143,7 +165,11 @@ export default function AiInsightsPage({ params }: { params: Promise<{ orgSlug: 
             </section>
           ) : null}
 
-          {!insights.data.velocity && !insights.data.cost && !insights.data.risk?.overBudget ? (
+          {!insights.data.velocity &&
+          !insights.data.cost &&
+          !insights.data.risk?.overBudget &&
+          !insights.data.risk?.requirementChange &&
+          !insights.data.risk?.communicationCollaboration ? (
             <EmptyState
               icon={Gauge}
               title="Nothing to report yet"
