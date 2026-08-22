@@ -16,6 +16,8 @@ public interface DeveloperProfileRepository extends JpaRepository<DeveloperProfi
 
     List<DeveloperProfile> findByUserIdIn(Collection<UUID> userIds);
 
+    List<DeveloperProfile> findByOrganizationId(UUID organizationId);
+
     /**
      * Blended hourly rate across a set of people, ignoring those without one.
      *
