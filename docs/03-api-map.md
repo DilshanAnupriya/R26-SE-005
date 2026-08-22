@@ -53,6 +53,8 @@ Model 3 from a measurement into a negotiation. Per-user workload is served by
 `GET|POST /{id}/members` · `DELETE /{id}/members/{userId}` ·
 `GET|POST /{id}/milestones` · `PATCH|DELETE /milestones/{id}` ·
 `GET|POST /{id}/requirements` · `PATCH|DELETE /requirements/{id}` ·
+`GET|POST /{id}/requirement-changes` · `DELETE /requirement-changes/{id}` ·
+`GET /requirement-changes/types` (the weights, so the form and the ledger agree) ·
 `GET|POST /{id}/workflow-states` · `GET|POST /{id}/labels`
 
 ## Backlog `/projects/{projectId}/backlog`
@@ -75,6 +77,8 @@ Model 3 from a measurement into a negotiation. Per-user workload is served by
 `POST /` · `GET /` (`projectId,storyId,sprintId,assigneeId,status,priority,blocked,dueBefore`) ·
 `GET|PATCH|DELETE /{id}` · `PATCH /{id}/status` · `PATCH /{id}/assign` · `PATCH /{id}/rank` ·
 `POST /{id}/subtasks` · `GET|POST /{id}/watchers` · `POST /{id}/block` · `POST /{id}/unblock` ·
+`POST /{id}/reopen` (rework: counts the reopen, resumes the work clock where it froze) ·
+`POST /{id}/overdue` (the board reporting an expired countdown; idempotent per task) ·
 `GET|POST /{id}/time-entries` · `POST /timer/start` · `POST /timer/stop`
 ### Boards
 `GET /projects/{id}/board` (kanban, grouped by workflow state, WIP limits)
@@ -101,6 +105,7 @@ permission boundary exists to control. Supported reports: `velocity`, `burndown`
 
 ## AI `/ai`
 *Implemented, plus `GET /risk/sprint/{id}`, `/risk/sprint/{id}/history`,
+`/risk/sprint/{id}/daily-trend`, `/risk/sprint/{id}/adjustments`, `/risk/compare`,
 `POST /risk/{id}/acknowledge`, `/allocation/story/{id}/suggest`,
 `GET /cost/sprint/{id}/history` and `POST /insights/sprint/{id}/refresh`.*
 | Method | Path |
@@ -113,6 +118,9 @@ permission boundary exists to control. Supported reports: `velocity`, `burndown`
 | GET | `/predictions` (`modelCode,entityType,entityId,from,to`) · `/predictions/{id}` |
 | POST | `/predictions/{id}/feedback` (ACCEPT/OVERRIDE/DISMISS) |
 | GET | `/models` · `PATCH /models/{code}` (admin) |
+| GET | `/risk/sprint/{id}/daily-trend` (one point per sprint day, forward-filled) |
+| GET | `/risk/sprint/{id}/adjustments` (the board activity behind an adjusted score) |
+| GET | `/risk/compare` (`sprintIds`, 2–5, side by side) |
 | GET | `/insights/project/{id}` · `/insights/sprint/{id}` (aggregated dashboard) |
 
 ## Governance

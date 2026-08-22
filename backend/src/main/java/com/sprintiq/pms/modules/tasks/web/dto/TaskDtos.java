@@ -113,7 +113,23 @@ public final class TaskDtos {
             Instant startedAt,
             Instant completedAt,
             Instant createdAt,
-            Instant updatedAt) {}
+            Instant updatedAt,
+            /**
+             * Work-clock state, sent raw rather than as a single "seconds elapsed"
+             * figure. A running clock has no correct scalar value — whatever the server
+             * computes is stale by the time it renders — so the client is given the
+             * banked total and the start of the current run and ticks it itself.
+             */
+            long elapsedSeconds,
+            /** Null while the clock is paused, which is exactly when the task is terminal. */
+            Instant runningSince) {}
+
+    @Schema(name = "ReopenTaskRequest",
+            description = "Send a finished task back for rework. Both fields are optional.")
+    public record ReopenTaskRequest(
+            @Schema(description = "Where the task lands. Defaults to IN_REVIEW; must not be terminal.")
+            TaskStatus status,
+            @Size(max = 500) String reason) {}
 
     // ---------------------------------------------------------------- watchers
 

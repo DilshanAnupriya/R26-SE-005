@@ -43,6 +43,7 @@ public class AiController {
     private final CostForecastService cost;
     private final AiFeedbackService feedback;
     private final AiInsightsService insights;
+    private final SprintRiskTrendService riskTrend;
 
     // -------------------------------------------------------- M1 · estimation
 
@@ -122,6 +123,38 @@ public class AiController {
     public List<RiskAssessmentResponse> riskHistory(@PathVariable UUID sprintId,
                                                     @RequestParam RiskType riskType) {
         return risk.history(sprintId, riskType);
+    }
+
+    @Operation(summary = "Risk per day of the sprint",
+            description = "One point per calendar day, forward-filled from the last scoring at or "
+                    + "before 17:00 UTC that day. Days before the first assessment and days still "
+                    + "to come are marked hasData=false so the chart draws them as gaps rather "
+                    + "than as zero risk. Today's point carries the board adjustments, so the end "
+                    + "of the line agrees with the gauges.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @GetMapping("/risk/sprint/{sprintId}/daily-trend")
+    public List<DailyRiskPoint> dailyRiskTrend(@PathVariable UUID sprintId) {
+        return riskTrend.dailyTrend(sprintId);
+    }
+
+    @Operation(summary = "The board activity behind an adjusted risk score",
+            description = "Newest first. Every point in the difference between the model's own "
+                    + "figure and the one on screen has a row here.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @GetMapping("/risk/sprint/{sprintId}/adjustments")
+    public List<RiskAdjustmentResponse> riskAdjustments(@PathVariable UUID sprintId) {
+        return risk.adjustments(sprintId);
+    }
+
+    @Operation(summary = "Compare the risk profile of several sprints",
+            description = "Two to five sprints side by side. A sprint that was never assessed "
+                    + "comes back with null scores rather than being dropped — that it was never "
+                    + "looked at is itself worth seeing.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @GetMapping("/risk/compare")
+    public List<SprintRiskComparison> compareSprintRisk(
+            @RequestParam List<UUID> sprintIds) {
+        return riskTrend.compare(sprintIds);
     }
 
     @Operation(summary = "Acknowledge a risk",

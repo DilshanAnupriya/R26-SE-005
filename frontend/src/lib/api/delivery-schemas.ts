@@ -288,6 +288,18 @@ export const taskSchema = z.object({
   blocked: z.boolean(),
   blockedReason: z.string().nullish(),
   rank: z.string().nullish(),
+  reopenedCount: z.number().int().default(0),
+  /**
+   * Work-clock state. Sent raw rather than as one "seconds so far" figure, because a
+   * running clock has no correct stored value — whatever the server computed is stale
+   * by the time it renders. The banked total plus the start of the current run is
+   * enough for the client to tick it itself; see `lib/task-clock.ts`.
+   */
+  elapsedSeconds: z.coerce.number().default(0),
+  /** Null while the clock is paused, which is exactly when the task is finished. */
+  runningSince: z.string().nullish(),
+  startedAt: z.string().nullish(),
+  completedAt: z.string().nullish(),
   createdAt: z.string(),
 });
 export type Task = z.infer<typeof taskSchema>;

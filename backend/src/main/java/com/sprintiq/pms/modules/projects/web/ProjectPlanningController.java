@@ -4,10 +4,12 @@ import com.sprintiq.pms.common.web.ApiConstants;
 import com.sprintiq.pms.common.web.PageQuery;
 import com.sprintiq.pms.common.web.PageResponse;
 import com.sprintiq.pms.modules.projects.application.MilestoneService;
+import com.sprintiq.pms.modules.projects.application.RequirementChangeService;
 import com.sprintiq.pms.modules.projects.application.RequirementService;
 import com.sprintiq.pms.modules.projects.domain.RequirementStatus;
 import com.sprintiq.pms.modules.projects.domain.RequirementType;
 import com.sprintiq.pms.modules.projects.web.dto.ProjectDtos.*;
+import com.sprintiq.pms.modules.projects.web.dto.RequirementChangeDtos.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -35,6 +37,7 @@ public class ProjectPlanningController {
 
     private final MilestoneService milestoneService;
     private final RequirementService requirementService;
+    private final RequirementChangeService requirementChangeService;
 
     // ------------------------------------------------------------------ milestones
 
@@ -120,5 +123,50 @@ public class ProjectPlanningController {
     @DeleteMapping("/requirements/{requirementId}")
     public void deleteRequirement(@PathVariable UUID requirementId) {
         requirementService.delete(requirementId);
+    }
+
+    // --------------------------------------------------------- requirement changes
+
+    @Operation(summary = "What each kind of requirement change costs the sprint's risk",
+            description = "Served rather than duplicated in the client so the form and the "
+                    + "ledger can never disagree about a weight.")
+    @PreAuthorize("@perm.has('project:read')")
+    @GetMapping("/requirement-changes/types")
+    public List<RequirementChangeTypeInfo> requirementChangeTypes() {
+        return requirementChangeService.catalogue();
+    }
+
+    @Operation(summary = "The project's requirement-change register")
+    @PreAuthorize("@perm.has('project:read')")
+    @GetMapping("/projects/{projectId}/requirement-changes")
+    public List<RequirementChangeResponse> listRequirementChanges(@PathVariable UUID projectId) {
+        return requirementChangeService.listForProject(projectId);
+    }
+
+    @Operation(summary = "Log a requirement change",
+            description = "Records the change, bumps the requirement's churn counter when one is "
+                    + "named, and charges the in-flight sprint the points the change is worth.")
+    @PreAuthorize("@perm.has('project:update')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/projects/{projectId}/requirement-changes")
+    public RequirementChangeResponse logRequirementChange(
+            @PathVariable UUID projectId,
+            @Valid @RequestBody LogRequirementChangeRequest request) {
+        return requirementChangeService.log(projectId, request);
+    }
+
+    @Operation(summary = "Requirement changes logged against one sprint, with churn totals")
+    @PreAuthorize("@perm.has('sprint:read')")
+    @GetMapping("/sprints/{sprintId}/requirement-changes")
+    public RequirementChangeSummary sprintRequirementChanges(@PathVariable UUID sprintId) {
+        return requirementChangeService.listForSprint(sprintId);
+    }
+
+    @Operation(summary = "Withdraw a logged requirement change, reversing its risk charge")
+    @PreAuthorize("@perm.has('project:update')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @DeleteMapping("/requirement-changes/{changeId}")
+    public void deleteRequirementChange(@PathVariable UUID changeId) {
+        requirementChangeService.delete(changeId);
     }
 }

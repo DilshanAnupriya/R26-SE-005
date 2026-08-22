@@ -86,4 +86,47 @@ export const boardApi = {
 
   get: (api: ApiClient, taskId: string) =>
     api.request(`/tasks/${taskId}`, { schema: taskSchema }),
+
+  /**
+   * Creates a task straight onto the board.
+   *
+   * <p>No story is required. The board is where work gets noticed, and forcing every
+   * card through the backlog first is how "just add a task for it" turns into a
+   * five-click detour that people skip — leaving the work untracked, which is worse for
+   * every downstream number than an unparented task.</p>
+   */
+  createTask: (
+    api: ApiClient,
+    body: {
+      projectId: string;
+      title: string;
+      description?: string | null;
+      storyId?: string | null;
+      sprintId?: string | null;
+      priority?: string | null;
+      assigneeId?: string | null;
+      estimateMinutes?: number | null;
+      dueDate?: string | null;
+    },
+  ) => api.request("/tasks", { method: "POST", body, schema: taskSchema }),
+
+  /** Sends a finished task back for rework: counts the reopen, resumes the work clock. */
+  reopen: (api: ApiClient, taskId: string, body?: { status?: string; reason?: string }) =>
+    api.request(`/tasks/${taskId}/reopen`, {
+      method: "POST",
+      body: body ?? {},
+      schema: taskSchema,
+    }),
+
+  /**
+   * Reports that a card's countdown has hit zero while the task is still open.
+   *
+   * <p>Reported from here rather than swept for on the server: the board is already
+   * ticking every second to draw the countdown, so it knows the instant it crosses,
+   * whereas a scheduler would run for every sprint in every tenant to catch the handful
+   * that matter and still be up to a minute late. The endpoint is idempotent per task,
+   * so a dozen open tabs cost the sprint exactly what one does.</p>
+   */
+  reportOverdue: (api: ApiClient, taskId: string) =>
+    api.request(`/tasks/${taskId}/overdue`, { method: "POST", schema: taskSchema }),
 };

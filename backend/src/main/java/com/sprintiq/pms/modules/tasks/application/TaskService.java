@@ -54,6 +54,7 @@ public class TaskService {
     private final NotificationService notifications;
     private final RealtimePublisher realtime;
     private final com.sprintiq.pms.modules.backlog.domain.StoryRepository storyRepository;
+    private final TaskRiskReporter riskReporter;
 
     // ------------------------------------------------------------------ queries
 
@@ -125,6 +126,11 @@ public class TaskService {
                         ? new ArrayList<>() : new ArrayList<>(request.requiredSkills()))
                 .dueDate(request.dueDate())
                 .rank(nextRank(request.projectId()))
+                // The work clock starts the moment the card exists. A task created
+                // straight into TODO is already in flight as far as the board is
+                // concerned, and starting it later would mean the countdown only
+                // began once somebody remembered to drag it.
+                .runningSince(Instant.now())
                 .build();
         task.setOrganizationId(TenantContext.requireOrganizationId());
         task = taskRepository.save(task);
@@ -234,7 +240,9 @@ public class TaskService {
                         null,
                         null,
                         story.getCreatedAt(),
-                        story.getUpdatedAt()
+                        story.getUpdatedAt(),
+                    0L,
+                    null
                 );
             }
         }
@@ -256,7 +264,63 @@ public class TaskService {
             activityService.recordChange(target(task), ActivityAction.STATUS_CHANGED, "status",
                     previous, request.status(),
                     "%s moved from %s to %s".formatted(task.getItemKey(), previous, request.status()));
+            // The board move is evidence about the sprint, not only about the task. Kept
+            // in the same transaction as the move so the ledger cannot end up describing
+            // a transition that was rolled back.
+            riskReporter.statusChanged(task, previous);
         }
+        return toResponse(task);
+    }
+
+    /**
+     * Sends a finished task back for rework.
+     *
+     * <p>Distinct from dragging the card, though both end in the same place: this is the
+     * reviewer's verb, and it says what happened rather than only where the card went.
+     * The transition itself does the bookkeeping — the reopen counter moves and the work
+     * clock resumes from where it froze rather than restarting.</p>
+     */
+    @Transactional
+    public TaskResponse reopen(UUID taskId, ReopenTaskRequest request) {
+        Task task = require(taskId);
+        TaskStatus previous = task.getStatus();
+        if (!previous.isTerminal()) {
+            throw new BusinessRuleException(
+                    "%s is not finished, so there is nothing to reopen".formatted(task.getItemKey()));
+        }
+        TaskStatus target = request == null || request.status() == null
+                ? TaskStatus.IN_REVIEW : request.status();
+        if (target.isTerminal()) {
+            throw new BusinessRuleException("Reopening a task has to move it out of a finished column");
+        }
+
+        task.transitionTo(target);
+        resolveStateIdForStatus(task.getProjectId(), target).ifPresent(task::setWorkflowStateId);
+        task = taskRepository.save(task);
+
+        String note = request == null || request.reason() == null || request.reason().isBlank()
+                ? "%s reopened".formatted(task.getItemKey())
+                : "%s reopened: %s".formatted(task.getItemKey(), request.reason().trim());
+        activityService.recordChange(target(task), ActivityAction.STATUS_CHANGED, "status",
+                previous, target, note);
+        riskReporter.statusChanged(task, previous);
+        return toResponse(task);
+    }
+
+    /**
+     * Records that a task's countdown has run out while it is still open.
+     *
+     * <p>Reported by the client rather than polled by a scheduler. The board is already
+     * ticking the clock every second to render the countdown, so it knows the moment it
+     * crosses zero; a server-side sweep would find out up to a minute later and would
+     * run for every sprint in every tenant to catch the handful that matter. The penalty
+     * is idempotent by task, so a dozen open tabs all reporting at once cost the sprint
+     * exactly what one would.</p>
+     */
+    @Transactional
+    public TaskResponse registerOverdue(UUID taskId) {
+        Task task = require(taskId);
+        riskReporter.overdue(task);
         return toResponse(task);
     }
 
@@ -407,7 +471,9 @@ public class TaskService {
                 null,
                 null,
                 story.getCreatedAt(),
-                story.getUpdatedAt()
+                story.getUpdatedAt(),
+                    0L,
+                    null
         );
     }
 
@@ -475,6 +541,11 @@ public class TaskService {
 
         task.setDeletedAt(now);
         taskRepository.save(task);
+        // A task in the recycle bin is not evidence about the sprint any more. Its
+        // state-based charges go with it; the one-off events it caused while it existed
+        // stay, because they did happen.
+        subtasks.forEach(riskReporter::removed);
+        riskReporter.removed(task);
         activityService.recordDeleted(target(task), subtasks.isEmpty()
                 ? "%s moved to the recycle bin".formatted(task.getItemKey())
                 : "%s and %d subtask(s) moved to the recycle bin"
@@ -581,6 +652,7 @@ public class TaskService {
                 task.isOverEstimate(), task.getComplexityScore(), task.getRequiredSkills(),
                 task.getDueDate(), task.getRank(), task.isBlocked(), task.getBlockedReason(),
                 task.getReopenedCount(), subtaskCount, task.getStartedAt(), task.getCompletedAt(),
-                task.getCreatedAt(), task.getUpdatedAt());
+                task.getCreatedAt(), task.getUpdatedAt(),
+                task.getElapsedSeconds(), task.getRunningSince());
     }
 }

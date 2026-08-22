@@ -10,6 +10,7 @@ import lombok.*;
 import org.hibernate.annotations.Type;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -143,6 +144,26 @@ public class Task extends TenantAwareEntity implements SoftDeletable {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /**
+     * Working seconds banked from runs that have already ended.
+     *
+     * <p>Distinct from {@code spentMinutes}, which is effort somebody chose to log.
+     * This is wall-clock time the card has spent outside a terminal column, and the
+     * two answer different questions: a task can be open for three days with forty
+     * minutes logged against it, and that gap is the interesting part.</p>
+     */
+    @Builder.Default
+    @Column(name = "elapsed_seconds", nullable = false)
+    private long elapsedSeconds = 0L;
+
+    /**
+     * Start of the current run, or null when the clock is paused — which is exactly
+     * when the task is terminal. Live elapsed time is
+     * {@code elapsedSeconds + (runningSince == null ? 0 : now - runningSince)}.
+     */
+    @Column(name = "running_since")
+    private Instant runningSince;
+
     public boolean isSubtask() {
         return parentTaskId != null;
     }
@@ -156,6 +177,7 @@ public class Task extends TenantAwareEntity implements SoftDeletable {
         if (target == status) {
             return;
         }
+        applyWorkClock(status, target);
         if (target.isReopenFrom(status)) {
             reopenedCount += 1;
             completedAt = null;
@@ -187,6 +209,65 @@ public class Task extends TenantAwareEntity implements SoftDeletable {
             blockedAt = null;
         }
         status = target;
+    }
+
+    /**
+     * Pauses or resumes the work clock as the task crosses the terminal boundary.
+     *
+     * <ul>
+     *   <li><b>into DONE or CANCELLED</b> — bank the current run and clear
+     *       {@code runningSince}. The total is frozen from this moment, so the time on
+     *       the card is the time the task actually took rather than the time since it
+     *       was created.</li>
+     *   <li><b>back out</b> — start a new run from now, leaving the banked total alone,
+     *       so a reopened task picks up where it froze instead of restarting or being
+     *       charged for the fortnight it sat in Done.</li>
+     *   <li><b>between two open columns</b> — nothing; the clock keeps running.</li>
+     * </ul>
+     *
+     * <p>Private, and driven from {@link #transitionTo} rather than exposed: a caller
+     * that set the status without moving the clock would leave a card counting up in
+     * Done, and there is no legitimate reason to want that.</p>
+     */
+    private void applyWorkClock(TaskStatus from, TaskStatus to) {
+        boolean wasStopped = from.isTerminal();
+        boolean isStopped = to.isTerminal();
+        if (wasStopped == isStopped) {
+            return;
+        }
+        if (isStopped) {
+            if (runningSince != null) {
+                elapsedSeconds += Math.max(0L, Duration.between(runningSince, Instant.now()).getSeconds());
+            }
+            runningSince = null;
+        } else {
+            runningSince = Instant.now();
+        }
+    }
+
+    /**
+     * Wall-clock seconds this task has been in flight, as of {@code now}.
+     *
+     * <p>Recomputed rather than stored, because a running clock has no single correct
+     * stored value — the row would be stale the instant after it was written.</p>
+     */
+    public long elapsedSecondsAt(Instant now) {
+        long live = runningSince == null
+                ? 0L
+                : Math.max(0L, Duration.between(runningSince, now).getSeconds());
+        return elapsedSeconds + live;
+    }
+
+    /**
+     * Whether the task has burned through its estimate in elapsed time.
+     *
+     * <p>Deliberately not {@link #isOverEstimate()}, which compares logged effort. A
+     * task can be well inside its logged budget and days past its estimate in wall
+     * time, and the board card is asking the second question.</p>
+     */
+    public boolean isOverdueAgainstEstimate(Instant now) {
+        return estimateMinutes != null && estimateMinutes > 0
+                && elapsedSecondsAt(now) > (long) estimateMinutes * 60L;
     }
 
     /** Logs effort and keeps the remaining estimate in step. */

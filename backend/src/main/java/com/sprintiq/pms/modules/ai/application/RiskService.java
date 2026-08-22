@@ -51,6 +51,7 @@ public class RiskService {
     /** Comment threads and board movement, for the collaboration model. */
     private final CollaborationFeatureSource collaboration;
     private final RiskAssessmentRepository assessments;
+    private final SprintRiskAdjustmentService adjustmentService;
 
     @Transactional
     public SprintRiskResponse assess(UUID sprintId) {
@@ -76,21 +77,39 @@ public class RiskService {
         return assessOne(riskType, sprint, project, sharedFeatures(sprint, project));
     }
 
+    /**
+     * The stored scorings, with the board activity since each one folded in.
+     *
+     * <p>The overlay is what keeps this figure from going stale between assessments. A
+     * risk number that only moves when somebody presses <em>Assess</em> teaches a team
+     * that it is decorative, and the events that matter most — a task blocked, work
+     * reopened, scope admitted — all arrive between scorings.</p>
+     */
     @Transactional(readOnly = true)
     public SprintRiskResponse latest(UUID sprintId) {
-        RiskAssessmentResponse overBudget = assessments
-                .findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprintId, RiskType.OVER_BUDGET)
-                .map(RiskAssessmentResponse::from).orElse(null);
-        RiskAssessmentResponse requirementChange = assessments
-                .findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprintId, RiskType.REQUIREMENT_CHANGE)
-                .map(RiskAssessmentResponse::from).orElse(null);
-        RiskAssessmentResponse communicationCollaboration = assessments
-                .findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(
-                        sprintId, RiskType.COMMUNICATION_COLLABORATION)
-                .map(RiskAssessmentResponse::from).orElse(null);
-        return new SprintRiskResponse(sprintId, overBudget, requirementChange,
-                communicationCollaboration,
-                highestOf(overBudget, requirementChange, communicationCollaboration));
+        SprintRiskAdjustmentService.Ledger ledger = adjustmentService.ledgerFor(sprintId);
+        RiskAssessmentResponse overBudget = adjusted(sprintId, RiskType.OVER_BUDGET, ledger);
+        RiskAssessmentResponse requirementChange =
+                adjusted(sprintId, RiskType.REQUIREMENT_CHANGE, ledger);
+        RiskAssessmentResponse collaboration =
+                adjusted(sprintId, RiskType.COMMUNICATION_COLLABORATION, ledger);
+        return new SprintRiskResponse(sprintId, overBudget, requirementChange, collaboration,
+                highestOf(overBudget, requirementChange, collaboration));
+    }
+
+    /** The ledger behind an adjusted score — what the board has recorded since each scoring. */
+    @Transactional(readOnly = true)
+    public List<RiskAdjustmentResponse> adjustments(UUID sprintId) {
+        return adjustmentService.ledgerFor(sprintId).entries().stream()
+                .map(RiskAdjustmentResponse::from).toList();
+    }
+
+    private RiskAssessmentResponse adjusted(UUID sprintId, RiskType riskType,
+                                            SprintRiskAdjustmentService.Ledger ledger) {
+        return assessments.findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprintId, riskType)
+                .map(assessment -> RiskAssessmentResponse.from(
+                        assessment, ledger.netSince(riskType, assessment.getCreatedAt())))
+                .orElse(null);
     }
 
     /** The risk score's history for one sprint — the trend a retrospective reads. */
@@ -459,19 +478,27 @@ public class RiskService {
     }
 
     RiskSeverity severityOf(BigDecimal score) {
-        double value = score.doubleValue();
-        if (value >= 0.80) return RiskSeverity.CRITICAL;
-        if (value >= 0.60) return RiskSeverity.HIGH;
-        if (value >= 0.35) return RiskSeverity.MEDIUM;
-        return RiskSeverity.LOW;
+        return RiskSeverity.forScore(score);
     }
 
+    /**
+     * The loudest of the three, read from the adjusted score rather than the stored one.
+     *
+     * <p>The banner is the thing people act on, so it has to agree with the panels
+     * underneath it. A sprint whose over-budget number has been pushed into the red by
+     * this morning's blockers, still headed "Medium risk" because that is what the model
+     * said on Monday, is the exact failure the overlay exists to prevent.</p>
+     */
     private RiskSeverity highestOf(RiskAssessmentResponse... responses) {
         RiskSeverity highest = RiskSeverity.LOW;
         for (RiskAssessmentResponse response : responses) {
-            if (response != null && response.severity() != null
-                    && response.severity().ordinal() > highest.ordinal()) {
-                highest = response.severity();
+            if (response == null) {
+                continue;
+            }
+            RiskSeverity severity = response.adjustedSeverity() == null
+                    ? response.severity() : response.adjustedSeverity();
+            if (severity != null && severity.ordinal() > highest.ordinal()) {
+                highest = severity;
             }
         }
         return highest;

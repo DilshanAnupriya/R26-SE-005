@@ -17,6 +17,7 @@ import {
   ListTodo,
   Map,
   Settings,
+  ShieldAlert,
   Target,
   Users,
   Wand2,
@@ -63,6 +64,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
       { href: "board", label: "Board", icon: KanbanSquare },
       { href: "backlog", label: "Backlog & Sprints", icon: ClipboardList },
       { href: "reports", label: "Reports", icon: Gauge },
+      { href: "risk", label: "Risk Analysis", icon: ShieldAlert },
     ],
   },
   {
