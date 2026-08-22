@@ -197,6 +197,38 @@ export const costTrendPointSchema = z.object({
 });
 export type CostTrendPoint = z.infer<typeof costTrendPointSchema>;
 
+export const costPredictionAccuracySchema = z.object({
+  forecastId: z.uuid(),
+  stage: costStageSchema,
+  predictedCost: z.coerce.number(),
+  actualCost: z.coerce.number(),
+  errorAmount: z.coerce.number(),
+  absoluteError: z.coerce.number(),
+  absolutePercentageError: z.coerce.number().nullish(),
+  snapshotAt: z.string(),
+});
+export type CostPredictionAccuracy = z.infer<typeof costPredictionAccuracySchema>;
+
+export const costValidationSchema = z.object({
+  sprintId: z.uuid(),
+  evaluationStatus: z.enum(["PLANNING", "LIVE_TRACKING", "FINAL", "CANCELLED"]).nullish(),
+  accuracyEligible: z.boolean().nullish(),
+  actualCost: z.coerce.number(),
+  actualCostSoFar: z.coerce.number().nullish(),
+  estimatedRemainingCost: z.coerce.number().nullish(),
+  projectedFinalCost: z.coerce.number().nullish(),
+  latestForecastAmount: z.coerce.number().nullish(),
+  liveVariance: z.coerce.number().nullish(),
+  mae: z.coerce.number().nullish(),
+  rmse: z.coerce.number().nullish(),
+  mape: z.coerce.number().nullish(),
+  initial: costPredictionAccuracySchema.nullish(),
+  midSprint: costPredictionAccuracySchema.nullish(),
+  closerStage: costStageSchema.nullish(),
+  predictions: z.array(costPredictionAccuracySchema).default([]),
+});
+export type CostValidation = z.infer<typeof costValidationSchema>;
+
 // -------------------------------------------------------------------- feedback
 
 export const feedbackActionSchema = z.enum(["ACCEPTED", "OVERRIDDEN", "DISMISSED"]);

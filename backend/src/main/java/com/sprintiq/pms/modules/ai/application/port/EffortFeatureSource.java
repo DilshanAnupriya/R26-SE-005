@@ -21,6 +21,9 @@ public interface EffortFeatureSource {
     /** The share of those minutes logged outside contracted hours. */
     long sprintOvertimeMinutes(UUID sprintId);
 
+    /** Remaining estimated minutes on open tasks in the sprint. */
+    long sprintRemainingEstimateMinutes(UUID sprintId);
+
     /** Tasks currently attached to the sprint. */
     long sprintTaskCount(UUID sprintId);
 

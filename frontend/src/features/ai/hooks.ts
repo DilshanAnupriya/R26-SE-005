@@ -126,6 +126,7 @@ export function useForecastCost() {
     onSuccess: (_forecast, input) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.cost(input.sprintId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.costHistory(input.sprintId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.costValidation(input.sprintId) });
     },
   });
 }

@@ -282,6 +282,7 @@ export const taskSchema = z.object({
   assigneeAvatarUrl: z.string().nullish(),
   estimateMinutes: z.number().int().nullish(),
   spentMinutes: z.number().int().nullish(),
+  remainingMinutes: z.number().int().nullish(),
   requiredSkills: z.array(z.string()).default([]),
   dueDate: z.string().nullish(),
   blocked: z.boolean(),
