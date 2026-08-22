@@ -107,7 +107,7 @@ permission boundary exists to control. Supported reports: `velocity`, `burndown`
 |---|---|
 | POST | `/estimation/story-points` · `/estimation/story-points/batch` |
 | POST | `/estimation/velocity` |
-| POST | `/risk/over-budget` · `/risk/requirement-change` · `/risk/sprint/{id}/assess` |
+| POST | `/risk/over-budget` · `/risk/requirement-change` · `/risk/communication-collaboration` · `/risk/sprint/{id}/assess` |
 | POST | `/allocation/rank` · `/allocation/task/{taskId}/suggest` |
 | POST | `/cost/initial` · `/cost/mid-sprint` |
 | GET | `/predictions` (`modelCode,entityType,entityId,from,to`) · `/predictions/{id}` |

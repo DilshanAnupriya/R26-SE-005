@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -135,6 +137,83 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
                     .divide(BigDecimal.valueOf(FULL_LOAD_MINUTES), 2, RoundingMode.HALF_UP));
         }
         return load;
+    }
+
+    /**
+     * How many of a sprint's tasks are already behind their own estimate.
+     *
+     * <p>Two conditions, both measured against the task's estimate rather than against
+     * the sprint's end date. A sprint-relative deadline says nothing until the last
+     * day; a task with a four-hour estimate that nobody has opened after two hours is
+     * behind now, and that is knowable now.</p>
+     *
+     * <p>Elapsed time runs from {@code startedAt} where the task has been started and
+     * from {@code createdAt} where it has not, because an untouched task has no other
+     * clock. Logged minutes are used in preference to both once they exist: a task
+     * created three weeks ago and worked on for one hour has been worked on for one
+     * hour, and charging it for the three weeks would flag every long-lived backlog
+     * item the moment it entered a sprint.</p>
+     *
+     * <p>Tasks with no estimate are excluded entirely rather than counted as on time.
+     * Nothing can be late against an estimate that does not exist, and letting them
+     * into the denominator would make a sprint look healthier the less of it was
+     * estimated.</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public SprintSlippage sprintSlippage(UUID sprintId) {
+        List<Task> tasks = taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId);
+        if (tasks.isEmpty()) {
+            return SprintSlippage.none();
+        }
+
+        Instant now = Instant.now();
+        long estimated = 0;
+        long notStartedPastHalf = 0;
+        long overEstimate = 0;
+        long minutesOver = 0;
+
+        for (Task task : tasks) {
+            Integer estimateMinutes = task.getEstimateMinutes();
+            if (estimateMinutes == null || estimateMinutes <= 0) {
+                continue;
+            }
+            estimated++;
+
+            long elapsed = elapsedMinutes(task, now);
+
+            if (!task.getStatus().isStarted() && !task.getStatus().isTerminal()
+                    && elapsed >= estimateMinutes / 2) {
+                notStartedPastHalf++;
+            }
+
+            if (!task.getStatus().isTerminal() && elapsed > estimateMinutes) {
+                overEstimate++;
+                minutesOver += elapsed - estimateMinutes;
+            }
+        }
+
+        return new SprintSlippage(estimated, notStartedPastHalf, overEstimate, minutesOver);
+    }
+
+    /**
+     * Minutes this task has been in play.
+     *
+     * <p>Logged time first, because it is the only figure that reflects work rather than
+     * calendar. Falling back to wall-clock from {@code startedAt}, then from
+     * {@code createdAt}, keeps a team that does not track time from being invisible to
+     * this measure — at the cost of counting weekends, which is why logged minutes win
+     * whenever there are any.</p>
+     */
+    private static long elapsedMinutes(Task task, Instant now) {
+        if (task.getSpentMinutes() > 0) {
+            return task.getSpentMinutes();
+        }
+        Instant from = task.getStartedAt() != null ? task.getStartedAt() : task.getCreatedAt();
+        if (from == null || !now.isAfter(from)) {
+            return 0;
+        }
+        return Duration.between(from, now).toMinutes();
     }
 
     // -------------------------------------------------------- allocation target

@@ -89,7 +89,20 @@ public class AiController {
         return risk.assess(request.sprintId(), RiskType.REQUIREMENT_CHANGE);
     }
 
-    @Operation(summary = "Assess both risks for a sprint in one call")
+    @Operation(summary = "Assess communication and collaboration risk for a sprint",
+            description = "Answers with an empty body when the sprint has no "
+                    + "collaboration to read yet — no comments, no blockers, no reopens. "
+                    + "Three of the five readings are healthiest at zero, so scoring an "
+                    + "untouched sprint would report a well-run team rather than an "
+                    + "unstarted one.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @PostMapping("/risk/communication-collaboration")
+    public RiskAssessmentResponse communicationCollaborationRisk(
+            @Valid @RequestBody AssessRiskRequest request) {
+        return risk.assess(request.sprintId(), RiskType.COMMUNICATION_COLLABORATION);
+    }
+
+    @Operation(summary = "Assess all three risks for a sprint in one call")
     @PreAuthorize("@perm.has('ai:predict')")
     @PostMapping("/risk/sprint/{sprintId}/assess")
     public SprintRiskResponse assessSprint(@PathVariable UUID sprintId) {
