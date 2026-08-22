@@ -21,6 +21,9 @@ public class OptimizerTaskService {
     private com.sprintiq.pms.modules.ai.domain.OptimizerSprintRepository sprintRepository;
 
     @Autowired
+    private com.sprintiq.pms.modules.ai.domain.OptimizerDeveloperRepository developerRepository;
+
+    @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     public Task addTask(Task task) {
@@ -92,9 +95,23 @@ public class OptimizerTaskService {
                 }
 
                 List<Task> existingTasks = taskRepository.findBySprintId(sprintId);
-                boolean exists = existingTasks.stream().anyMatch(t -> t.getTask_type() != null && t.getTask_type().equals(taskType));
+                java.util.Optional<Task> existingOpt = existingTasks.stream()
+                        .filter(t -> t.getTask_type() != null && t.getTask_type().equals(taskType))
+                        .findFirst();
 
-                if (!exists) {
+                String storyStatus = st.get("status") != null ? st.get("status").toString() : "";
+                boolean isDone = "DONE".equalsIgnoreCase(storyStatus) || "ACCEPTED".equalsIgnoreCase(storyStatus);
+                boolean isInProgress = "IN_PROGRESS".equalsIgnoreCase(storyStatus) || "IN_REVIEW".equalsIgnoreCase(storyStatus);
+
+                if (existingOpt.isPresent()) {
+                    Task existing = existingOpt.get();
+                    TaskStatus targetStatus = isDone ? TaskStatus.COMPLETED : (isInProgress ? TaskStatus.IN_PROGRESS : TaskStatus.TODO);
+                    if (existing.getStatus() != targetStatus) {
+                        existing.setStatus(targetStatus);
+                        if (isDone) existing.setCompleted_at(java.time.LocalDateTime.now());
+                        taskRepository.save(existing);
+                    }
+                } else {
                     Task newTask = new Task();
                     newTask.setSprint(optSprint);
                     newTask.setTask_type(taskType);
@@ -107,7 +124,8 @@ public class OptimizerTaskService {
                     newTask.setDependency_risk(blocked ? 0.8 : 0.1);
                     newTask.setBlocked(blocked);
                     newTask.setReopened(false);
-                    newTask.setStatus(TaskStatus.TODO);
+                    newTask.setStatus(isDone ? TaskStatus.COMPLETED : (isInProgress ? TaskStatus.IN_PROGRESS : TaskStatus.TODO));
+                    if (isDone) newTask.setCompleted_at(java.time.LocalDateTime.now());
                     newTask.setOrganizationId(optSprint.getOrganizationId());
                     taskRepository.save(newTask);
                 }
@@ -149,9 +167,19 @@ public class OptimizerTaskService {
 
     public Task updateTaskStatus(Long id, TaskStatus status) {
         Task task = taskRepository.findById(id).orElseThrow(() -> new RuntimeException("Task not found"));
+        TaskStatus previousStatus = task.getStatus();
         task.setStatus(status);
         if (status == TaskStatus.COMPLETED) {
             task.setCompleted_at(java.time.LocalDateTime.now());
+            if (previousStatus != TaskStatus.COMPLETED && task.getDeveloper() != null && developerRepository != null) {
+                com.sprintiq.pms.modules.ai.domain.Developer dev = task.getDeveloper();
+                dev.setCurrent_workload(Math.max(0, dev.getCurrent_workload() - task.getStory_points()));
+                dev.setCurrent_tasks(Math.max(0, dev.getCurrent_tasks() - 1));
+                int capacity = (dev.getExperience_level() > 0 ? dev.getExperience_level() : 2) * 10;
+                double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0, capacity - dev.getCurrent_workload()) / capacity) * 100.0));
+                dev.setAvailability(availPct);
+                developerRepository.save(dev);
+            }
         } else if (status == TaskStatus.IN_PROGRESS && task.getStarted_at() == null) {
             task.setStarted_at(java.time.LocalDateTime.now());
         }
@@ -161,8 +189,19 @@ public class OptimizerTaskService {
     public void completeAllTasksInSprint(Long sprintId) {
         List<Task> tasks = taskRepository.findBySprintId(sprintId);
         for (Task task : tasks) {
-            task.setStatus(TaskStatus.COMPLETED);
-            task.setCompleted_at(java.time.LocalDateTime.now());
+            if (task.getStatus() != TaskStatus.COMPLETED) {
+                task.setStatus(TaskStatus.COMPLETED);
+                task.setCompleted_at(java.time.LocalDateTime.now());
+                if (task.getDeveloper() != null && developerRepository != null) {
+                    com.sprintiq.pms.modules.ai.domain.Developer dev = task.getDeveloper();
+                    dev.setCurrent_workload(Math.max(0, dev.getCurrent_workload() - task.getStory_points()));
+                    dev.setCurrent_tasks(Math.max(0, dev.getCurrent_tasks() - 1));
+                    int capacity = (dev.getExperience_level() > 0 ? dev.getExperience_level() : 2) * 10;
+                    double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0, capacity - dev.getCurrent_workload()) / capacity) * 100.0));
+                    dev.setAvailability(availPct);
+                    developerRepository.save(dev);
+                }
+            }
         }
         taskRepository.saveAll(tasks);
     }

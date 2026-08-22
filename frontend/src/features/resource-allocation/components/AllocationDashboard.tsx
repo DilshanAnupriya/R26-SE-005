@@ -4,9 +4,9 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Users, Bot, Wand2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import AIAllocationPage from "@/app/(dashboard)/ai-allocation/page";
-import DevelopersPage from "@/app/(dashboard)/developers/page";
-import SimulatorPage from "@/app/(dashboard)/simulator/page";
+import AIAllocationView from "./views/AIAllocationView";
+import DevelopersView from "./views/DevelopersView";
+import SimulatorView from "./views/SimulatorView";
 
 type Tab = "allocation" | "developers" | "simulator";
 
@@ -95,9 +95,9 @@ export default function AllocationDashboard() {
 
         {/* Active View Content Area */}
         <div className="pt-2">
-          {activeTab === "allocation" && <AIAllocationPage isEmbedded={true} />}
-          {activeTab === "developers" && <DevelopersPage isEmbedded={true} />}
-          {activeTab === "simulator" && <SimulatorPage isEmbedded={true} />}
+          {activeTab === "allocation" && <AIAllocationView />}
+          {activeTab === "developers" && <DevelopersView />}
+          {activeTab === "simulator" && <SimulatorView />}
         </div>
       </div>
     </div>
