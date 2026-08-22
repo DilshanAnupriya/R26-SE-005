@@ -266,7 +266,8 @@ class MockAiModelClientTest {
                 case M1_STORY_POINTS -> story(3, 150, 1, true);
                 case M1_VELOCITY -> FeatureVector.create()
                         .put("historical_velocities", List.of(18, 22, 20));
-                case M2_OVER_BUDGET, M2_REQUIREMENT_CHANGE -> sprint(1.4, 0.3, 0.5);
+                case M2_OVER_BUDGET, M2_REQUIREMENT_CHANGE, M2_COMMUNICATION_COLLABORATION ->
+                        sprint(1.4, 0.3, 0.5);
                 case M3_ALLOCATION -> FeatureVector.create()
                         .putNumber("required_skill_count", 1).putNumber("skill_match_ratio", 0.5)
                         .putNumber("consistency_score", 0.6).putNumber("current_load_pct", 120)
