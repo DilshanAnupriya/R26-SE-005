@@ -25,6 +25,10 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
 
     List<Story> findByIdInAndDeletedAtIsNull(Collection<UUID> ids);
 
+    List<Story> findByAssigneeIdAndDeletedAtIsNull(UUID assigneeId);
+
+    List<Story> findByAssigneeIdInAndDeletedAtIsNull(Collection<UUID> assigneeIds);
+
     List<Story> findBySprintIdAndDeletedAtIsNull(UUID sprintId);
 
     List<Story> findByEpicIdAndDeletedAtIsNullOrderByRankAsc(UUID epicId);

@@ -38,6 +38,8 @@ export const backlogApi = {
       type?: string | null;
       priority?: string | null;
       storyPoints?: number | null;
+      assigneeId?: string | null;
+      sprintId?: string | null;
     },
   ) => api.request("/stories", { method: "POST", body, schema: storySchema }),
 

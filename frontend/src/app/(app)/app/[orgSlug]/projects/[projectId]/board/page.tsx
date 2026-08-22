@@ -1,16 +1,19 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Radio } from "lucide-react";
+import { ArrowLeft, Plus, Radio } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useProjectRealtime, useRealtime } from "@/components/realtime-provider";
 import { KanbanBoard } from "@/features/board/components/kanban-board";
-import { useMoveTask, useTaskBoard } from "@/features/board/hooks";
+import { useAssignTask, useMoveTask, useTaskBoard } from "@/features/board/hooks";
 import { useProject } from "@/features/projects/hooks";
 import { useSprints } from "@/features/sprints/hooks";
+import { useMembers } from "@/features/organizations/hooks";
+import { CreateStoryDialog } from "@/features/backlog/components/create-story-dialog";
 
 export default function BoardPage({
   params,
@@ -19,15 +22,30 @@ export default function BoardPage({
 }) {
   const { orgSlug, projectId } = use(params);
   const [sprintFilter, setSprintFilter] = useState<string>("");
+  const [createOpen, setCreateOpen] = useState(false);
 
   const project = useProject(projectId);
   const sprints = useSprints(projectId);
+  const members = useMembers();
+
+  useEffect(() => {
+    if (!sprintFilter && sprints.data?.content) {
+      const active = sprints.data.content.find((s) => s.status === "ACTIVE");
+      if (active) {
+        setSprintFilter(active.id);
+      }
+    }
+  }, [sprints.data, sprintFilter]);
+
   const board = useTaskBoard(projectId, sprintFilter || undefined);
   const move = useMoveTask(projectId);
+  const assign = useAssignTask(projectId);
   const { connected } = useRealtime();
 
-  // Someone else's drag updates this board without a refresh.
+  // Someone else's drag or assignment updates this board without a refresh.
   useProjectRealtime(projectId);
+
+  const memberList = members.data?.content ?? (Array.isArray(members.data) ? members.data : []);
 
   return (
     <div className="animate-fade-up space-y-4">
@@ -44,8 +62,6 @@ export default function BoardPage({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Live is worth stating: a board that has silently stopped updating looks
-              exactly like a board where nothing is happening. */}
           <Badge variant={connected ? "secondary" : "outline"} className="gap-1.5">
             <Radio
               className={connected ? "size-3 text-emerald-600" : "size-3 text-muted-foreground"}
@@ -69,12 +85,16 @@ export default function BoardPage({
               ))}
             </select>
           </label>
+
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5 h-8">
+            <Plus className="size-3.5" />
+            <span>Create Item</span>
+          </Button>
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Drag a card, or focus its handle and press Enter to pick it up — arrows move it
-        between columns, Enter drops it.
+        Drag a card to move between columns, or click the Assignee button on any card to assign or reassign developers.
       </p>
 
       {board.isPending ? (
@@ -88,8 +108,10 @@ export default function BoardPage({
       ) : board.data && board.data.columns.length > 0 ? (
         <KanbanBoard
           board={board.data}
-          disabled={move.isPending}
+          disabled={move.isPending || assign.isPending}
           onMove={(taskId, state) => move.mutate({ taskId, state })}
+          onAssign={(taskId, assigneeId) => assign.mutate({ taskId, assigneeId })}
+          members={memberList}
         />
       ) : (
         <EmptyState
@@ -97,6 +119,16 @@ export default function BoardPage({
           description="This project has no workflow states configured yet."
         />
       )}
+
+      <CreateStoryDialog
+        projectId={projectId}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        defaultSprintId={sprintFilter || undefined}
+        onCreated={() => {
+          void board.refetch();
+        }}
+      />
     </div>
   );
 }

@@ -89,6 +89,12 @@ public class OptimizerSimulatorController {
         return response;
     }
 
+    @Autowired
+    private com.sprintiq.pms.modules.ai.domain.OptimizerAllocationRepository allocationRepository;
+
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     @PostMapping("/apply")
     public ResponseEntity<?> applyConfiguration(@RequestBody List<SimulationAssignment> assignments) {
         try {
@@ -98,15 +104,73 @@ public class OptimizerSimulatorController {
                 
                 if (taskOpt.isPresent() && devOpt.isPresent()) {
                     Task task = taskOpt.get();
-                    task.setDeveloper(devOpt.get());
+                    Developer dev = devOpt.get();
+                    task.setDeveloper(dev);
                     task.setStatus(TaskStatus.PLANNED);
                     taskRepository.save(task);
+
+                    List<com.sprintiq.pms.modules.ai.domain.Allocation> allocs = allocationRepository.findByTask_Id(task.getId());
+                    for (com.sprintiq.pms.modules.ai.domain.Allocation a : allocs) {
+                        if (a.getDeveloper().getId().equals(dev.getId())) {
+                            a.setStatus("ALLOCATED");
+                        } else if ("ALLOCATED".equals(a.getStatus())) {
+                            a.setStatus("RECOMMENDED");
+                        }
+                        allocationRepository.save(a);
+                    }
+
+                    try {
+                        String taskType = task.getTask_type();
+                        if (taskType != null) {
+                            String itemKey = taskType.contains(":") ? taskType.substring(0, taskType.indexOf(":")).trim() : taskType.trim();
+                            String email = dev.getProfile() != null ? dev.getProfile().getEmail() : null;
+                            if (email != null) {
+                                jdbcTemplate.update(
+                                    "UPDATE stories SET assignee_id = (SELECT id FROM users WHERE email = ? LIMIT 1), updated_at = NOW() WHERE item_key = ? OR title = ? OR CONCAT(item_key, ': ', title) = ?",
+                                    email, itemKey, taskType, taskType
+                                );
+                            }
+                        }
+                    } catch (Exception ex) {
+                        System.err.println("Note: Story sync in simulator apply: " + ex.getMessage());
+                    }
                 }
             }
             return ResponseEntity.ok(Map.of("message", "Configuration applied successfully"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private double getDeveloperTaskScore(Task task, Developer dev) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("task", task);
+            payload.put("developers", Collections.singletonList(dev));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+
+            ResponseEntity<Map> mlResponse = restTemplate.postForEntity(pythonApiUrl, entity, Map.class);
+            if (mlResponse.getStatusCode() == HttpStatus.OK && mlResponse.getBody() != null) {
+                List<Map<String, Object>> recommendations = (List<Map<String, Object>>) mlResponse.getBody().get("recommendations");
+                if (recommendations != null && !recommendations.isEmpty()) {
+                    return Double.parseDouble(recommendations.get(0).get("final_score").toString());
+                }
+            }
+        } catch (Exception e) {}
+
+        // High accuracy skill & domain match fallback
+        double totalReq = Math.max(1.0, task.getReq_frontend() + task.getReq_backend() + task.getReq_db());
+        double skillMatch = (Math.min(dev.getSkill_frontend(), task.getReq_frontend())
+                + Math.min(dev.getSkill_backend(), task.getReq_backend())
+                + Math.min(dev.getSkill_db(), task.getReq_db())) / totalReq;
+
+        double expScore = Math.min(1.0, dev.getExperience_level() / 5.0);
+        double consistency = dev.getConsistency() > 0 ? dev.getConsistency() : 0.8;
+        return (skillMatch * 60.0) + (expScore * 20.0) + (consistency * 20.0);
     }
 
     @SuppressWarnings("unchecked")
@@ -123,80 +187,124 @@ public class OptimizerSimulatorController {
             }
         }
 
-        List<SimulationAssignment> newAssignments = new ArrayList<>();
-        
-        // Track current load for each developer (Manual + AI assigned)
-        Map<Long, Double> devLoadMap = new HashMap<>();
-        
-        // Initialize with manual assignments
-        if (currentAssignments != null) {
-            currentAssignments.forEach((taskIdStr, devIdObj) -> {
-                Optional<Task> tOpt = taskRepository.findById(Long.parseLong(taskIdStr));
-                tOpt.ifPresent(task -> {
-                    Long devId = Long.valueOf(devIdObj.toString());
-                    devLoadMap.put(devId, devLoadMap.getOrDefault(devId, 0.0) + task.getStory_points());
-                });
-            });
+        if (developerIds.isEmpty() || tasks == null || tasks.isEmpty()) {
+            return Collections.emptyList();
         }
 
-        // Convert tasks to a sorted list by complexity (assign harder tasks first)
-        List<Map<String, Object>> mutableTasks = new ArrayList<>(tasks);
-        mutableTasks.sort((a, b) -> Integer.compare(
-            Integer.parseInt(b.get("storyPoints").toString()), 
-            Integer.parseInt(a.get("storyPoints").toString())
+        // Filter for tasks that are actually unassigned
+        List<Task> unassignedTasks = new ArrayList<>();
+        for (Map<String, Object> taskMap : tasks) {
+            Long taskId = Long.valueOf(taskMap.get("id").toString());
+            if (currentAssignments == null || !currentAssignments.containsKey(taskId.toString())) {
+                taskRepository.findById(taskId).ifPresent(unassignedTasks::add);
+            }
+        }
+
+        List<Developer> availableDevs = new ArrayList<>();
+        for (Long devId : developerIds) {
+            developerRepository.findById(devId).ifPresent(availableDevs::add);
+        }
+
+        if (unassignedTasks.isEmpty() || availableDevs.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Precompute score matrix
+        Map<Long, Map<Long, Double>> scoreMatrix = new HashMap<>();
+        for (Task t : unassignedTasks) {
+            scoreMatrix.put(t.getId(), new HashMap<>());
+            for (Developer d : availableDevs) {
+                scoreMatrix.get(t.getId()).put(d.getId(), getDeveloperTaskScore(t, d));
+            }
+        }
+
+        // Optimal Global Bipartite Matching with capacity constraints
+        int nTasks = unassignedTasks.size();
+        int nDevs = availableDevs.size();
+        int maxTasksPerDev = Math.max(1, (int) Math.ceil((double) nTasks / nDevs));
+
+        Map<Long, Long> bestMatching = new HashMap<>();
+        double[] maxTotalScore = new double[]{-1.0};
+
+        findOptimalMatching(
+            0,
+            unassignedTasks,
+            availableDevs,
+            scoreMatrix,
+            new HashMap<>(),
+            new HashMap<>(),
+            maxTasksPerDev,
+            0.0,
+            maxTotalScore,
+            bestMatching
+        );
+
+        List<SimulationAssignment> result = new ArrayList<>();
+        for (Map.Entry<Long, Long> entry : bestMatching.entrySet()) {
+            SimulationAssignment sa = new SimulationAssignment();
+            sa.setTaskId(entry.getKey());
+            sa.setDeveloperId(entry.getValue());
+            result.add(sa);
+        }
+
+        return result;
+    }
+
+    private void findOptimalMatching(
+        int taskIdx,
+        List<Task> tasks,
+        List<Developer> devs,
+        Map<Long, Map<Long, Double>> scoreMatrix,
+        Map<Long, Long> currentMatch,
+        Map<Long, Integer> devAssignedCounts,
+        int maxTasksPerDev,
+        double currentScore,
+        double[] bestScore,
+        Map<Long, Long> bestMatch
+    ) {
+        if (taskIdx >= tasks.size()) {
+            if (currentScore > bestScore[0]) {
+                bestScore[0] = currentScore;
+                bestMatch.clear();
+                bestMatch.putAll(currentMatch);
+            }
+            return;
+        }
+
+        Task task = tasks.get(taskIdx);
+
+        // Sort developers by score for this task descending
+        List<Developer> sortedDevs = new ArrayList<>(devs);
+        sortedDevs.sort((d1, d2) -> Double.compare(
+            scoreMatrix.get(task.getId()).getOrDefault(d2.getId(), 0.0),
+            scoreMatrix.get(task.getId()).getOrDefault(d1.getId(), 0.0)
         ));
 
-        // For each unassigned task, find the best developer with capacity
-        for (Map<String, Object> taskMap : mutableTasks) {
-            Long taskId = Long.valueOf(taskMap.get("id").toString());
-            
-            // Skip if already manually assigned
-            if (currentAssignments != null && currentAssignments.containsKey(taskId.toString())) continue;
-
-            Long bestDevId = null;
-            double bestScore = -1000.0; // Low baseline
-
-            for (Long devId : developerIds) {
-                Optional<Developer> devOpt = developerRepository.findById(devId);
-                Optional<Task> taskOpt = taskRepository.findById(taskId);
-
-                if (devOpt.isPresent() && taskOpt.isPresent()) {
-                    Developer dev = devOpt.get();
-                    Task task = taskOpt.get();
-                    
-                    // Calculate Dynamic Capacity based on Experience Level (1-5)
-                    double dynamicCapacity = dev.getExperience_level() * 10.0; // Level 1=10SP, Level 5=50SP
-                    if (dynamicCapacity == 0) dynamicCapacity = 20.0; // Fallback
-                    
-                    // HEURISTIC: (Skill Match * 0.5) + (Experience * 0.2) + (Consistency * 0.3)
-                    double baseScore = (dev.getConsistency() * 0.3 + (dev.getExperience_level() / 5.0) * 0.7);
-                    
-                    // Workload Penalty: Grows as they reach their individual dynamic capacity
-                    double currentLoad = devLoadMap.getOrDefault(devId, 0.0);
-                    double workloadPenalty = (currentLoad / dynamicCapacity) * 1.5; 
-                    
-                    double finalScore = baseScore - workloadPenalty;
-
-                    if (finalScore > bestScore) {
-                        bestScore = finalScore;
-                        bestDevId = devId;
-                    }
-                }
-            }
-
-            if (bestDevId != null) {
-                SimulationAssignment sa = new SimulationAssignment();
-                sa.setTaskId(taskId);
-                sa.setDeveloperId(bestDevId);
-                newAssignments.add(sa);
+        for (Developer dev : sortedDevs) {
+            int currentDevCount = devAssignedCounts.getOrDefault(dev.getId(), 0);
+            if (currentDevCount < maxTasksPerDev) {
+                double score = scoreMatrix.get(task.getId()).getOrDefault(dev.getId(), 0.0);
                 
-                // Update tracker
-                Optional<Task> tOpt = taskRepository.findById(taskId);
-                double sp = tOpt.map(Task::getStory_points).orElse(0);
-                devLoadMap.put(bestDevId, devLoadMap.getOrDefault(bestDevId, 0.0) + sp);
+                currentMatch.put(task.getId(), dev.getId());
+                devAssignedCounts.put(dev.getId(), currentDevCount + 1);
+
+                findOptimalMatching(
+                    taskIdx + 1,
+                    tasks,
+                    devs,
+                    scoreMatrix,
+                    currentMatch,
+                    devAssignedCounts,
+                    maxTasksPerDev,
+                    currentScore + score,
+                    bestScore,
+                    bestMatch
+                );
+
+                devAssignedCounts.put(dev.getId(), currentDevCount);
+                currentMatch.remove(task.getId());
             }
         }
-        return newAssignments;
     }
 
     @Data

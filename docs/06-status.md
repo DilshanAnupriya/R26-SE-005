@@ -219,7 +219,7 @@ header, board card chrome.
 | Backlog planning view with capacity meter | Endpoints exist; the planning layout does not |
 | Sprint retrospective UI | `GET/POST /sprints/{id}/retrospective` exists; the close-out dialog captures a summary, the full retro board does not |
 | Attachment upload UI | Endpoints and storage exist; no picker is wired into the item view |
-| Developer-profile metric recomputation | Columns and API exist; the nightly derivation does not, so measured metrics stay at their defaults |
+| Developer-profile metric recomputation | Implemented via hybrid engine: deterministic statistical post-sprint recomputation + ML sync loop |
 | Malware scanning of attachments | `scan_status` is honestly `PENDING` on every row |
 | Calendar events | The calendar shows commitments the system already tracks. Meetings and time off are not modelled, and the screen says so |
 

@@ -46,4 +46,14 @@ public class OptimizerAllocationController {
     public void approveAllRecommendations(@PathVariable Long sprintId) {
         allocationService.approveAllRecommendations(sprintId);
     }
+
+    @PostMapping("/unassign-all/sprint/{sprintId}")
+    public void unassignAllInSprint(@PathVariable Long sprintId) {
+        allocationService.unassignAllInSprint(sprintId);
+    }
+
+    @PostMapping("/task/{taskId}/unassign")
+    public void unassignTask(@PathVariable Long taskId) {
+        allocationService.unassignTask(taskId);
+    }
 }

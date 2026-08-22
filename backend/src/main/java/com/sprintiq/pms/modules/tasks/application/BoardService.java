@@ -37,6 +37,8 @@ public class BoardService {
     private final WorkflowStateService workflowStateService;
     private final ProjectLookupService projectLookup;
     private final ProjectService projectService;
+    private final com.sprintiq.pms.modules.backlog.domain.StoryRepository storyRepository;
+    private final com.sprintiq.pms.modules.users.application.UserService userService;
 
     @Transactional(readOnly = true)
     public TaskBoardResponse board(UUID projectId, UUID sprintId, UUID assigneeId) {
@@ -61,6 +63,87 @@ public class BoardService {
             }
         }
 
+        // Also include committed stories from this sprint/project
+        List<com.sprintiq.pms.modules.backlog.domain.Story> stories;
+        if (sprintId != null) {
+            stories = storyRepository.findBySprintIdAndDeletedAtIsNull(sprintId);
+        } else {
+            stories = storyRepository.search(projectId, null, null, null, null, assigneeId, null, false, null,
+                    org.springframework.data.domain.PageRequest.of(0, 100)).getContent();
+        }
+
+        List<UUID> storyAssigneeIds = stories.stream()
+                .map(com.sprintiq.pms.modules.backlog.domain.Story::getAssigneeId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, com.sprintiq.pms.modules.users.application.UserSummary> userSummaries =
+                storyAssigneeIds.isEmpty() ? Map.of() : userService.summariesFor(storyAssigneeIds);
+
+        for (com.sprintiq.pms.modules.backlog.domain.Story story : stories) {
+            if (assigneeId != null && !assigneeId.equals(story.getAssigneeId())) {
+                continue;
+            }
+            boolean hasSubtasks = tasks.stream().anyMatch(t -> story.getId().equals(t.getStoryId()));
+            if (hasSubtasks) {
+                continue;
+            }
+
+            com.sprintiq.pms.modules.tasks.domain.TaskStatus status = switch (story.getStatus()) {
+                case IN_PROGRESS -> com.sprintiq.pms.modules.tasks.domain.TaskStatus.IN_PROGRESS;
+                case DONE -> com.sprintiq.pms.modules.tasks.domain.TaskStatus.DONE;
+                case CANCELLED -> com.sprintiq.pms.modules.tasks.domain.TaskStatus.CANCELLED;
+                default -> com.sprintiq.pms.modules.tasks.domain.TaskStatus.TODO;
+            };
+
+            int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+            var assignee = story.getAssigneeId() != null ? userSummaries.get(story.getAssigneeId()) : null;
+
+            TaskResponse response = new TaskResponse(
+                    story.getId(),
+                    story.getProjectId(),
+                    story.getId(),
+                    null,
+                    story.getSprintId(),
+                    story.getWorkflowStateId(),
+                    story.getItemKey(),
+                    story.getTitle(),
+                    story.getDescription(),
+                    com.sprintiq.pms.modules.tasks.domain.TaskType.TASK,
+                    status,
+                    story.getPriority(),
+                    com.sprintiq.pms.common.domain.Severity.MINOR,
+                    story.getAssigneeId(),
+                    assignee != null ? assignee.fullName() : null,
+                    assignee != null ? assignee.avatarUrl() : null,
+                    com.sprintiq.pms.modules.tasks.domain.AssignmentSource.MANUAL,
+                    null,
+                    story.getReporterId(),
+                    estimateMins > 0 ? estimateMins : null,
+                    0,
+                    null,
+                    false,
+                    BigDecimal.valueOf(3.0),
+                    List.of(),
+                    null,
+                    story.getRank(),
+                    story.isBlocked(),
+                    story.getBlockedReason(),
+                    (short) 0,
+                    0,
+                    null,
+                    null,
+                    story.getCreatedAt(),
+                    story.getUpdatedAt()
+            );
+
+            if (story.getWorkflowStateId() == null) {
+                unplaced.add(response);
+            } else {
+                byState.computeIfAbsent(story.getWorkflowStateId(), key -> new ArrayList<>()).add(response);
+            }
+        }
+
         List<TaskBoardColumnResponse> columns = new ArrayList<>(states.size());
         for (int index = 0; index < states.size(); index++) {
             WorkflowStateResponse state = states.get(index);
@@ -75,7 +158,8 @@ public class BoardService {
                     exceedsWipLimit(state, columnTasks.size())));
         }
 
-        return new TaskBoardResponse(projectId, columns, tasks.size());
+        int totalCount = tasks.size() + stories.size();
+        return new TaskBoardResponse(projectId, columns, totalCount);
     }
 
     /**

@@ -15,7 +15,16 @@ import { EstimatePanel } from "@/features/ai/components/estimate-panel";
 import { useEstimateBatch } from "@/features/ai/hooks";
 import { useBacklog } from "@/features/backlog/hooks";
 import { useProject, useProjectOverview } from "@/features/projects/hooks";
-import type { Story } from "@/lib/api/delivery-schemas";
+import { useSprints, useAddSprintItems, useRemoveSprintItem } from "@/features/sprints/hooks";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import type { Story, Sprint } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,11 +45,17 @@ export default function ProjectPage({
   const backlog = useBacklog(projectId, { size: 50 });
   const members = useProjectMembers(projectId);
   const batch = useEstimateBatch();
+  const sprints = useSprints(projectId);
+  const addSprintItem = useAddSprintItems(projectId);
+  const removeSprintItem = useRemoveSprintItem(projectId);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creatingStory, setCreatingStory] = useState(false);
   const stories = backlog.data?.content ?? [];
   const selected = stories.find((story) => story.id === selectedId) ?? null;
+
+  const sprintList = sprints.data?.content ?? [];
+  const sprintMap = new Map<string, Sprint>(sprintList.map((s) => [s.id, s]));
 
   const unestimated = stories.filter((story) => story.storyPoints == null);
 
@@ -156,6 +171,7 @@ export default function ProjectPage({
                 <li key={story.id}>
                   <StoryRow
                     story={story}
+                    sprintName={story.sprintId ? sprintMap.get(story.sprintId)?.name : undefined}
                     selected={story.id === selectedId}
                     onSelect={() => setSelectedId(story.id === selectedId ? null : story.id)}
                   />
@@ -175,6 +191,37 @@ export default function ProjectPage({
                   <p className="mt-2 text-xs text-muted-foreground">{selected.description}</p>
                 ) : null}
               </div>
+
+              {/* Sprint Assignment */}
+              <div className="rounded-lg border p-3 space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Sprint</Label>
+                <Select
+                  value={selected.sprintId ?? "__none__"}
+                  onValueChange={(val) => {
+                    if (val === "__none__") {
+                      if (selected.sprintId) {
+                        removeSprintItem.mutate({ sprintId: selected.sprintId, storyId: selected.id });
+                      }
+                    } else {
+                      addSprintItem.mutate({ sprintId: val, storyIds: [selected.id] });
+                    }
+                  }}
+                  disabled={addSprintItem.isPending || removeSprintItem.isPending}
+                >
+                  <SelectTrigger className="w-full h-8 text-xs">
+                    <SelectValue placeholder="Assign to a sprint…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Backlog (Unassigned)</SelectItem>
+                    {sprintList.map((sp) => (
+                      <SelectItem key={sp.id} value={sp.id}>
+                        {sp.name} ({sp.status.toLowerCase()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Sizing by hand comes first: it is the team's own number, and it must
                   not depend on a model having been asked. */}
               <StoryPointsField story={selected} projectId={projectId} />
@@ -247,10 +294,12 @@ function Metric({
 
 function StoryRow({
   story,
+  sprintName,
   selected,
   onSelect,
 }: {
   story: Story;
+  sprintName?: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -272,6 +321,12 @@ function StoryRow({
         {story.itemKey}
       </span>
       <span className="min-w-0 flex-1 truncate text-sm">{story.title}</span>
+
+      {sprintName ? (
+        <Badge variant="secondary" className="shrink-0 text-2xs px-1.5 py-0">
+          {sprintName}
+        </Badge>
+      ) : null}
 
       {story.blocked ? (
         <Badge variant="destructive" className="shrink-0">

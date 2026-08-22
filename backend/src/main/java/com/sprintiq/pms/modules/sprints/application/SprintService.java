@@ -55,6 +55,7 @@ public class SprintService {
     private final SprintMetricsService metricsService;
     private final ActivityService activityService;
     private final AuditService auditService;
+    private final com.sprintiq.pms.modules.users.application.DeveloperProfileRecomputationService profileRecomputationService;
 
     // ------------------------------------------------------------------ queries
 
@@ -246,6 +247,20 @@ public class SprintService {
                         "completedPoints", points.completed(),
                         "spilloverCount", spilled.size(),
                         "spilloverStrategy", request.spilloverStrategy().name()));
+
+        // Recompute developer behavioral profiles for all contributors in this sprint
+        try {
+            List<StoryResponse> sprintStories = sprintBacklog.storiesIn(sprintId);
+            Set<UUID> contributorUserIds = sprintStories.stream()
+                    .map(StoryResponse::assigneeId)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toSet());
+            if (!contributorUserIds.isEmpty() && profileRecomputationService != null) {
+                profileRecomputationService.recomputeForUsers(contributorUserIds);
+            }
+        } catch (Exception e) {
+            log.warn("Non-fatal: Failed to recompute developer profiles on sprint completion: {}", e.getMessage());
+        }
 
         return new CompleteSprintResponse(toResponse(sprint), (int) points.completedCount(), spilled.size(),
                 destination, points.completed());
