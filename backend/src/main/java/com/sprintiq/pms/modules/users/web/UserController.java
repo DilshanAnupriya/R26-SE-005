@@ -27,6 +27,7 @@ public class UserController {
 
     private final UserService userService;
     private final DeveloperProfileService developerProfileService;
+    private final com.sprintiq.pms.modules.users.application.DeveloperProfileRecomputationService developerProfileRecomputationService;
 
     @Operation(summary = "List users in the active organization")
     @PreAuthorize("@perm.has('member:read')")
@@ -85,6 +86,22 @@ public class UserController {
             @PathVariable UUID userId,
             @Valid @RequestBody UpdateDeveloperProfileRequest request) {
         return developerProfileService.update(userId, request);
+    }
+
+    @Operation(summary = "Recompute developer profile metrics from delivery history")
+    @PreAuthorize("@perm.isSelf(#userId) or @perm.hasAny('member:update','settings:manage')")
+    @PostMapping("/{userId}/developer-profile/recompute")
+    public DeveloperProfileResponse recomputeDeveloperProfile(@PathVariable UUID userId) {
+        developerProfileRecomputationService.recomputeForUser(userId);
+        return developerProfileService.get(userId);
+    }
+
+    @Operation(summary = "Recompute all developer profile metrics for the organization")
+    @PreAuthorize("@perm.hasAny('settings:manage','admin:access')")
+    @PostMapping("/developer-profiles/recompute-all")
+    public List<DeveloperProfileResponse> recomputeAllDeveloperProfiles() {
+        UUID orgId = com.sprintiq.pms.tenancy.TenantContext.requireOrganizationId();
+        return developerProfileRecomputationService.recomputeForOrganization(orgId);
     }
 
     @Operation(summary = "A user's skills and proficiencies")

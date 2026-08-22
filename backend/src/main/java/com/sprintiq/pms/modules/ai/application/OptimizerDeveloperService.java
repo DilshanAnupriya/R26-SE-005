@@ -93,16 +93,122 @@ public class OptimizerDeveloperService {
     }
 
 
+    @Autowired
+    private com.sprintiq.pms.modules.ai.domain.OptimizerTaskRepository taskRepository;
+
     public List<DeveloperProfile> getAllDeveloperProfiles() {
         return developerProfileRepository.findAll();
     }
 
     public List<Developer> getAllDevelopers() {
-        return developerRepository.findAll();
+        List<Developer> devs = developerRepository.findAll();
+        for (Developer dev : devs) {
+            syncDeveloperWorkload(dev);
+        }
+        return devs;
     }
 
     public Developer getDeveloperById(Long id) {
-        return developerRepository.findById(id).orElseThrow(() -> new RuntimeException("Developer not found"));
+        Developer dev = developerRepository.findById(id).orElseThrow(() -> new RuntimeException("Developer not found"));
+        syncDeveloperWorkload(dev);
+        return dev;
+    }
+
+    private void syncDeveloperWorkload(Developer dev) {
+        if (dev == null) return;
+        try {
+            // First synchronize optimizer_tasks status with core stories status
+            if (jdbcTemplate != null) {
+                try {
+                    jdbcTemplate.update(
+                            "UPDATE optimizer_tasks ot " +
+                            "SET status = 'COMPLETED', completed_at = NOW() " +
+                            "FROM stories st " +
+                            "WHERE (ot.task_type LIKE CONCAT('%', st.item_key, '%') OR ot.task_type = st.title) " +
+                            "  AND st.status IN ('DONE', 'ACCEPTED', 'CANCELLED') " +
+                            "  AND ot.status != 'COMPLETED'"
+                    );
+                } catch (Exception ignored) {}
+            }
+
+            int activePoints = 0;
+            int activeTasks = 0;
+            boolean hasData = false;
+
+            // 1. Check stories assigned to this developer's core User account
+            String email = dev.getProfile() != null ? dev.getProfile().getEmail() : null;
+            String firstName = dev.getProfile() != null ? dev.getProfile().getFirstName() : "";
+            String lastName = dev.getProfile() != null ? dev.getProfile().getLastName() : "";
+            String fullName = (firstName + " " + lastName).trim();
+
+            List<UUID> userIds = new java.util.ArrayList<>();
+            if (jdbcTemplate != null) {
+                if (email != null && !email.isBlank()) {
+                    userIds.addAll(jdbcTemplate.query(
+                            "SELECT id FROM users WHERE lower(email) = lower(?)",
+                            (rs, rowNum) -> (UUID) rs.getObject(1),
+                            email.trim()
+                    ));
+                }
+                if (userIds.isEmpty() && !fullName.isBlank()) {
+                    userIds.addAll(jdbcTemplate.query(
+                            "SELECT id FROM users WHERE lower(full_name) = lower(?)",
+                            (rs, rowNum) -> (UUID) rs.getObject(1),
+                            fullName
+                    ));
+                }
+                if (userIds.isEmpty() && dev.getDev_id() != null) {
+                    userIds.addAll(jdbcTemplate.query(
+                            "SELECT id FROM users WHERE lower(email_normalized) = lower(?)",
+                            (rs, rowNum) -> (UUID) rs.getObject(1),
+                            dev.getDev_id().trim()
+                    ));
+                }
+
+                if (!userIds.isEmpty()) {
+                    hasData = true;
+                    for (UUID userId : userIds) {
+                        List<Map<String, Object>> storyStats = jdbcTemplate.queryForList(
+                                "SELECT COALESCE(SUM(COALESCE(story_points, 3)), 0) AS total_pts, COUNT(id) AS total_cnt " +
+                                "FROM stories " +
+                                "WHERE assignee_id = ? AND status NOT IN ('DONE', 'ACCEPTED', 'CANCELLED') AND deleted_at IS NULL",
+                                userId
+                        );
+                        if (!storyStats.isEmpty()) {
+                            Number pts = (Number) storyStats.get(0).get("total_pts");
+                            Number cnt = (Number) storyStats.get(0).get("total_cnt");
+                            activePoints += pts != null ? pts.intValue() : 0;
+                            activeTasks += cnt != null ? cnt.intValue() : 0;
+                        }
+                    }
+                }
+            }
+
+            // 2. If not linked to a core User, fallback to optimizer tasks table
+            if (userIds.isEmpty() && taskRepository != null) {
+                List<com.sprintiq.pms.modules.ai.domain.Task> devTasks = taskRepository.findByDeveloperId(dev.getId());
+                if (!devTasks.isEmpty()) {
+                    hasData = true;
+                    for (com.sprintiq.pms.modules.ai.domain.Task t : devTasks) {
+                        if (t.getStatus() != com.sprintiq.pms.modules.ai.domain.TaskStatus.COMPLETED) {
+                            activePoints += t.getStory_points();
+                            activeTasks++;
+                        }
+                    }
+                }
+            }
+
+            if (hasData) {
+                dev.setCurrent_workload(activePoints);
+                dev.setCurrent_tasks(activeTasks);
+                int capacity = (dev.getExperience_level() > 0 ? dev.getExperience_level() : 2) * 10;
+                double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0, capacity - activePoints) / capacity) * 100.0));
+                dev.setAvailability(availPct);
+                developerRepository.save(dev);
+            }
+        } catch (Exception e) {
+            System.err.println("Note: syncDeveloperWorkload error: " + e.getMessage());
+        }
     }
 
     public DeveloperProfile getDeveloperProfileById(Long id) {
@@ -130,10 +236,56 @@ public class OptimizerDeveloperService {
             Developer developer = optionalDev.get();
 
             // SAFE parsing (prevents crashes)
-            developer.setConsistency(parseDoubleSafe(dev.get("consistency")));
-            developer.setLearning_rate(parseDoubleSafe(dev.get("learning_rate")));
+            double consistency = parseDoubleSafe(dev.get("consistency"));
+            double learningRate = parseDoubleSafe(dev.get("learning_rate"));
 
+            developer.setConsistency(consistency);
+            developer.setLearning_rate(learningRate);
             developerRepository.save(developer);
+
+            // Synchronize with core developer_profiles table
+            syncWithCoreProfile(developer, dev);
+        }
+    }
+
+    private void syncWithCoreProfile(Developer developer, Map<String, Object> devData) {
+        if (jdbcTemplate == null) {
+            return;
+        }
+        try {
+            String email = developer.getProfile() != null ? developer.getProfile().getEmail() : null;
+            if (email == null && developer.getDev_id() != null && developer.getDev_id().contains("@")) {
+                email = developer.getDev_id();
+            }
+            if (email == null) return;
+
+            List<UUID> userIds = jdbcTemplate.query(
+                    "SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1",
+                    (rs, rowNum) -> (UUID) rs.getObject(1),
+                    email.trim()
+            );
+            if (userIds.isEmpty()) return;
+            UUID userId = userIds.get(0);
+
+            Double consistency = developer.getConsistency();
+            Double learningRate = developer.getLearning_rate();
+            Double avgVelocity = devData.get("avg_velocity") != null ? parseDoubleSafe(devData.get("avg_velocity")) : null;
+            Double defectRate = devData.get("defect_rate") != null ? parseDoubleSafe(devData.get("defect_rate")) : null;
+            Double reopenRate = devData.get("reopen_rate") != null ? parseDoubleSafe(devData.get("reopen_rate")) : null;
+
+            jdbcTemplate.update(
+                    "UPDATE developer_profiles SET " +
+                    "consistency_score = COALESCE(?, consistency_score), " +
+                    "learning_rate = COALESCE(?, learning_rate), " +
+                    "avg_velocity = COALESCE(?, avg_velocity), " +
+                    "defect_rate = COALESCE(?, defect_rate), " +
+                    "reopen_rate = COALESCE(?, reopen_rate), " +
+                    "last_computed_at = NOW() " +
+                    "WHERE user_id = ?",
+                    consistency, learningRate, avgVelocity, defectRate, reopenRate, userId
+            );
+        } catch (Exception e) {
+            System.err.println("Note: Core profile sync from ML: " + e.getMessage());
         }
     }
 

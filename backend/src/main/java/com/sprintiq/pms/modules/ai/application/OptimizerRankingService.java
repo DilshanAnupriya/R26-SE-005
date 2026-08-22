@@ -28,6 +28,9 @@ public class OptimizerRankingService {
     private OptimizerAllocationRepository allocationRepository;
 
     @Autowired
+    private OptimizerTaskService taskService;
+
+    @Autowired
     private RestTemplate restTemplate;
 
     @Value("${python.api.url:http://localhost:8000/predict}")
@@ -180,6 +183,7 @@ public class OptimizerRankingService {
         Sprint sprint = sprintRepository.findById(sprintId)
                 .orElseThrow(() -> new RuntimeException("Sprint not found with ID: " + sprintId));
 
+        taskService.syncSprintStories(sprintId);
         List<Task> allTasks = taskRepository.findBySprintId(sprintId);
         List<Task> tasks = allTasks.stream()
                 .filter(t -> t.getDeveloper() == null)
@@ -249,24 +253,25 @@ public class OptimizerRankingService {
                     Object explanationObj = devData.get("explanation");
                     String explanationJson = new ObjectMapper().writeValueAsString(explanationObj);
 
-                    // ✅ DUPLICATE CHECK
-                    boolean exists = allocationRepository.existsBySprintAndTaskAndDeveloper(sprint, task, developer);
+                    // Update existing allocation or create new
+                    Allocation allocation = allocationRepository
+                            .findBySprintAndTaskAndDeveloper(sprint, task, developer)
+                            .orElseGet(() -> Allocation.builder()
+                                    .developer(developer)
+                                    .sprint(sprint)
+                                    .task(task)
+                                    .organizationId(sprint.getOrganizationId())
+                                    .build());
 
-                    if (exists) continue;
-
-                    Allocation allocation = Allocation.builder()
-                            .developer(developer)
-                            .sprint(sprint)
-                            .task(task)
-                            .mlScore(Double.valueOf(devData.get("predicted_performance").toString()))
-                            .skillMatchScore(Double.valueOf(devData.get("skill_match_score").toString()))
-                            .workloadBalance(Double.valueOf(devData.get("workload_balance").toString()))
-                            .finalScore(Double.valueOf(devData.get("final_score").toString()))
-                            .rankPosition(Integer.valueOf(devData.get("rank").toString()))
-                            .status("RECOMMENDED")
-                            .explanation(explanationJson)
-                            .build();
-
+                    allocation.setMlScore(Double.valueOf(devData.get("predicted_performance").toString()));
+                    allocation.setSkillMatchScore(Double.valueOf(devData.get("skill_match_score").toString()));
+                    allocation.setWorkloadBalance(Double.valueOf(devData.get("workload_balance").toString()));
+                    allocation.setFinalScore(Double.valueOf(devData.get("final_score").toString()));
+                    allocation.setRankPosition(Integer.valueOf(devData.get("rank").toString()));
+                    if (allocation.getStatus() == null || !"ALLOCATED".equals(allocation.getStatus())) {
+                        allocation.setStatus("RECOMMENDED");
+                    }
+                    allocation.setExplanation(explanationJson);
                     allocationRepository.save(allocation);
                 }
             }

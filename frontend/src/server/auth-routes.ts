@@ -29,7 +29,11 @@ export async function exchangeForSession(
   const result = await callBackend<unknown>(path, { method: "POST", body });
 
   if (!result.ok) {
-    return backendError(result.status, result.error);
+    const response = backendError(result.status, result.error);
+    if (result.status === 401 || result.status === 403) {
+      clearRefreshCookie(response);
+    }
+    return response;
   }
 
   const parsed = authTokensSchema.safeParse(result.data);

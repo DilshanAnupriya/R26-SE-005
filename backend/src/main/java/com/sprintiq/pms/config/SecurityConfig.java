@@ -52,7 +52,7 @@ public class SecurityConfig {
             "/api/tasks/**",
             "/api/developers/**",
             "/api/allocation/**",
-            "/api/simulate/**"
+            "/api/simulator/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
