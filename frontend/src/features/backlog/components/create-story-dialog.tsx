@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, Sparkles, User, Users } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,35 +21,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCreateStory } from "../hooks";
-import { useEpics } from "../hooks";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useCreateStory, useEpics } from "../hooks";
+import { useMembers } from "@/features/organizations/hooks";
+import { useSprints } from "@/features/sprints/hooks";
 
 const TYPES = ["STORY", "TASK", "BUG", "SPIKE", "CHORE"] as const;
 const PRIORITIES = ["LOWEST", "LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 const NO_EPIC = "__none__";
+const NO_SPRINT = "__none__";
+const UNASSIGNED = "__unassigned__";
+
+function initials(name?: string | null) {
+  if (!name) return "?";
+  return name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
 
 /**
- * Writing a backlog item.
- *
- * <p>Acceptance criteria sit in the main form rather than behind a disclosure because
- * they are the strongest size signal available before anyone writes code — the
- * estimator counts them as its component signal and scores their text. A story
- * captured as a title alone is one the model has almost nothing to go on for, and the
- * hint under the field says so rather than leaving that to be discovered.</p>
+ * Writing a backlog item with optional upfront developer assignment and sprint association.
  */
 export function CreateStoryDialog({
   projectId,
   open,
   onOpenChange,
   onCreated,
+  defaultSprintId,
 }: {
   projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated?: (storyId: string) => void;
+  defaultSprintId?: string;
 }) {
   const create = useCreateStory(projectId);
   const epics = useEpics(open ? projectId : undefined);
+  const members = useMembers();
+  const sprints = useSprints(open ? projectId : undefined);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -57,6 +64,14 @@ export function CreateStoryDialog({
   const [type, setType] = useState<string>("STORY");
   const [priority, setPriority] = useState<string>("MEDIUM");
   const [epicId, setEpicId] = useState<string>(NO_EPIC);
+  const [assigneeId, setAssigneeId] = useState<string>(UNASSIGNED);
+  const [sprintId, setSprintId] = useState<string>(defaultSprintId || NO_SPRINT);
+
+  useEffect(() => {
+    if (defaultSprintId) {
+      setSprintId(defaultSprintId);
+    }
+  }, [defaultSprintId, open]);
 
   const criteriaCount = criteria
     .split("\n")
@@ -72,6 +87,8 @@ export function CreateStoryDialog({
     setType("STORY");
     setPriority("MEDIUM");
     setEpicId(NO_EPIC);
+    setAssigneeId(UNASSIGNED);
+    setSprintId(defaultSprintId || NO_SPRINT);
   }
 
   function submit(event: React.FormEvent) {
@@ -86,6 +103,8 @@ export function CreateStoryDialog({
         type,
         priority,
         epicId: epicId === NO_EPIC ? undefined : epicId,
+        assigneeId: assigneeId === UNASSIGNED ? undefined : assigneeId,
+        sprintId: sprintId === NO_SPRINT ? undefined : sprintId,
       },
       {
         onSuccess: (story) => {
@@ -97,13 +116,15 @@ export function CreateStoryDialog({
     );
   }
 
+  const memberList = members.data?.content ?? (Array.isArray(members.data) ? members.data : []);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>New backlog item</DialogTitle>
           <DialogDescription>
-            Describe the change from the point of view of whoever asked for it.
+            Create a task, story, or bug and assign a developer upfront or schedule it into a sprint.
           </DialogDescription>
         </DialogHeader>
 
@@ -114,9 +135,73 @@ export function CreateStoryDialog({
               id="story-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Add multi-currency invoice generation"
+              placeholder="e.g. Design authentication backend API"
               autoFocus
             />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* Assignee Selection */}
+            <div className="space-y-1.5">
+              <Label htmlFor="story-assignee" className="flex items-center gap-1.5">
+                <User className="size-3.5 text-muted-foreground" />
+                Assignee (Developer)
+              </Label>
+              <Select value={assigneeId} onValueChange={setAssigneeId}>
+                <SelectTrigger id="story-assignee" className="w-full">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED}>
+                    <span className="text-muted-foreground font-normal">Unassigned</span>
+                  </SelectItem>
+                  {memberList.map((m: any) => {
+                    const id = m.userId || m.id;
+                    const name = m.fullName || m.email || "Developer";
+                    return (
+                      <SelectItem key={id} value={id}>
+                        <div className="flex items-center gap-2">
+                          <Avatar className="size-4">
+                            <AvatarImage src={m.avatarUrl ?? undefined} alt={name} />
+                            <AvatarFallback className="text-[8px] bg-primary text-white">
+                              {initials(name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium text-foreground">{name}</span>
+                          {m.jobTitle ? (
+                            <span className="text-[11px] text-muted-foreground">({m.jobTitle})</span>
+                          ) : null}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Sprint Selection */}
+            <div className="space-y-1.5">
+              <Label htmlFor="story-sprint" className="flex items-center gap-1.5">
+                <Users className="size-3.5 text-muted-foreground" />
+                Sprint
+              </Label>
+              <Select value={sprintId} onValueChange={setSprintId}>
+                <SelectTrigger id="story-sprint" className="w-full">
+                  <SelectValue placeholder="Backlog (No Sprint)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SPRINT}>
+                    <span className="text-muted-foreground font-normal">Backlog (No Sprint)</span>
+                  </SelectItem>
+                  {(sprints.data?.content ?? []).map((sprint) => (
+                    <SelectItem key={sprint.id} value={sprint.id}>
+                      <span className="font-medium text-foreground">{sprint.name}</span>
+                      <span className="ml-1.5 text-xs text-muted-foreground">({sprint.status})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
@@ -187,15 +272,15 @@ export function CreateStoryDialog({
               id="story-criteria"
               value={criteria}
               onChange={(event) => setCriteria(event.target.value)}
-              rows={4}
+              rows={3}
               placeholder={"Given a customer in the EU\nWhen an invoice is generated\nThen VAT is applied"}
               className="font-mono text-sm"
             />
-            <p className="flex items-center gap-1.5 text-2xs text-ink-3">
-              <Sparkles className="size-3 flex-none text-accent" aria-hidden />
+            <p className="flex items-center gap-1.5 text-2xs text-muted-foreground">
+              <Sparkles className="size-3 flex-none text-primary" aria-hidden />
               {criteriaCount > 0
                 ? `${criteriaCount} line${criteriaCount === 1 ? "" : "s"} — the estimator counts these, so more detail here sharpens its range.`
-                : "One per line. The estimator uses these as its strongest size signal; without them it has little to go on."}
+                : "One per line. The estimator uses these as its size signal."}
             </p>
           </div>
 

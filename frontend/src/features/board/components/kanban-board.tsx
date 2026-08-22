@@ -1,9 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, GripVertical } from "lucide-react";
+import { AlertTriangle, Check, GripVertical, UserPlus, UserX } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Task, WorkflowState } from "@/lib/api/delivery-schemas";
 import type { TaskBoard } from "../api";
 import { cn } from "@/lib/utils";
@@ -13,25 +21,29 @@ function initials(name?: string | null) {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
 }
 
+export interface BoardMember {
+  userId?: string;
+  id?: string;
+  fullName?: string | null;
+  email?: string | null;
+  avatarUrl?: string | null;
+  jobTitle?: string | null;
+}
+
 /**
- * The project kanban board.
- *
- * <p>Drag uses the native HTML5 API rather than a library. The interaction is one
- * element into one of four drop zones; a drag library would add a bundle and a
- * pointer-event abstraction to solve a problem this screen does not have.</p>
- *
- * <p>Every card is also reachable from the keyboard: focus its handle, press Enter to
- * pick it up, move with the arrow keys, Enter to drop, Escape to cancel. Drag and drop
- * that only works with a mouse makes the board unusable for anyone who cannot use one,
- * and a kanban board is the primary interface of this product.</p>
+ * The project kanban board with Jira-style interactive developer assignments.
  */
 export function KanbanBoard({
   board,
   onMove,
+  onAssign,
+  members = [],
   disabled,
 }: {
   board: TaskBoard;
   onMove: (taskId: string, state: WorkflowState) => void;
+  onAssign?: (taskId: string, assigneeId: string | null) => void;
+  members?: BoardMember[];
   disabled?: boolean;
 }) {
   // The card the keyboard has picked up, and which column it is hovering over.
@@ -89,8 +101,6 @@ export function KanbanBoard({
               <h3 id={`column-${column.state.id}`} className="text-sm font-medium">
                 {column.state.name}
               </h3>
-              {/* WIP shown as used-of-limit, not just a warning once broken: a limit you
-                  can see approaching is one a team can act on. */}
               {column.state.wipLimit != null ? (
                 <Badge
                   variant={column.wipLimitExceeded ? "destructive" : "secondary"}
@@ -119,6 +129,8 @@ export function KanbanBoard({
                 <li key={task.id}>
                   <TaskCard
                     task={task}
+                    members={members}
+                    onAssign={onAssign}
                     carried={carrying?.taskId === task.id}
                     disabled={disabled}
                     onPickUp={() => setCarrying({ taskId: task.id, columnIndex })}
@@ -144,6 +156,8 @@ export function KanbanBoard({
 
 function TaskCard({
   task,
+  members,
+  onAssign,
   carried,
   disabled,
   onPickUp,
@@ -152,6 +166,8 @@ function TaskCard({
   onCancel,
 }: {
   task: Task;
+  members: BoardMember[];
+  onAssign?: (taskId: string, assigneeId: string | null) => void;
   carried?: boolean;
   disabled?: boolean;
   onPickUp?: () => void;
@@ -179,8 +195,6 @@ function TaskCard({
         {draggable ? (
           <button
             type="button"
-            // The instructions live in the accessible name so a screen reader announces
-            // how to move the card at the moment it becomes possible.
             aria-pressed={carried}
             aria-label={
               carried
@@ -210,7 +224,7 @@ function TaskCard({
         <div className="min-w-0 flex-1">
           <p className="text-sm leading-snug">{task.title}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground tabular-nums">{task.itemKey}</span>
+            <span className="text-[11px] text-muted-foreground tabular-nums font-mono">{task.itemKey}</span>
             {task.blocked ? (
               <Badge variant="destructive" className="text-[10px]">
                 blocked
@@ -224,21 +238,84 @@ function TaskCard({
           </div>
         </div>
 
-        {task.assigneeId ? (
-          <div className="flex items-center gap-1.5 shrink-0 bg-primary/10 border border-primary/20 rounded-full py-0.5 px-2" title={task.assigneeName ?? undefined}>
-            <Avatar className="size-4 shrink-0">
-              <AvatarImage src={task.assigneeAvatarUrl ?? undefined} alt={task.assigneeName ?? ""} />
-              <AvatarFallback className="text-[8px] bg-primary text-white font-medium">
-                {initials(task.assigneeName)}
-              </AvatarFallback>
-            </Avatar>
-            {task.assigneeName ? (
-              <span className="text-[11px] font-medium max-w-[90px] truncate text-foreground">
-                {task.assigneeName}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
+        {/* Jira-style Assignee Dropdown */}
+        <div className="shrink-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              {task.assigneeId ? (
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-full py-0.5 px-2 transition-colors cursor-pointer"
+                  title={`Assigned to ${task.assigneeName || 'Developer'}. Click to reassign.`}
+                >
+                  <Avatar className="size-4 shrink-0">
+                    <AvatarImage src={task.assigneeAvatarUrl ?? undefined} alt={task.assigneeName ?? ""} />
+                    <AvatarFallback className="text-[8px] bg-primary text-white font-medium">
+                      {initials(task.assigneeName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-[11px] font-medium max-w-[70px] truncate text-foreground">
+                    {task.assigneeName}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer"
+                  title="Assign developer"
+                >
+                  <UserPlus className="size-3" />
+                  <span>Assign</span>
+                </button>
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Assign Developer</DropdownMenuLabel>
+              {task.assigneeId && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => onAssign?.(task.id, null)}
+                    className="text-xs text-destructive flex items-center gap-2 cursor-pointer"
+                  >
+                    <UserX className="size-3.5" />
+                    <span>Unassign</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              {members.length === 0 ? (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">No members found</div>
+              ) : (
+                members.map((m) => {
+                  const uid = m.userId || m.id || "";
+                  const name = m.fullName || m.email || "Developer";
+                  const isSelected = task.assigneeId === uid;
+                  return (
+                    <DropdownMenuItem
+                      key={uid}
+                      onClick={() => onAssign?.(task.id, uid)}
+                      className={cn(
+                        "text-xs flex items-center justify-between cursor-pointer",
+                        isSelected && "bg-primary/10 font-semibold text-primary"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Avatar className="size-4 shrink-0">
+                          <AvatarImage src={m.avatarUrl ?? undefined} alt={name} />
+                          <AvatarFallback className="text-[8px] bg-primary text-white">
+                            {initials(name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="truncate">{name}</span>
+                      </div>
+                      {isSelected && <Check className="size-3.5 text-primary shrink-0" />}
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {task.blocked && task.blockedReason ? (
