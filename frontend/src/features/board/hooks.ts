@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSession } from "@/components/session-provider";
@@ -89,6 +90,99 @@ export function useMoveTask(projectId: string) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.overview(projectId) });
     },
   });
+}
+
+/** Adds a card to the board. The new task lands in the project's default column. */
+export function useCreateTask(projectId: string) {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      title: string;
+      description?: string | null;
+      sprintId?: string | null;
+      storyId?: string | null;
+      priority?: string | null;
+      assigneeId?: string | null;
+      estimateMinutes?: number | null;
+    }) => boardApi.createTask(api, { projectId, ...input }),
+
+    onSuccess: (task) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.board(projectId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.overview(projectId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.workload(projectId) });
+      toast.success(`${task.itemKey} added.`);
+    },
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : "Could not add that task.");
+    },
+  });
+}
+
+/**
+ * Sends a finished card back for rework.
+ *
+ * <p>Not the same as dragging it, though both end in the same column: this says why,
+ * and the sprint's collaboration risk reads the reopen count. The board is refetched
+ * rather than patched optimistically — the server decides where a reopened card lands
+ * and restarts its clock, and guessing either would show a number that changes under
+ * the cursor a moment later.</p>
+ */
+export function useReopenTask(projectId: string) {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { taskId: string; reason?: string }) =>
+      boardApi.reopen(api, input.taskId, { reason: input.reason }),
+
+    onSuccess: (task) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.board(projectId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.detail(task.id) });
+      if (task.sprintId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(task.sprintId) });
+      }
+      toast.success(`${task.itemKey} reopened.`);
+    },
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : "Could not reopen that task.");
+    },
+  });
+}
+
+/**
+ * Reports an expired countdown, at most once per task per session.
+ *
+ * <p>The server is idempotent per task, so a duplicate report is harmless rather than a
+ * double charge — but the local guard means a board with forty overdue cards does not
+ * fire forty POSTs on every mount, which it otherwise would.</p>
+ */
+export function useReportOverdue() {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+  const reported = useRef(new Set<string>());
+
+  return useCallback(
+    (taskId: string, sprintId?: string | null) => {
+      if (reported.current.has(taskId)) return;
+      reported.current.add(taskId);
+      boardApi
+        .reportOverdue(api, taskId)
+        .then(() => {
+          if (sprintId) {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(sprintId) });
+          }
+        })
+        .catch(() => {
+          // Silent. The countdown on the card is the user-visible signal; a toast for a
+          // background bookkeeping call would interrupt work to report nothing they can
+          // act on. Dropped from the set so the next tick can retry.
+          reported.current.delete(taskId);
+        });
+    },
+    [api, queryClient],
+  );
 }
 
 export function useAssignTask(projectId: string) {

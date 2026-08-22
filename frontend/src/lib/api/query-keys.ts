@@ -85,6 +85,12 @@ export const queryKeys = {
     estimate: (storyId: string) => [...queryKeys.ai.all, "estimate", storyId] as const,
     velocity: (sprintId: string) => [...queryKeys.ai.all, "velocity", sprintId] as const,
     risk: (sprintId: string) => [...queryKeys.ai.all, "risk", sprintId] as const,
+    riskTrend: (sprintId: string) => [...queryKeys.ai.all, "risk-trend", sprintId] as const,
+    riskAdjustments: (sprintId: string) =>
+      [...queryKeys.ai.all, "risk-adjustments", sprintId] as const,
+    // Sorted at the call site, so picking the same two sprints in either order hits one
+    // cache entry rather than two.
+    riskCompare: (sprintIds: string[]) => [...queryKeys.ai.all, "risk-compare", sprintIds] as const,
     cost: (sprintId: string) => [...queryKeys.ai.all, "cost", sprintId] as const,
     costHistory: (sprintId: string) => [...queryKeys.ai.all, "cost-history", sprintId] as const,
     costValidation: (sprintId: string) => [...queryKeys.ai.all, "cost-validation", sprintId] as const,
@@ -95,6 +101,15 @@ export const queryKeys = {
     models: () => [...queryKeys.ai.all, "models"] as const,
     predictions: (filters: Record<string, unknown> = {}) =>
       [...queryKeys.ai.all, "predictions", filters] as const,
+  },
+
+  requirementChanges: {
+    all: ["requirement-changes"] as const,
+    types: () => [...queryKeys.requirementChanges.all, "types"] as const,
+    forSprint: (sprintId: string) =>
+      [...queryKeys.requirementChanges.all, "sprint", sprintId] as const,
+    forProject: (projectId: string) =>
+      [...queryKeys.requirementChanges.all, "project", projectId] as const,
   },
 
   comments: {

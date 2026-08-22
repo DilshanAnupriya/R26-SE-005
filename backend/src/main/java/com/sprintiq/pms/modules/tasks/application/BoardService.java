@@ -134,7 +134,9 @@ public class BoardService {
                     null,
                     null,
                     story.getCreatedAt(),
-                    story.getUpdatedAt()
+                    story.getUpdatedAt(),
+                    0L,
+                    null
             );
 
             if (story.getWorkflowStateId() == null) {

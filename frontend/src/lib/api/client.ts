@@ -14,7 +14,12 @@ export interface RequestOptions<TSchema extends z.ZodType | undefined> {
   body?: unknown;
   /** Validates the response at the boundary. Omit for endpoints that return no body. */
   schema?: TSchema;
-  query?: Record<string, string | number | boolean | null | undefined>;
+  /**
+   * An array value becomes repeated parameters (`ids=a&ids=b`) rather than one
+   * comma-joined string. Spring binds both to a `List`, but only the repeated form
+   * survives a value that contains a comma.
+   */
+  query?: Record<string, string | number | boolean | null | undefined | readonly string[]>;
   signal?: AbortSignal;
   /** Skips the bearer token and the 401-refresh dance. For the BFF's own auth routes. */
   skipAuth?: boolean;
@@ -222,6 +227,12 @@ export class ApiClient {
     const url = new URL(`${base}${path.startsWith("/") ? path : `/${path}`}`);
 
     for (const [key, value] of Object.entries(query ?? {})) {
+      if (Array.isArray(value)) {
+        value
+          .filter((entry) => entry !== undefined && entry !== null && entry !== "")
+          .forEach((entry) => url.searchParams.append(key, String(entry)));
+        continue;
+      }
       // Absent filters must not become the literal strings "undefined"/"null",
       // which the backend would try to parse as a UUID.
       if (value !== undefined && value !== null && value !== "") {

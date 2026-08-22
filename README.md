@@ -92,6 +92,27 @@ per-project workflow states with WIP limits, labels, epics, stories, tasks and s
 watchers, time tracking with a persisted start/stop timer, sprint boards and a project
 kanban board, and a workload planner.
 
+**Task work clock** — a stopwatch, not a `createdAt + estimate` deadline. Banked seconds
+plus the start of the current run, stored on the task, so a card parked in Done stops
+burning its estimate and one pulled back out resumes where it froze rather than
+restarting. The board card counts down live, goes amber in the last quarter, and shows an
+OVERDUE badge only on work that *finished* late — work still running past its estimate
+shows a live overrun instead, which is a different situation.
+
+**Requirement-change register** — what moved, who asked, which sprint was in flight, and
+whether it made delivery harder or easier. The last part is why this is not an activity
+query: removing scope and adding it are both "a change" and they move the risk in
+opposite directions. Weights live on the enum and are served to the form, so the number
+promised before logging is the number recorded.
+
+**Live risk adjustments** — a model scores a sprint at a moment, and the board keeps
+moving. Blockers, rework and logged scope changes accumulate as signed points against the
+model they bear on, and the read path folds them into the stored score. Measured from
+each model's own last scoring, so nothing is counted twice, and every adjusted figure
+decomposes back into "the model said X, the board has since added Y". Bounded by a soft
+cap rather than a clamp — a clamp stops responding exactly when the next blocker most
+deserves to register.
+
 **Backlog ranking** — LexoRank-style string ranks, so reordering rewrites only the rows
 that moved rather than every row below the drop point.
 

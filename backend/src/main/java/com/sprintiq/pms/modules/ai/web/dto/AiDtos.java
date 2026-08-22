@@ -139,18 +139,111 @@ public final class AiDtos {
                                          UUID predictionId,
                                          UUID acknowledgedBy,
                                          Instant acknowledgedAt,
-                                         Instant createdAt) {
+                                         Instant createdAt,
+                                         /**
+                                          * Points the board has added since this scoring — a task
+                                          * blocked, work reopened, scope logged.
+                                          *
+                                          * <p>On a 0–100 scale, unlike {@code riskScore}, which is
+                                          * a 0–1 probability. Deliberately: the ledger is written
+                                          * and read by people ("scope added, +8"), and expressing
+                                          * it in hundredths of a probability would make every
+                                          * entry unreadable to make one division unnecessary.</p>
+                                          */
+                                         BigDecimal adjustmentDelta,
+                                         /**
+                                          * What the score reads as now: {@code riskScore} plus the
+                                          * adjustment converted to the same 0–1 scale, clamped.
+                                          *
+                                          * <p>Sent alongside the model's own figure rather than
+                                          * replacing it. A dashboard showing only the adjusted
+                                          * number cannot be reconciled with the prediction record,
+                                          * and the first person to try would stop trusting both.</p>
+                                          */
+                                         BigDecimal adjustedScore,
+                                         /** {@code adjustedScore} banded — what the badge should say. */
+                                         RiskSeverity adjustedSeverity) {
+
+        /** Divides the human-scale ledger into the model's probability scale. */
+        private static final BigDecimal POINTS_PER_UNIT = BigDecimal.valueOf(100);
 
         public static RiskAssessmentResponse from(RiskAssessment assessment) {
+            return from(assessment, BigDecimal.ZERO);
+        }
+
+        public static RiskAssessmentResponse from(RiskAssessment assessment, BigDecimal adjustment) {
+            BigDecimal delta = adjustment == null ? BigDecimal.ZERO : adjustment;
+            BigDecimal base = assessment.getRiskScore() == null ? BigDecimal.ZERO : assessment.getRiskScore();
+            BigDecimal adjusted = base
+                    .add(delta.divide(POINTS_PER_UNIT, 4, java.math.RoundingMode.HALF_UP))
+                    .max(BigDecimal.ZERO).min(BigDecimal.ONE)
+                    .setScale(4, java.math.RoundingMode.HALF_UP);
             return new RiskAssessmentResponse(assessment.getId(), assessment.getSprintId(),
                     assessment.getRiskType(), assessment.getRiskScore(), assessment.isRiskLabel(),
                     assessment.getSeverity(), assessment.getConfidence(),
                     assessment.getDrivers().stream().map(PredictionDriverResponse::from).toList(),
                     assessment.getMitigations(), assessment.getExplanation(),
                     assessment.getPredictionId(), assessment.getAcknowledgedBy(),
-                    assessment.getAcknowledgedAt(), assessment.getCreatedAt());
+                    assessment.getAcknowledgedAt(), assessment.getCreatedAt(),
+                    delta.setScale(2, java.math.RoundingMode.HALF_UP), adjusted,
+                    RiskSeverity.forScore(adjusted));
         }
     }
+
+    @Schema(name = "RiskAdjustmentResponse",
+            description = "One entry in the ledger of board activity behind an adjusted risk score")
+    public record RiskAdjustmentResponse(UUID id,
+                                         UUID sprintId,
+                                         RiskType riskType,
+                                         BigDecimal delta,
+                                         String reason,
+                                         Instant createdAt) {
+
+        public static RiskAdjustmentResponse from(SprintRiskAdjustment adjustment) {
+            return new RiskAdjustmentResponse(adjustment.getId(), adjustment.getSprintId(),
+                    adjustment.getRiskType(), adjustment.getDelta(), adjustment.getReason(),
+                    adjustment.getCreatedAt());
+        }
+    }
+
+    @Schema(name = "DailyRiskPoint",
+            description = "One calendar day of a sprint, forward-filled from the last scoring at or before it")
+    public record DailyRiskPoint(
+            /** ISO date, e.g. 2026-08-22. */
+            String date,
+            BigDecimal overallScore,
+            RiskSeverity overallSeverity,
+            BigDecimal overBudgetScore,
+            BigDecimal requirementChangeScore,
+            BigDecimal communicationCollaborationScore,
+            /**
+             * False for a day the sprint had not yet been scored, and for days still in
+             * the future. Both are rendered as gaps rather than zeroes — a chart that
+             * draws an unscored day at the bottom of the axis reads as a day with no
+             * risk, which is the opposite of what it means.
+             */
+            boolean hasData,
+            /** The live row: today, carrying the adjustments the board has since accumulated. */
+            boolean current) {}
+
+    @Schema(name = "SprintRiskComparison", description = "One sprint's column in a side-by-side comparison")
+    public record SprintRiskComparison(UUID sprintId,
+                                       String sprintName,
+                                       String status,
+                                       java.time.LocalDate startDate,
+                                       java.time.LocalDate endDate,
+                                       BigDecimal overallScore,
+                                       RiskSeverity overallSeverity,
+                                       BigDecimal overBudgetScore,
+                                       BigDecimal requirementChangeScore,
+                                       BigDecimal communicationCollaborationScore,
+                                       BigDecimal committedPoints,
+                                       BigDecimal completedPoints,
+                                       long blockedCount,
+                                       long reopenedCount,
+                                       BigDecimal adjustmentDelta,
+                                       /** Null when the sprint has never been scored. */
+                                       Instant assessedAt) {}
 
     @Schema(name = "SprintRiskResponse", description = "All three risk types for one sprint")
     public record SprintRiskResponse(UUID sprintId,

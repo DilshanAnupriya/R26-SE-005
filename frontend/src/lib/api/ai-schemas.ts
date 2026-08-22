@@ -124,8 +124,71 @@ export const riskAssessmentSchema = z.object({
   acknowledgedBy: z.uuid().nullish(),
   acknowledgedAt: z.string().nullish(),
   createdAt: z.string(),
+  /**
+   * Points the board has added since this scoring, on a 0-100 scale — unlike
+   * `riskScore`, which is a 0-1 probability. The mismatch is deliberate on the server:
+   * the ledger is written and read by people ("scope added, +8").
+   */
+  adjustmentDelta: z.coerce.number().default(0),
+  /** `riskScore` with the adjustment folded in, on the same 0-1 scale. */
+  adjustedScore: z.coerce.number().nullish(),
+  /** `adjustedScore` banded — what the badge should say. */
+  adjustedSeverity: riskSeveritySchema.nullish(),
 });
 export type RiskAssessment = z.infer<typeof riskAssessmentSchema>;
+
+/** One entry in the ledger behind an adjusted score. */
+export const riskAdjustmentSchema = z.object({
+  id: z.uuid(),
+  sprintId: z.uuid(),
+  riskType: riskTypeSchema,
+  delta: z.coerce.number(),
+  reason: z.string(),
+  createdAt: z.string(),
+});
+export type RiskAdjustment = z.infer<typeof riskAdjustmentSchema>;
+
+/**
+ * One calendar day of a sprint.
+ *
+ * <p>Every score is nullable and `hasData` says whether the day was ever scored. The
+ * two are not redundant: a chart that drew an unscored day as zero would report "no
+ * risk" for every day of a sprint nobody has assessed, which is the most misleading
+ * thing this shape could express.</p>
+ */
+export const dailyRiskPointSchema = z.object({
+  date: z.string(),
+  overallScore: z.coerce.number().nullish(),
+  overallSeverity: riskSeveritySchema.nullish(),
+  overBudgetScore: z.coerce.number().nullish(),
+  requirementChangeScore: z.coerce.number().nullish(),
+  communicationCollaborationScore: z.coerce.number().nullish(),
+  hasData: z.boolean(),
+  current: z.boolean(),
+});
+export type DailyRiskPoint = z.infer<typeof dailyRiskPointSchema>;
+
+/** One sprint's column in a side-by-side risk comparison. */
+export const sprintRiskComparisonSchema = z.object({
+  sprintId: z.uuid(),
+  sprintName: z.string().nullish(),
+  status: z.string().nullish(),
+  startDate: z.string().nullish(),
+  endDate: z.string().nullish(),
+  overallScore: z.coerce.number().nullish(),
+  overallSeverity: riskSeveritySchema.nullish(),
+  overBudgetScore: z.coerce.number().nullish(),
+  requirementChangeScore: z.coerce.number().nullish(),
+  communicationCollaborationScore: z.coerce.number().nullish(),
+  committedPoints: z.coerce.number().nullish(),
+  completedPoints: z.coerce.number().nullish(),
+  blockedCount: z.coerce.number().nullish(),
+  reopenedCount: z.coerce.number().nullish(),
+  adjustmentDelta: z.coerce.number().default(0),
+  /** Null when the sprint has never been assessed — itself worth seeing. */
+  assessedAt: z.string().nullish(),
+});
+export type SprintRiskComparison = z.infer<typeof sprintRiskComparisonSchema>;
 
 export const sprintRiskSchema = z.object({
   sprintId: z.uuid(),

@@ -114,6 +114,25 @@ public class TaskController {
                 request.complexityScore(), request.requiredSkills(), request.dueDate()));
     }
 
+    @Operation(summary = "Send a finished task back for rework",
+            description = "Moves it out of the finished column, counts the reopen and resumes the "
+                    + "work clock from where it froze rather than restarting it.")
+    @PreAuthorize("@perm.has('task:manage')")
+    @PostMapping("/{taskId}/reopen")
+    public TaskResponse reopen(@PathVariable UUID taskId,
+                               @RequestBody(required = false) @Valid ReopenTaskRequest request) {
+        return taskService.reopen(taskId, request);
+    }
+
+    @Operation(summary = "Report that a task's countdown has run out",
+            description = "Charges the sprint's over-budget risk once, however many clients "
+                    + "report it. A finished task is ignored.")
+    @PreAuthorize("@perm.has('task:manage')")
+    @PostMapping("/{taskId}/overdue")
+    public TaskResponse reportOverdue(@PathVariable UUID taskId) {
+        return taskService.registerOverdue(taskId);
+    }
+
     @Operation(summary = "Flag a task as blocked")
     @PreAuthorize("@perm.has('task:manage')")
     @PostMapping("/{taskId}/block")

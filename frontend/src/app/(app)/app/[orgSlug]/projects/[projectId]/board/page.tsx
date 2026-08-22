@@ -8,8 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useProjectRealtime, useRealtime } from "@/components/realtime-provider";
+import { AddTaskDialog } from "@/features/board/components/add-task-dialog";
 import { KanbanBoard } from "@/features/board/components/kanban-board";
-import { useAssignTask, useMoveTask, useTaskBoard } from "@/features/board/hooks";
+import {
+  useAssignTask,
+  useMoveTask,
+  useReopenTask,
+  useReportOverdue,
+  useTaskBoard,
+} from "@/features/board/hooks";
 import { useProject } from "@/features/projects/hooks";
 import { useSprints } from "@/features/sprints/hooks";
 import { useMembers } from "@/features/organizations/hooks";
@@ -23,6 +30,7 @@ export default function BoardPage({
   const { orgSlug, projectId } = use(params);
   const [sprintFilter, setSprintFilter] = useState<string>("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [addTaskOpen, setAddTaskOpen] = useState(false);
 
   const project = useProject(projectId);
   const sprints = useSprints(projectId);
@@ -40,6 +48,8 @@ export default function BoardPage({
   const board = useTaskBoard(projectId, sprintFilter || undefined);
   const move = useMoveTask(projectId);
   const assign = useAssignTask(projectId);
+  const reopen = useReopenTask(projectId);
+  const reportOverdue = useReportOverdue();
   const { connected } = useRealtime();
 
   // Someone else's drag or assignment updates this board without a refresh.
@@ -94,7 +104,9 @@ export default function BoardPage({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Drag a card to move between columns, or click the Assignee button on any card to assign or reassign developers.
+        Drag a card to move between columns, or click the Assignee button on any card to assign or
+        reassign developers. Each card counts down against its estimate while it is open, and freezes
+        when it is finished.
       </p>
 
       {board.isPending ? (
@@ -108,9 +120,12 @@ export default function BoardPage({
       ) : board.data && board.data.columns.length > 0 ? (
         <KanbanBoard
           board={board.data}
-          disabled={move.isPending || assign.isPending}
+          disabled={move.isPending || assign.isPending || reopen.isPending}
           onMove={(taskId, state) => move.mutate({ taskId, state })}
           onAssign={(taskId, assigneeId) => assign.mutate({ taskId, assigneeId })}
+          onAddTask={() => setAddTaskOpen(true)}
+          onReopen={(task) => reopen.mutate({ taskId: task.id })}
+          onTaskOverdue={(task) => reportOverdue(task.id, task.sprintId)}
           members={memberList}
         />
       ) : (
@@ -119,6 +134,14 @@ export default function BoardPage({
           description="This project has no workflow states configured yet."
         />
       )}
+
+      <AddTaskDialog
+        projectId={projectId}
+        open={addTaskOpen}
+        onOpenChange={setAddTaskOpen}
+        defaultSprintId={sprintFilter || undefined}
+        members={memberList}
+      />
 
       <CreateStoryDialog
         projectId={projectId}

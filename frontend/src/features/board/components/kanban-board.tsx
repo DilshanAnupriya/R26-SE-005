@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, GripVertical, UserPlus, UserX } from "lucide-react";
+import { AlertTriangle, Check, GripVertical, Plus, RotateCcw, UserPlus, UserX } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,6 +15,8 @@ import {
 import type { Task, WorkflowState } from "@/lib/api/delivery-schemas";
 import type { TaskBoard } from "../api";
 import { cn } from "@/lib/utils";
+import { computeTaskClock } from "@/lib/task-clock";
+import { OverdueBadge, ReopenBadge, TaskClockRow } from "./task-clock-row";
 
 function initials(name?: string | null) {
   if (!name) return "?";
@@ -37,12 +39,24 @@ export function KanbanBoard({
   board,
   onMove,
   onAssign,
+  onAddTask,
+  onReopen,
+  onTaskOverdue,
   members = [],
   disabled,
 }: {
   board: TaskBoard;
   onMove: (taskId: string, state: WorkflowState) => void;
   onAssign?: (taskId: string, assigneeId: string | null) => void;
+  /** Adds a card from the column header. Omit to hide the control entirely. */
+  onAddTask?: () => void;
+  /** Sends a finished card back for rework. Only offered on finished cards. */
+  onReopen?: (task: Task) => void;
+  /**
+   * Fires the first time an open card's countdown crosses its estimate. The board is
+   * the only thing that knows the moment it happens — it is already ticking to draw it.
+   */
+  onTaskOverdue?: (task: Task) => void;
   members?: BoardMember[];
   disabled?: boolean;
 }) {
@@ -131,6 +145,8 @@ export function KanbanBoard({
                     task={task}
                     members={members}
                     onAssign={onAssign}
+                    onReopen={onReopen}
+                    onTaskOverdue={onTaskOverdue}
                     carried={carrying?.taskId === task.id}
                     disabled={disabled}
                     onPickUp={() => setCarrying({ taskId: task.id, columnIndex })}
@@ -147,6 +163,23 @@ export function KanbanBoard({
                 </li>
               ) : null}
             </ul>
+
+            {/*
+              One add control per column, but only on the first — every column would be
+              four buttons that all do the same thing, since a new task always starts in
+              the project's first workflow state whatever column you press.
+            */}
+            {onAddTask && columnIndex === 0 ? (
+              <button
+                type="button"
+                onClick={onAddTask}
+                disabled={disabled}
+                className="mx-2 mb-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
+              >
+                <Plus className="size-3.5" aria-hidden />
+                Add task
+              </button>
+            ) : null}
           </section>
         );
       })}
@@ -158,6 +191,8 @@ function TaskCard({
   task,
   members,
   onAssign,
+  onReopen,
+  onTaskOverdue,
   carried,
   disabled,
   onPickUp,
@@ -168,6 +203,8 @@ function TaskCard({
   task: Task;
   members: BoardMember[];
   onAssign?: (taskId: string, assigneeId: string | null) => void;
+  onReopen?: (task: Task) => void;
+  onTaskOverdue?: (task: Task) => void;
   carried?: boolean;
   disabled?: boolean;
   onPickUp?: () => void;
@@ -176,6 +213,11 @@ function TaskCard({
   onCancel?: () => void;
 }) {
   const draggable = !disabled && Boolean(onPickUp);
+  const finished = task.status === "DONE" || task.status === "CANCELLED";
+  // Stories are rendered through the task shape on this board and have no clock and no
+  // /tasks/{id} of their own — offering them a Reopen button would show a control that
+  // 404s. `tracked` is the same discriminator the countdown uses.
+  const isTask = computeTaskClock(task).tracked;
 
   return (
     <article
@@ -232,10 +274,31 @@ function TaskCard({
             ) : null}
             {task.estimateMinutes ? (
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                {Math.round(task.estimateMinutes / 60)}h
+                {formatEstimate(task.estimateMinutes)}
               </span>
             ) : null}
+            <ReopenBadge count={task.reopenedCount ?? 0} />
+            <OverdueBadge task={task} />
           </div>
+
+          <TaskClockRow task={task} onExpired={onTaskOverdue} />
+
+          {/*
+            Only on a finished card. Offering "reopen" on a task nobody has finished is
+            an action with no meaning, and the server rejects it — better not to show it.
+          */}
+          {finished && isTask && onReopen ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onReopen(task)}
+              className="mt-1.5 inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-amber-500/50 hover:text-amber-600 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50 dark:hover:text-amber-400"
+              title="Send this back for rework. Counts as a reopen and resumes the clock from where it froze."
+            >
+              <RotateCcw className="size-2.5" aria-hidden />
+              Reopen
+            </button>
+          ) : null}
         </div>
 
         {/* Jira-style Assignee Dropdown */}
@@ -323,4 +386,16 @@ function TaskCard({
       ) : null}
     </article>
   );
+}
+
+/**
+ * The estimate as people say it. `480m` and `8h` are the same number and only one of
+ * them is read at a glance on a card.
+ */
+function formatEstimate(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const hours = minutes / 60;
+  if (hours < 8) return `${Number(hours.toFixed(1))}h`;
+  const days = hours / 8;
+  return `${Number(days.toFixed(1))}d`;
 }
