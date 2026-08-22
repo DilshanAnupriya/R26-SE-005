@@ -1,9 +1,11 @@
 package com.sprintiq.pms.modules.ai.application;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +30,9 @@ public class OptimizerAllocationService {
     @Autowired
     private OptimizerTaskService taskService;
 
+    @Autowired(required = false)
+    private OptimizerRankingService rankingService;
+
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
@@ -40,7 +45,18 @@ public class OptimizerAllocationService {
         if (sprintId != null && taskService != null) {
             try {
                 taskService.syncSprintStories(sprintId);
-                generateMissingAllocationsForSprint(sprintId);
+                List<Allocation> existing = allocationRepository.findBySprint_Id(sprintId);
+                if (existing.isEmpty()) {
+                    if (rankingService != null) {
+                        try {
+                            rankingService.getSprintRecommendations(sprintId);
+                        } catch (Exception mlEx) {
+                            generateMissingAllocationsForSprint(sprintId);
+                        }
+                    } else {
+                        generateMissingAllocationsForSprint(sprintId);
+                    }
+                }
             } catch (Exception e) {
                 System.err.println("Note: syncSprintStories/allocations error: " + e.getMessage());
             }
@@ -246,6 +262,16 @@ public class OptimizerAllocationService {
         Map<Long, List<Allocation>> taskGroups = allAllocations.stream()
             .collect(java.util.stream.Collectors.groupingBy(a -> a.getTask().getId()));
 
+        Set<Long> assignedDevIdsInSprint = new HashSet<>();
+
+        // Identify devs already assigned to any task in this sprint
+        for (List<Allocation> allocs : taskGroups.values()) {
+            allocs.stream()
+                .filter(a -> "ALLOCATED".equals(a.getStatus()))
+                .findFirst()
+                .ifPresent(a -> assignedDevIdsInSprint.add(a.getDeveloper().getId()));
+        }
+
         for (Map.Entry<Long, List<Allocation>> entry : taskGroups.entrySet()) {
             List<Allocation> allocations = entry.getValue();
 
@@ -254,13 +280,22 @@ public class OptimizerAllocationService {
                 .anyMatch(a -> "ALLOCATED".equals(a.getStatus()));
 
             if (!alreadyAllocated) {
-                // Find the Rank 1 recommendation
-                allocations.stream()
-                    .filter(a -> a.getRankPosition() == 1 && "RECOMMENDED".equals(a.getStatus()))
+                // Sort allocations by rank
+                allocations.sort((a, b) -> Integer.compare(a.getRankPosition(), b.getRankPosition()));
+
+                // 1. Try to find top candidate who doesn't have a task in this sprint yet (fair distribution)
+                Allocation chosen = allocations.stream()
+                    .filter(a -> !assignedDevIdsInSprint.contains(a.getDeveloper().getId()) && "RECOMMENDED".equals(a.getStatus()))
                     .findFirst()
-                    .ifPresent(topAlloc -> {
-                        assignRecommendedDeveloper(topAlloc.getId(), topAlloc.getDeveloper().getId());
-                    });
+                    .orElseGet(() -> allocations.stream()
+                        .filter(a -> "RECOMMENDED".equals(a.getStatus()))
+                        .findFirst()
+                        .orElse(null));
+
+                if (chosen != null) {
+                    assignRecommendedDeveloper(chosen.getId(), chosen.getDeveloper().getId());
+                    assignedDevIdsInSprint.add(chosen.getDeveloper().getId());
+                }
             }
         }
     }
