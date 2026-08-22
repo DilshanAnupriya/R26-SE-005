@@ -126,20 +126,25 @@ export default function SimulatorView() {
         const tasksData = await tasksRes.json();
         
         if (Array.isArray(tasksData)) {
-          const unassignedTasks = tasksData.filter((t: any) => t.developer === null);
-          
-          setTasks(unassignedTasks.map((t: any) => ({
+          setTasks(tasksData.map((t: any) => ({
             id: t.id,
             title: t.task_type || "Unknown Task",
             storyPoints: t.story_points || 0,
-            type: t.req_frontend > t.req_backend ? "Frontend" : "Backend",
-            priority: t.task_complexity > 4 ? "High" : (t.task_complexity > 2 ? "Medium" : "Low")
+            type: (t.req_frontend || 0) > (t.req_backend || 0) ? "Frontend" : "Backend",
+            priority: (t.task_complexity || 3) > 4 ? "High" : ((t.task_complexity || 3) > 2 ? "Medium" : "Low")
           })));
+
+          const initialAssignments: Record<number, number> = {};
+          tasksData.forEach((t: any) => {
+            if (t.developer?.id) {
+              initialAssignments[t.id] = t.developer.id;
+            }
+          });
+          setAssignments(initialAssignments);
         } else {
           setTasks([]);
+          setAssignments({});
         }
-        
-        setAssignments({});
       } catch (err) {
         console.error("Error fetching tasks for sprint:", err);
       }
