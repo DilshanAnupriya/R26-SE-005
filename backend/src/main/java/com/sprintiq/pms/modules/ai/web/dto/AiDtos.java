@@ -234,6 +234,35 @@ public final class AiDtos {
                                  BigDecimal budgetAmount,
                                  Instant snapshotAt) {}
 
+    @Schema(name = "CostPredictionAccuracy", description = "Accuracy of one stored cost forecast against actual sprint cost")
+    public record CostPredictionAccuracy(UUID forecastId,
+                                         CostStage stage,
+                                         BigDecimal predictedCost,
+                                         BigDecimal actualCost,
+                                         BigDecimal errorAmount,
+                                         BigDecimal absoluteError,
+                                         BigDecimal absolutePercentageError,
+                                         Instant snapshotAt) {}
+
+    @Schema(name = "CostValidationResponse",
+            description = "Live cost tracking for an active sprint or final prediction accuracy for a completed sprint")
+    public record CostValidationResponse(UUID sprintId,
+                                         String evaluationStatus,
+                                         boolean accuracyEligible,
+                                         BigDecimal actualCost,
+                                         BigDecimal actualCostSoFar,
+                                         BigDecimal estimatedRemainingCost,
+                                         BigDecimal projectedFinalCost,
+                                         BigDecimal latestForecastAmount,
+                                         BigDecimal liveVariance,
+                                         BigDecimal mae,
+                                         BigDecimal rmse,
+                                         BigDecimal mape,
+                                         CostPredictionAccuracy initial,
+                                         CostPredictionAccuracy midSprint,
+                                         CostStage closerStage,
+                                         List<CostPredictionAccuracy> predictions) {}
+
     // -------------------------------------------------------------- feedback loop
 
     @Schema(name = "SubmitFeedbackRequest",

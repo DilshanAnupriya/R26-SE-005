@@ -61,6 +61,21 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
 
     @Override
     @Transactional(readOnly = true)
+    public long sprintRemainingEstimateMinutes(UUID sprintId) {
+        return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).stream()
+                .filter(task -> task.getStatus().isOpen())
+                .mapToLong(task -> {
+                    if (task.getRemainingMinutes() != null) {
+                        return task.getRemainingMinutes();
+                    }
+                    int estimate = task.getEstimateMinutes() == null ? 0 : task.getEstimateMinutes();
+                    return Math.max(0, estimate - task.getSpentMinutes());
+                })
+                .sum();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public long sprintTaskCount(UUID sprintId) {
         return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).size();
     }
