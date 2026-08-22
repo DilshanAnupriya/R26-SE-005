@@ -37,7 +37,7 @@ import { useVelocityReport } from "@/features/reports/hooks";
 import { useSprintCapacity, useSprints } from "@/features/sprints/hooks";
 import { useSession } from "@/components/session-provider";
 import { queryKeys } from "@/lib/api/query-keys";
-import type { CostForecast, CostTrendPoint } from "@/lib/api/ai-schemas";
+import type { CostForecast, CostPredictionAccuracy, CostTrendPoint, CostValidation } from "@/lib/api/ai-schemas";
 import type { Sprint, Task } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
 import {
@@ -142,6 +142,82 @@ function costForMinutes(minutes: number, rate?: number | null, overtime = false)
   return (minutes / 60) * rate * (overtime ? 1.5 : 1);
 }
 
+function buildLocalValidation(
+  sprintId: string,
+  sprintStatus: Sprint["status"],
+  history: CostTrendPoint[],
+  actualCost?: number | null,
+  estimatedRemainingCost?: number | null,
+): CostValidation | undefined {
+  if (actualCost == null || !Number.isFinite(actualCost)) {
+    return undefined;
+  }
+
+  const accuracyEligible = sprintStatus === "COMPLETED";
+  const remainingCost = accuracyEligible ? 0 : (estimatedRemainingCost ?? 0);
+  const projectedFinalCost = actualCost + remainingCost;
+  const latestForecastAmount = history.at(-1)?.forecastAmount ?? null;
+  const liveVariance = latestForecastAmount == null
+    ? null
+    : projectedFinalCost - latestForecastAmount;
+  const predictions: CostPredictionAccuracy[] = accuracyEligible ? history.map((point, index) => {
+    const errorAmount = actualCost - point.forecastAmount;
+    const absoluteError = Math.abs(errorAmount);
+
+    return {
+      forecastId: `${sprintId}-${index}`,
+      stage: point.stage,
+      predictedCost: point.forecastAmount,
+      actualCost,
+      errorAmount,
+      absoluteError,
+      absolutePercentageError: actualCost === 0 ? null : (absoluteError / actualCost) * 100,
+      snapshotAt: point.snapshotAt,
+    };
+  }) : [];
+  const mean = (values: number[]) =>
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const latestOf = (stage: CostTrendPoint["stage"]) =>
+    predictions
+      .filter((row) => row.stage === stage)
+      .sort((left, right) => Date.parse(right.snapshotAt) - Date.parse(left.snapshotAt))[0] ?? null;
+  const percentageErrors = predictions
+    .map((row) => row.absolutePercentageError)
+    .filter((value): value is number => value != null && Number.isFinite(value));
+  const initial = latestOf("INITIAL");
+  const midSprint = latestOf("MID_SPRINT");
+  const closerStage = initial && midSprint
+    ? (midSprint.absoluteError <= initial.absoluteError ? "MID_SPRINT" : "INITIAL")
+    : (midSprint?.stage ?? initial?.stage ?? null);
+
+  return {
+    sprintId,
+    evaluationStatus: sprintStatus === "COMPLETED"
+      ? "FINAL"
+      : sprintStatus === "ACTIVE"
+        ? "LIVE_TRACKING"
+        : sprintStatus === "CANCELLED"
+          ? "CANCELLED"
+          : "PLANNING",
+    accuracyEligible,
+    actualCost,
+    actualCostSoFar: actualCost,
+    estimatedRemainingCost: remainingCost,
+    projectedFinalCost,
+    latestForecastAmount,
+    liveVariance,
+    mae: predictions.length > 0 ? mean(predictions.map((row) => row.absoluteError)) : null,
+    rmse: predictions.length > 0
+      ? Math.sqrt(mean(predictions.map((row) => row.absoluteError ** 2)))
+      : null,
+    mape: percentageErrors.length > 0 ? mean(percentageErrors) : null,
+    initial,
+    midSprint,
+    closerStage,
+    predictions,
+  };
+}
+
 export default function CostDashboard() {
   const { api, status } = useSession();
   const projects = useProjects();
@@ -202,6 +278,12 @@ export default function CostDashboard() {
     enabled: status === "authenticated" && Boolean(selectedSprint),
   });
 
+  const validation = useQuery({
+    queryKey: queryKeys.ai.costValidation(selectedSprint?.id ?? ""),
+    queryFn: () => aiApi.costValidation(api, selectedSprint!.id),
+    enabled: status === "authenticated" && Boolean(selectedSprint),
+  });
+
   const sprintTasks = taskBoard.data?.columns.flatMap((column) => column.tasks) ?? [];
   const capacityByUser = new Map(
     (capacity.data?.members ?? []).map((entry) => [entry.userId, entry]),
@@ -257,6 +339,15 @@ export default function CostDashboard() {
         0,
       );
   const actualLaborCost = timeEntries.isSuccess ? actualCostFromEntries : actualCostFromTasks;
+  const estimatedRemainingLaborCost = averageHourlyRate == null
+    ? null
+    : sprintTasks
+        .filter((task) => task.status !== "DONE" && task.status !== "CANCELLED")
+        .reduce((sum, task) => {
+          const remainingMinutes = task.remainingMinutes
+            ?? Math.max(0, (task.estimateMinutes ?? 0) - (task.spentMinutes ?? 0));
+          return sum + (costForMinutes(remainingMinutes, rateFor(task.assigneeId)) ?? 0);
+        }, 0);
   const overtimeMinutes = sprintTimeEntries
     .filter((entry) => entry.overtime)
     .reduce((sum, entry) => sum + entry.minutes, 0);
@@ -327,6 +418,24 @@ export default function CostDashboard() {
   const latestHistory = history.data?.at(-1) ?? null;
   const sprintBudget = selectedSprint?.budgetAmount ?? selectedProject?.budgetAmount ?? null;
   const pendingStage = forecast.isPending ? forecast.variables?.stage : null;
+  const maxLoadPct = teamRows.reduce(
+    (max, row) => Math.max(max, row.loadPct ?? 0),
+    0,
+  );
+  const localValidation = selectedSprint
+    ? buildLocalValidation(
+        selectedSprint.id,
+        selectedSprint.status,
+        history.data ?? [],
+        actualLaborCost,
+        estimatedRemainingLaborCost,
+      )
+    : undefined;
+  const backendValidation = validation.data?.evaluationStatus ? validation.data : undefined;
+  const validationResult = backendValidation ?? localValidation;
+  const usingLocalValidation = !backendValidation && Boolean(validation.error) && Boolean(localValidation);
+  const validationError = validationResult ? null : validation.error;
+  const validationPending = validation.isPending && !validationResult;
 
   const runForecast = (stage: "initial" | "mid-sprint") => {
     if (!selectedSprint) return;
@@ -517,9 +626,41 @@ export default function CostDashboard() {
                     {forecastError(forecast.error)}
                   </p>
                 ) : visibleForecast ? (
-                  <CostWidget forecast={visibleForecast} />
+                  <div className="space-y-4">
+                    <CostWidget forecast={visibleForecast} />
+                    <CostExplanationPanel
+                      forecast={visibleForecast}
+                      plannedLaborCost={plannedLaborCost}
+                      actualLaborCost={actualLaborCost}
+                      overtimeMinutes={overtimeMinutes}
+                      availabilityPct={availabilityPct}
+                      totalAbsenceDays={totalAbsenceDays}
+                      skillCoverage={skillCoverage}
+                      coveredSkillCount={coveredSkillCount}
+                      requiredSkillCount={requiredSkills.length}
+                      maxLoadPct={maxLoadPct}
+                      budget={sprintBudget}
+                      currency={currency}
+                    />
+                  </div>
                 ) : latestHistory ? (
-                  <StoredForecast forecast={latestHistory} currency={currency} />
+                  <div className="space-y-4">
+                    <StoredForecast forecast={latestHistory} currency={currency} />
+                    <CostExplanationPanel
+                      forecast={latestHistory}
+                      plannedLaborCost={plannedLaborCost}
+                      actualLaborCost={actualLaborCost}
+                      overtimeMinutes={overtimeMinutes}
+                      availabilityPct={availabilityPct}
+                      totalAbsenceDays={totalAbsenceDays}
+                      skillCoverage={skillCoverage}
+                      coveredSkillCount={coveredSkillCount}
+                      requiredSkillCount={requiredSkills.length}
+                      maxLoadPct={maxLoadPct}
+                      budget={sprintBudget}
+                      currency={currency}
+                    />
+                  </div>
                 ) : (
                   <EmptyState icon={LineChart} title="No forecast generated" description="Use the forecast actions above for this sprint." />
                 )}
@@ -562,6 +703,15 @@ export default function CostDashboard() {
                 </dl>
               </section>
             </div>
+
+            <ValidationSummary
+              validation={validationResult}
+              currency={currency}
+              isPending={validationPending}
+              error={validationError}
+              isFallback={usingLocalValidation}
+              onRetry={() => void validation.refetch()}
+            />
           </TabsContent>
 
           <TabsContent value="team">
@@ -614,10 +764,166 @@ export default function CostDashboard() {
                 error={history.error}
                 onRetry={() => void history.refetch()}
               />
+              <div className="mt-5">
+                <ValidationDetails
+                  validation={validationResult}
+                  currency={currency}
+                  isPending={validationPending}
+                  error={validationError}
+                  isFallback={usingLocalValidation}
+                  onRetry={() => void validation.refetch()}
+                />
+              </div>
             </section>
           </TabsContent>
         </Tabs>
       )}
+    </div>
+  );
+}
+
+function CostExplanationPanel({
+  forecast,
+  plannedLaborCost,
+  actualLaborCost,
+  overtimeMinutes,
+  availabilityPct,
+  totalAbsenceDays,
+  skillCoverage,
+  coveredSkillCount,
+  requiredSkillCount,
+  maxLoadPct,
+  budget,
+  currency,
+}: {
+  forecast: CostForecast | CostTrendPoint;
+  plannedLaborCost?: number | null;
+  actualLaborCost?: number | null;
+  overtimeMinutes: number;
+  availabilityPct?: number | null;
+  totalAbsenceDays?: number | null;
+  skillCoverage?: number | null;
+  coveredSkillCount: number;
+  requiredSkillCount: number;
+  maxLoadPct: number;
+  budget?: number | null;
+  currency: string;
+}) {
+  const budgetVariance = budget != null ? forecast.forecastAmount - budget : null;
+  const drivers = "drivers" in forecast ? forecast.drivers : [];
+  const explanation = "explanation" in forecast ? forecast.explanation : null;
+  const confidence = "confidence" in forecast ? forecast.confidence : null;
+  const variancePct = "varianceVsBudgetPct" in forecast ? forecast.varianceVsBudgetPct : null;
+  const errorMarginAmount = "errorMarginAmount" in forecast ? forecast.errorMarginAmount : null;
+  const topDrivers = drivers
+    .slice()
+    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+    .slice(0, 4);
+
+  return (
+    <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="cost-explanation">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id="cost-explanation" className="font-semibold">Cost explanation</h3>
+          <p className="text-xs text-muted-foreground">
+            Breakdown of the planning signals behind this forecast.
+          </p>
+        </div>
+        <Badge variant="outline">{stageLabel(forecast.stage)}</Badge>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ExplanationMetric label="Forecast amount" value={money(forecast.forecastAmount, currency)} />
+        <ExplanationMetric label="Planned labor" value={money(plannedLaborCost, currency)} />
+        <ExplanationMetric label="Actual labor so far" value={money(actualLaborCost, currency)} />
+        <ExplanationMetric label="Overtime signal" value={hours(overtimeMinutes)} detail="Logged as overtime" />
+        <ExplanationMetric
+          label="Availability signal"
+          value={availabilityPct == null ? "-" : `${number(availabilityPct)}%`}
+          detail={`${number(totalAbsenceDays)} planned absence days`}
+        />
+        <ExplanationMetric
+          label="Skill coverage"
+          value={skillCoverage == null ? "-" : `${number(skillCoverage)}%`}
+          detail={requiredSkillCount > 0
+            ? `${coveredSkillCount} of ${requiredSkillCount} required skills covered`
+            : "No required skills listed"}
+        />
+        <ExplanationMetric
+          label="Workload pressure"
+          value={maxLoadPct > 0 ? `${number(maxLoadPct)}%` : "-"}
+          detail="Highest developer load"
+        />
+        <ExplanationMetric
+          label="Budget variance"
+          value={budgetVariance == null ? "-" : money(budgetVariance, currency)}
+          detail={variancePct == null ? "Set budget for variance" : `${variancePct}% vs budget`}
+          tone={budgetVariance != null && budgetVariance > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}
+        />
+        <ExplanationMetric
+          label="Prediction interval"
+          value={forecast.lowerBound != null && forecast.upperBound != null
+            ? `${money(forecast.lowerBound, currency)} - ${money(forecast.upperBound, currency)}`
+            : "-"}
+          detail={errorMarginAmount == null ? "No margin stored" : `± ${money(errorMarginAmount, currency)}`}
+        />
+        <ExplanationMetric
+          label="Confidence"
+          value={confidence == null ? "-" : `${number(confidence * 100)}%`}
+          detail={confidence == null ? "No calibrated probability available" : "Model confidence"}
+        />
+      </div>
+
+      {explanation ? (
+        <p className="mt-4 rounded-md bg-muted/50 p-3 text-sm leading-relaxed text-muted-foreground">
+          {explanation}
+        </p>
+      ) : null}
+
+      <div className="mt-4 border-t pt-3">
+        <h4 className="text-sm font-medium">Forecast drivers</h4>
+        {topDrivers.length > 0 ? (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {topDrivers.map((driver) => (
+              <div key={`${driver.feature}-${driver.label}`} className="rounded-md border bg-background/40 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium">{driver.label ?? driver.feature}</p>
+                  <Badge variant="outline" className="shrink-0 tabular-nums">
+                    {driver.contribution > 0 ? "+" : ""}{number(driver.contribution)}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {driver.detail ?? enumLabel(driver.direction)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Detailed forecast drivers are available after generating a fresh forecast. Stored history keeps the cost trend and interval.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ExplanationMetric({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: string;
+}) {
+  return (
+    <div className="rounded-md border bg-background/40 p-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={cn("mt-1 text-lg font-semibold tabular-nums", tone)}>{value}</p>
+      {detail ? <p className="mt-1 text-[11px] text-muted-foreground">{detail}</p> : null}
     </div>
   );
 }
@@ -881,6 +1187,220 @@ function TaskTable({
         </table>
       </div>
     </section>
+  );
+}
+
+function ValidationSummary({
+  validation,
+  currency,
+  isPending,
+  error,
+  isFallback,
+  onRetry,
+}: {
+  validation?: CostValidation;
+  currency: string;
+  isPending: boolean;
+  error: unknown;
+  isFallback: boolean;
+  onRetry: () => void;
+}) {
+  if (isPending) return <Skeleton className="h-36 w-full" />;
+  if (error) return <ErrorState error={error} onRetry={onRetry} />;
+  if (validation?.accuracyEligible === false) {
+    const isCancelled = validation.evaluationStatus === "CANCELLED";
+    const varianceDetail = validation.liveVariance == null
+      ? "Generate a forecast to compare"
+      : validation.liveVariance > 0
+        ? "Projected above latest forecast"
+        : validation.liveVariance < 0
+          ? "Projected below latest forecast"
+          : "Matches latest forecast";
+
+    return (
+      <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="cost-tracking-summary">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 id="cost-tracking-summary" className="font-semibold">
+              {isCancelled ? "Cost record" : "Forecast tracking"}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {isCancelled
+                ? "Cancelled sprints are not included in model accuracy results."
+                : "Live cost projection during execution. Final accuracy is calculated after sprint completion."}
+            </p>
+            {isFallback ? (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                Calculated from loaded tasks and forecast history while backend validation is unavailable.
+              </p>
+            ) : null}
+          </div>
+          <Badge variant="outline">{enumLabel(validation.evaluationStatus)}</Badge>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <ExplanationMetric
+            label="Actual cost so far"
+            value={money(validation.actualCostSoFar ?? validation.actualCost, currency)}
+            detail="Logged labor and overtime"
+          />
+          <ExplanationMetric
+            label="Estimated remaining"
+            value={isCancelled ? "-" : money(validation.estimatedRemainingCost, currency)}
+            detail={isCancelled ? "Sprint cancelled" : "Open task estimates"}
+          />
+          <ExplanationMetric
+            label="Projected final cost"
+            value={isCancelled ? "-" : money(validation.projectedFinalCost, currency)}
+            detail={isCancelled ? "No final projection" : "Actual plus remaining estimate"}
+          />
+          <ExplanationMetric
+            label="Latest forecast"
+            value={money(validation.latestForecastAmount, currency)}
+            detail="Stored model prediction"
+          />
+          <ExplanationMetric
+            label="Live variance"
+            value={isCancelled ? "-" : money(validation.liveVariance, currency)}
+            detail={isCancelled ? "Not evaluated" : varianceDetail}
+          />
+        </div>
+      </section>
+    );
+  }
+  if (!validation || validation.predictions.length === 0) {
+    return (
+      <EmptyState
+        icon={Gauge}
+        title="No accuracy data yet"
+        description="This sprint is complete, but it has no stored forecasts to validate."
+      />
+    );
+  }
+
+  return (
+    <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="cost-validation-summary">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id="cost-validation-summary" className="font-semibold">Final accuracy validation</h3>
+          <p className="text-xs text-muted-foreground">
+            Stored predictions compared with the completed sprint's final logged labor cost.
+          </p>
+          {isFallback ? (
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              Calculated from loaded forecast history while backend validation is unavailable.
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">Final</Badge>
+          {validation.closerStage ? (
+            <Badge variant="outline">Closer: {stageLabel(validation.closerStage)}</Badge>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <ExplanationMetric label="Actual cost" value={money(validation.actualCost, currency)} />
+        <ExplanationMetric label="MAE" value={money(validation.mae, currency)} detail="Average absolute error" />
+        <ExplanationMetric label="RMSE" value={money(validation.rmse, currency)} detail="Large-error penalty" />
+        <ExplanationMetric label="MAPE" value={validation.mape == null ? "-" : `${number(validation.mape)}%`} detail="Average percentage error" />
+        <ExplanationMetric
+          label="Mid-sprint error"
+          value={validation.midSprint?.absolutePercentageError == null ? "-" : `${number(validation.midSprint.absolutePercentageError)}%`}
+          detail={validation.midSprint ? money(validation.midSprint.absoluteError, currency) : "No mid-sprint forecast"}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ValidationDetails({
+  validation,
+  currency,
+  isPending,
+  error,
+  isFallback,
+  onRetry,
+}: {
+  validation?: CostValidation;
+  currency: string;
+  isPending: boolean;
+  error: unknown;
+  isFallback: boolean;
+  onRetry: () => void;
+}) {
+  if (isPending) return <Skeleton className="h-32 w-full" />;
+  if (error) return <ErrorState error={error} onRetry={onRetry} />;
+  if (validation?.accuracyEligible === false) {
+    return (
+      <section className="border-t pt-4" aria-labelledby="cost-validation-pending">
+        <h3 id="cost-validation-pending" className="font-semibold">Accuracy pending sprint completion</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Forecast history is retained now and will be scored against final actual cost when this sprint is completed.
+        </p>
+      </section>
+    );
+  }
+  if (!validation || validation.predictions.length === 0) {
+    return null;
+  }
+
+  return (
+    <section aria-labelledby="cost-validation-details">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <div>
+          <h3 id="cost-validation-details" className="font-semibold">Prediction accuracy</h3>
+          <p className="text-xs text-muted-foreground">
+            Actual cost is calculated from logged minutes, overtime, and developer rates.
+          </p>
+          {isFallback ? (
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              Backend validation is unavailable; these values use the loaded history.
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span>MAE {money(validation.mae, currency)}</span>
+          <span>RMSE {money(validation.rmse, currency)}</span>
+          <span>MAPE {validation.mape == null ? "-" : `${number(validation.mape)}%`}</span>
+        </div>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[46rem] text-left text-sm">
+          <thead className="border-b text-xs text-muted-foreground">
+            <tr>
+              <th className="py-2 pr-3 font-medium">Time</th>
+              <th className="px-3 py-2 font-medium">Stage</th>
+              <th className="px-3 py-2 font-medium">Predicted</th>
+              <th className="px-3 py-2 font-medium">Actual</th>
+              <th className="px-3 py-2 font-medium">Error</th>
+              <th className="py-2 pl-3 font-medium">Error %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {validation.predictions.map((row) => (
+              <ValidationRow key={row.forecastId} row={row} currency={currency} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ValidationRow({ row, currency }: { row: CostPredictionAccuracy; currency: string }) {
+  return (
+    <tr className="border-b last:border-b-0">
+      <td className="py-2 pr-3 text-muted-foreground">{dateTimeLabel(row.snapshotAt)}</td>
+      <td className="px-3 py-2"><Badge variant="outline">{stageLabel(row.stage)}</Badge></td>
+      <td className="px-3 py-2 font-medium tabular-nums">{money(row.predictedCost, currency)}</td>
+      <td className="px-3 py-2 tabular-nums">{money(row.actualCost, currency)}</td>
+      <td className={cn("px-3 py-2 tabular-nums", row.errorAmount < 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+        {row.errorAmount > 0 ? "+" : ""}{money(row.errorAmount, currency)}
+      </td>
+      <td className="py-2 pl-3 tabular-nums">
+        {row.absolutePercentageError == null ? "-" : `${number(row.absolutePercentageError)}%`}
+      </td>
+    </tr>
   );
 }
 

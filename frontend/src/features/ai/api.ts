@@ -7,6 +7,7 @@ import {
   batchEstimateSchema,
   costForecastSchema,
   costTrendPointSchema,
+  costValidationSchema,
   feedbackSchema,
   riskAssessmentSchema,
   sprintRiskSchema,
@@ -75,6 +76,11 @@ export const aiApi = {
   costHistory: (api: ApiClient, sprintId: string) =>
     api.request(`/ai/cost/sprint/${sprintId}/history`, {
       schema: z.array(costTrendPointSchema),
+    }),
+
+  costValidation: (api: ApiClient, sprintId: string) =>
+    api.request(`/ai/cost/sprint/${sprintId}/validation`, {
+      schema: costValidationSchema,
     }),
 
   /**

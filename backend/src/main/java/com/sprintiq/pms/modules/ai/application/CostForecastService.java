@@ -50,13 +50,15 @@ public class CostForecastService {
         List<DeveloperFeatureSource.DeveloperFeatures> team = developers.candidatesFor(sprint.projectId());
         long effortMinutes = effort.sprintEffortMinutes(sprintId);
         long overtimeMinutes = effort.sprintOvertimeMinutes(sprintId);
+        long plannedEffortMinutes = effort.sprintPlannedEstimateMinutes(sprintId);
         long sprintTaskCount = effort.sprintTaskCount(sprintId);
         long totalTasks = sprintTaskCount > 0 ? sprintTaskCount : Math.max(sprint.storyCount(), 1L);
         long concurrentAssignments = effort.concurrentAssignments(sprint.projectId());
         BigDecimal budget = sprint.budgetAmount() != null ? sprint.budgetAmount() : project.budgetAmount();
         BigDecimal overtimeHours = BigDecimal.valueOf(overtimeMinutes)
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
-        BigDecimal actualCostSoFar = actualCost(effortMinutes, overtimeHours, blendedRate);
+        BigDecimal actualCostSoFar = actualCost(
+                effort.sprintEffortByUser(sprintId), team, blendedRate);
         BigDecimal availabilityRate = averageAvailability(team);
         BigDecimal skillMatchRatio = skillMatchRatio(effort.sprintRequiredSkills(sprintId), team);
         BigDecimal avgSeniority = averageSeniority(team);
@@ -77,6 +79,7 @@ public class CostForecastService {
                 .put("team_id", project.key())
                 .putNumber("total_tasks", totalTasks)
                 .putNumber("planned_story_points", sprint.committedPoints())
+                .putNumber("planned_effort_minutes", plannedEffortMinutes)
                 .putNumber("completed_story_points", sprint.completedPoints())
                 .putNumber("total_effort_minutes", effortMinutes)
                 .putNumber("sprint_number", sprint.sequenceNo())
@@ -172,6 +175,59 @@ public class CostForecastService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public CostValidationResponse validateSprint(UUID sprintId) {
+        SprintFeatureSource.SprintFeatures sprint = sprints.featuresFor(sprintId);
+        BigDecimal blendedRate = developers.averageHourlyRate(sprint.projectId());
+        List<DeveloperFeatureSource.DeveloperFeatures> team =
+                developers.candidatesFor(sprint.projectId());
+        long effortMinutes = effort.sprintEffortMinutes(sprintId);
+        BigDecimal actualCostSoFar = actualCost(
+                effort.sprintEffortByUser(sprintId), team, blendedRate);
+        boolean accuracyEligible = "COMPLETED".equalsIgnoreCase(sprint.status());
+        BigDecimal estimatedRemainingCost = accuracyEligible
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : actualCost(effort.sprintRemainingEstimateMinutes(sprintId), BigDecimal.ZERO, blendedRate);
+        BigDecimal projectedFinalCost = actualCostSoFar.add(estimatedRemainingCost)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        List<CostForecast> storedForecasts = forecasts.findBySprintIdOrderBySnapshotAtAsc(sprintId);
+        BigDecimal latestForecastAmount = storedForecasts.isEmpty()
+                ? null
+                : storedForecasts.get(storedForecasts.size() - 1).getForecastAmount();
+        BigDecimal liveVariance = latestForecastAmount == null
+                ? null
+                : projectedFinalCost.subtract(latestForecastAmount).setScale(2, RoundingMode.HALF_UP);
+
+        List<CostPredictionAccuracy> rows = accuracyEligible
+                ? storedForecasts.stream().map(forecast -> accuracy(forecast, actualCostSoFar)).toList()
+                : List.of();
+
+        CostPredictionAccuracy initial = latestOf(rows, CostStage.INITIAL);
+        CostPredictionAccuracy midSprint = latestOf(rows, CostStage.MID_SPRINT);
+        CostStage closerStage = closerStage(initial, midSprint);
+
+        BigDecimal mae = rows.isEmpty() ? null : rows.stream()
+                .map(CostPredictionAccuracy::absoluteError)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(rows.size()), 2, RoundingMode.HALF_UP);
+        BigDecimal mse = rows.isEmpty() ? null : rows.stream()
+                .map(row -> row.absoluteError().multiply(row.absoluteError()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(rows.size()), 6, RoundingMode.HALF_UP);
+        BigDecimal rmse = mse == null ? null : BigDecimal.valueOf(Math.sqrt(mse.doubleValue()))
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal mape = rows.isEmpty() || actualCostSoFar.compareTo(BigDecimal.ZERO) == 0 ? null : rows.stream()
+                .map(CostPredictionAccuracy::absolutePercentageError)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(rows.size()), 2, RoundingMode.HALF_UP);
+
+        return new CostValidationResponse(sprintId, evaluationStatus(sprint.status()), accuracyEligible,
+                actualCostSoFar, actualCostSoFar, estimatedRemainingCost, projectedFinalCost,
+                latestForecastAmount, liveVariance, mae, rmse, mape, initial, midSprint,
+                closerStage, rows);
+    }
+
     /** Latest forecast per sprint across a project — the cost trend report. */
     @Transactional(readOnly = true)
     public List<CostTrendPoint> projectTrend(UUID projectId, Map<UUID, String> sprintNames) {
@@ -218,6 +274,65 @@ public class CostForecastService {
         BigDecimal base = hours.multiply(hourlyRate);
         BigDecimal overtimePremium = overtimeHours.multiply(hourlyRate).multiply(BigDecimal.valueOf(0.5));
         return base.add(overtimePremium).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal actualCost(
+            List<EffortFeatureSource.UserEffort> effortByUser,
+            List<DeveloperFeatureSource.DeveloperFeatures> team,
+            BigDecimal fallbackRate) {
+        return effortByUser.stream()
+                .map(row -> {
+                    BigDecimal rate = team.stream()
+                            .filter(member -> member.userId().equals(row.userId()))
+                            .map(DeveloperFeatureSource.DeveloperFeatures::hourlyRate)
+                            .filter(candidate -> candidate != null
+                                    && candidate.compareTo(BigDecimal.ZERO) > 0)
+                            .findFirst()
+                            .orElse(fallbackRate);
+                    BigDecimal overtimeHours = BigDecimal.valueOf(row.overtimeMinutes())
+                            .divide(BigDecimal.valueOf(60), 4, RoundingMode.HALF_UP);
+                    return actualCost(row.minutes(), overtimeHours, rate);
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private CostPredictionAccuracy accuracy(CostForecast forecast, BigDecimal actualCost) {
+        BigDecimal predicted = forecast.getForecastAmount();
+        BigDecimal error = actualCost.subtract(predicted).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal absolute = error.abs().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal percentage = actualCost.compareTo(BigDecimal.ZERO) == 0
+                ? null
+                : absolute.multiply(BigDecimal.valueOf(100))
+                .divide(actualCost, 2, RoundingMode.HALF_UP);
+        return new CostPredictionAccuracy(forecast.getId(), forecast.getStage(), predicted,
+                actualCost, error, absolute, percentage, forecast.getSnapshotAt());
+    }
+
+    private CostPredictionAccuracy latestOf(List<CostPredictionAccuracy> rows, CostStage stage) {
+        return rows.stream()
+                .filter(row -> row.stage() == stage)
+                .reduce((first, second) -> second)
+                .orElse(null);
+    }
+
+    private CostStage closerStage(CostPredictionAccuracy initial, CostPredictionAccuracy midSprint) {
+        if (initial == null && midSprint == null) return null;
+        if (initial == null) return CostStage.MID_SPRINT;
+        if (midSprint == null) return CostStage.INITIAL;
+        return midSprint.absoluteError().compareTo(initial.absoluteError()) <= 0
+                ? CostStage.MID_SPRINT
+                : CostStage.INITIAL;
+    }
+
+    private String evaluationStatus(String sprintStatus) {
+        if (sprintStatus == null) return "PLANNING";
+        return switch (sprintStatus.toUpperCase(java.util.Locale.ROOT)) {
+            case "COMPLETED" -> "FINAL";
+            case "ACTIVE" -> "LIVE_TRACKING";
+            case "CANCELLED" -> "CANCELLED";
+            default -> "PLANNING";
+        };
     }
 
     private BigDecimal averageAvailability(List<DeveloperFeatureSource.DeveloperFeatures> team) {

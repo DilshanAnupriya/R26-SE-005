@@ -187,6 +187,15 @@ public class AiController {
         return cost.sprintHistory(sprintId);
     }
 
+    @Operation(summary = "Track active sprint cost or validate completed sprint forecasts",
+            description = "Accuracy metrics are returned only after the sprint is completed. Active sprints "
+                    + "return actual cost so far, estimated remaining cost and projected final cost.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @GetMapping("/cost/sprint/{sprintId}/validation")
+    public CostValidationResponse costValidation(@PathVariable UUID sprintId) {
+        return cost.validateSprint(sprintId);
+    }
+
     // -------------------------------------------------- predictions & feedback
 
     @Operation(summary = "Search predictions")
