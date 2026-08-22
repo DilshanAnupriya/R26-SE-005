@@ -19,6 +19,7 @@ export const aiModelCodeSchema = z.enum([
   "M1_VELOCITY",
   "M2_OVER_BUDGET",
   "M2_REQUIREMENT_CHANGE",
+  "M2_COMMUNICATION_COLLABORATION",
   "M3_ALLOCATION",
   "M4_COST_INITIAL",
   "M4_COST_MID",
@@ -101,7 +102,12 @@ export type VelocityPrediction = z.infer<typeof velocityPredictionSchema>;
 export const riskSeveritySchema = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
 export type RiskSeverity = z.infer<typeof riskSeveritySchema>;
 
-export const riskTypeSchema = z.enum(["OVER_BUDGET", "REQUIREMENT_CHANGE"]);
+export const riskTypeSchema = z.enum([
+  "OVER_BUDGET",
+  "REQUIREMENT_CHANGE",
+  "COMMUNICATION_COLLABORATION",
+]);
+export type RiskType = z.infer<typeof riskTypeSchema>;
 
 export const riskAssessmentSchema = z.object({
   id: z.uuid(),
@@ -125,6 +131,10 @@ export const sprintRiskSchema = z.object({
   sprintId: z.uuid(),
   overBudget: riskAssessmentSchema.nullish(),
   requirementChange: riskAssessmentSchema.nullish(),
+  // Null until the sprint has some collaboration to read — a comment, a blocker, a
+  // reopen. Three of that model's five readings are healthiest at zero, so an
+  // untouched sprint would otherwise be scored as a well-coordinated one.
+  communicationCollaboration: riskAssessmentSchema.nullish(),
   highestSeverity: riskSeveritySchema.nullish(),
 });
 export type SprintRisk = z.infer<typeof sprintRiskSchema>;

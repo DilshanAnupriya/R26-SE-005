@@ -2,6 +2,7 @@ package com.sprintiq.pms.modules.ai.application;
 
 import com.sprintiq.pms.common.domain.EntityType;
 import com.sprintiq.pms.common.error.ResourceNotFoundException;
+import com.sprintiq.pms.modules.ai.application.port.CollaborationFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.EffortFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.ProjectContextSource;
 import com.sprintiq.pms.modules.ai.application.port.SprintFeatureSource;
@@ -16,16 +17,26 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Model 2 — over-budget and requirement-change risk for a sprint.
+ * Model 2 — over-budget, requirement-change and collaboration risk for a sprint.
  *
- * <p>Both classifiers read one shared feature vector. They are asking different
- * questions of the same sprint, and assembling the features twice would let the two
+ * <p>All three classifiers read one shared feature vector. They are asking different
+ * questions of the same sprint, and assembling the features three times would let the
  * widgets on one dashboard disagree about how much scope had changed.</p>
+ *
+ * <p>The collaboration classifier is the odd one out in two ways, both deliberate. Its
+ * inputs come from comment threads rather than from the sprint row, so they arrive
+ * through their own port; and it is the one model here that declines to answer rather
+ * than scoring an empty sprint, because three of its five readings are healthiest at
+ * zero and an untouched sprint would otherwise be handed a clean bill it has not
+ * earned.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -37,6 +48,8 @@ public class RiskService {
     private final EffortFeatureSource effort;
     /** For the story-text readings the requirement-change model shares with M1. */
     private final StoryFeatureSource stories;
+    /** Comment threads and board movement, for the collaboration model. */
+    private final CollaborationFeatureSource collaboration;
     private final RiskAssessmentRepository assessments;
 
     @Transactional
@@ -48,9 +61,12 @@ public class RiskService {
         RiskAssessmentResponse overBudget = assessOne(RiskType.OVER_BUDGET, sprint, project, shared);
         RiskAssessmentResponse requirementChange =
                 assessOne(RiskType.REQUIREMENT_CHANGE, sprint, project, shared);
+        RiskAssessmentResponse communicationCollaboration =
+                assessOne(RiskType.COMMUNICATION_COLLABORATION, sprint, project, shared);
 
-        RiskSeverity highest = highestOf(overBudget, requirementChange);
-        return new SprintRiskResponse(sprintId, overBudget, requirementChange, highest);
+        RiskSeverity highest = highestOf(overBudget, requirementChange, communicationCollaboration);
+        return new SprintRiskResponse(sprintId, overBudget, requirementChange,
+                communicationCollaboration, highest);
     }
 
     @Transactional
@@ -68,8 +84,13 @@ public class RiskService {
         RiskAssessmentResponse requirementChange = assessments
                 .findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprintId, RiskType.REQUIREMENT_CHANGE)
                 .map(RiskAssessmentResponse::from).orElse(null);
+        RiskAssessmentResponse communicationCollaboration = assessments
+                .findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(
+                        sprintId, RiskType.COMMUNICATION_COLLABORATION)
+                .map(RiskAssessmentResponse::from).orElse(null);
         return new SprintRiskResponse(sprintId, overBudget, requirementChange,
-                highestOf(overBudget, requirementChange));
+                communicationCollaboration,
+                highestOf(overBudget, requirementChange, communicationCollaboration));
     }
 
     /** The risk score's history for one sprint — the trend a retrospective reads. */
@@ -152,6 +173,7 @@ public class RiskService {
      */
     private FeatureVector overBudgetFeatures(SprintFeatureSource.SprintFeatures sprint,
                                              FeatureVector shared) {
+        EffortFeatureSource.SprintSlippage slippage = effort.sprintSlippage(sprint.sprintId());
         BigDecimal capacityHours = sprint.capacityHours();
         BigDecimal capacityPoints = sprint.capacityPoints();
         BigDecimal hoursPerPoint = positive(capacityHours) && positive(capacityPoints)
@@ -193,7 +215,25 @@ public class RiskService {
                 .putNumber("prev_reopened_tasks", sprint.reopenedCount())
                 .putNumber("prev_rework_score", sprint.reopenedCount() + sprint.defectCount())
                 .put("fatigue", fatigue)
-                .put("scope_added", sprint.addedPoints());
+                .put("scope_added", sprint.addedPoints())
+                // Mid-sprint slippage. Everything above this line is knowable at
+                // planning and does not move, so without these the sprint scores the
+                // same on day nine as it did on day one however badly it is going.
+                // "Behind" is measured against each task's own estimate rather than
+                // against the sprint's end date, so it says something before the last
+                // day — see EffortFeatureSource.SprintSlippage.
+                //
+                // The deployed CatBoost bundle does not have columns for these; its
+                // feature list is fixed at training time and the service drops what it
+                // does not recognise. They are sent anyway, and that is deliberate:
+                // they drive the heuristic client, they are on the prediction's stored
+                // payload so a retrain has the history to fit against, and a feature
+                // the backend computes but never sends is one nobody discovers is
+                // missing. The columns join the model at its next training run.
+                .putNumber("tasks_not_started_past_half", slippage.tasksNotStartedPastHalf())
+                .putNumber("tasks_over_estimate", slippage.tasksOverEstimate())
+                .putNumber("minutes_over_estimate", slippage.minutesOverEstimate())
+                .putNumber("task_slippage_rate", slippage.slippageRate());
     }
 
     /**
@@ -242,6 +282,68 @@ public class RiskService {
                 .putNumber("prev_high_risk_flag", previouslyHigh ? 1 : 0);
     }
 
+    /**
+     * The collaboration model's own columns.
+     *
+     * <p>Five readings, named for the corpus the classifier was fine-tuned on rather
+     * than for anything in this codebase: {@code avg_response_time},
+     * {@code comments_per_task}, {@code inactive_days}, {@code blockers} and
+     * {@code reopened_tasks}. The service turns them into one sentence and reads that,
+     * so a renamed key here is not a mapping error the model rejects — it is a zero it
+     * accepts, and the score comes back looking fine.</p>
+     *
+     * <p>The blocked and reopened counts come from the collaboration port rather than
+     * from {@code shared}, and the difference is not redundancy. The shared vector's
+     * figures are story-level, off the backlog snapshot; these are task-level, and the
+     * conversation that failed happened on a task. A story is only blocked once its
+     * tasks are, so the story figure lags the signal this model exists to catch.</p>
+     */
+    private FeatureVector collaborationFeatures(
+            CollaborationFeatureSource.SprintCollaboration signals, FeatureVector shared) {
+        return shared
+                // Null means no thread had two participants — see the port. Left absent
+                // rather than sent as zero, which on this scale is the best possible
+                // reading and would turn silence into an instant reply.
+                .put("avg_response_time", signals.avgResponseTimeHours())
+                .putNumber("comments_per_task", signals.commentsPerTask())
+                .putNumber("inactive_days", signals.inactiveDays())
+                .putNumber("blockers", signals.blockedTasks())
+                .putNumber("reopened_tasks", signals.reopenedTasks())
+                // Context for the audit trail and the panel, not for the model: the
+                // service builds its sentence from the five above and ignores the rest.
+                .putNumber("collaboration_task_count", signals.taskCount())
+                .putNumber("collaboration_comment_count", signals.commentCount())
+                .putNumber("longest_silence_days", signals.longestSilenceDays())
+                .putNumber("unanswered_threads", signals.unansweredThreads())
+                .putNumber("collaboration_contributor_count", signals.contributorCount());
+    }
+
+    /** The stretch of time the collaboration readings describe. */
+    private record Window(Instant start, Instant end) {}
+
+    /**
+     * The sprint's window for the collaboration readings.
+     *
+     * <p>Ends now, or at the sprint's end date once that has passed — never in the
+     * future. A window running to a date the sprint has not reached would count every
+     * day still to come as a day on which nobody spoke, so a sprint planned for next
+     * month would open at maximum risk.</p>
+     *
+     * <p>A sprint with no start date falls back to the last fortnight: the readings are
+     * rates and counts, and over an unbounded window every one of them grows without
+     * saying anything.</p>
+     */
+    private Window collaborationWindow(SprintFeatureSource.SprintFeatures sprint) {
+        Instant now = Instant.now();
+        Instant start = sprint.startDate() == null
+                ? now.minus(Duration.ofDays(14))
+                : sprint.startDate().atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant end = sprint.endDate() == null
+                ? now
+                : sprint.endDate().plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        return new Window(start, end.isBefore(now) ? end : now);
+    }
+
     private boolean positive(BigDecimal value) {
         return value != null && value.compareTo(BigDecimal.ZERO) > 0;
     }
@@ -271,9 +373,30 @@ public class RiskService {
         // first one's columns — and since the feature hash is the cache key, the
         // contamination would persist for six hours without anything looking wrong.
         FeatureVector base = FeatureVector.create().putAll(features.asMap());
-        FeatureVector vector = riskType == RiskType.OVER_BUDGET
-                ? overBudgetFeatures(sprint, base)
-                : requirementChangeFeatures(sprint, project, base);
+
+        // Collaboration is the one model that can decline before it is called. Three of
+        // its five readings are healthiest at zero, so an untouched sprint assembles a
+        // perfectly well-formed vector that the model reads as a well-run team — a
+        // confident all-clear for a sprint nobody has started. Returning null instead
+        // puts the panel in its "nothing to read yet" state, which is the true
+        // statement, and costs nothing rather than billing for the inference.
+        CollaborationFeatureSource.SprintCollaboration signals = null;
+        if (riskType == RiskType.COMMUNICATION_COLLABORATION) {
+            Window window = collaborationWindow(sprint);
+            signals = collaboration.collaborationFor(sprint.sprintId(), window.start(), window.end());
+            if (!signals.hasSignal()) {
+                return null;
+            }
+        }
+
+        // A switch expression rather than a statement, so a fourth risk type is a
+        // compile error here instead of a model that silently scores on the wrong
+        // columns.
+        FeatureVector vector = switch (riskType) {
+            case OVER_BUDGET -> overBudgetFeatures(sprint, base);
+            case REQUIREMENT_CHANGE -> requirementChangeFeatures(sprint, project, base);
+            case COMMUNICATION_COLLABORATION -> collaborationFeatures(signals, base);
+        };
 
         AiPrediction prediction = inference.infer(new AiInferenceService.InferenceCommand(
                 riskType.getModelCode(), EntityType.SPRINT, sprint.sprintId(),

@@ -152,10 +152,16 @@ public final class AiDtos {
         }
     }
 
-    @Schema(name = "SprintRiskResponse", description = "Both risk types for one sprint")
+    @Schema(name = "SprintRiskResponse", description = "All three risk types for one sprint")
     public record SprintRiskResponse(UUID sprintId,
                                      RiskAssessmentResponse overBudget,
                                      RiskAssessmentResponse requirementChange,
+                                     /**
+                                      * Null until the sprint has some collaboration to
+                                      * read — a comment, a blocker or a reopen. An
+                                      * untouched sprint is not a well-coordinated one.
+                                      */
+                                     RiskAssessmentResponse communicationCollaboration,
                                      RiskSeverity highestSeverity) {}
 
     // ------------------------------------------------------------ M3 · allocation
