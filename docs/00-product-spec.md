@@ -87,7 +87,7 @@ Personas: Product Owner, Scrum Master, Developer, Engineering Manager, Org Admin
 
 #### 3.5 AI capabilities (see §4)
 1. Story point estimation + sprint velocity prediction
-2. Sprint risk prediction (over-budget, requirement-change)
+2. Sprint risk prediction (over-budget, requirement-change, communication & collaboration)
 3. Intelligent resource allocation & productivity optimization
 4. Sprint cost forecasting (initial + mid-sprint)
 
@@ -112,6 +112,7 @@ execution with Redis caching, batch prediction for backlog grooming.
 | **M1b** Velocity | `POST /api/v1/ai/estimation/velocity` | Sprint planning capacity meter → sets commitment target |
 | **M2a** Over-budget risk | `POST /api/v1/ai/risk/over-budget` | Sprint dashboard risk widget → creates mitigation task |
 | **M2b** Req-change risk | `POST /api/v1/ai/risk/requirement-change` | Planning risk card → flags volatile epics |
+| **M2c** Collaboration risk | `POST /api/v1/ai/risk/communication-collaboration` | AI insights risk card → names the coordination signals to fix |
 | **M3** Assignee ranking | `POST /api/v1/ai/allocation/rank` | Task assignment assistant → sets `assignee_id` |
 | **M4a** Initial cost | `POST /api/v1/ai/cost/initial` | Planning cost widget → stores baseline forecast |
 | **M4b** Mid-sprint cost | `POST /api/v1/ai/cost/mid-sprint` | Dashboard cost trend → cost-awareness alert |

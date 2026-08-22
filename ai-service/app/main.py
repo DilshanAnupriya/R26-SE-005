@@ -18,6 +18,8 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from .collaboration_features import FEATURE_RANGES
+from .collaboration_predictor import CollaborationRiskPredictor
 from .cost_predictor import CostPredictor
 from .predictor import StoryPointPredictor
 from .risk_predictor import RiskPredictor
@@ -36,6 +38,8 @@ OVERBUDGET_MODEL_PATH = Path(os.getenv("SPRINTIQ_OVERBUDGET_MODEL_PATH",
                                        MODELS / "overbudget_model_bundle.pkl"))
 REQCHANGE_MODEL_PATH = Path(os.getenv("SPRINTIQ_REQCHANGE_MODEL_PATH",
                                       MODELS / "reqchange_model_bundle.pkl"))
+COLLABORATION_MODEL_PATH = Path(os.getenv("SPRINTIQ_COLLABORATION_MODEL_PATH",
+                                          MODELS / "communication_model"))
 COST_INITIAL_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_INITIAL_MODEL_DIR",
                                         MODELS / "SprintCost-initial_model"))
 COST_MID_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_MID_MODEL_DIR",
@@ -43,8 +47,10 @@ COST_MID_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_MID_MODEL_DIR",
 
 app = FastAPI(
     title="SprintIQ estimation service",
-    description="Story-point estimation with calibrated uncertainty (M1) and "
-                "velocity, delivery-risk, and hybrid sprint-cost prediction.",
+    description="Story-point estimation with calibrated uncertainty (M1), "
+                "next-sprint velocity prediction with domain transfer (M1_VELOCITY), "
+                "the three sprint risk classifiers (M2) and the two cost "
+                "forecasters (M4).",
     version="1.2.0",
 )
 
@@ -54,13 +60,17 @@ predictor: StoryPointPredictor | None = None
 velocity: VelocityPredictor | None = None
 over_budget: RiskPredictor | None = None
 requirement_change: RiskPredictor | None = None
+# Never None: without its weights this one scores from the equation its corpus was
+# labelled with, and says so in every response.
+collaboration: CollaborationRiskPredictor | None = None
 cost_initial: CostPredictor | None = None
 cost_mid: CostPredictor | None = None
 
 
 @app.on_event("startup")
 def load_model() -> None:
-    global predictor, velocity, over_budget, requirement_change, cost_initial, cost_mid
+    global predictor, velocity, over_budget, requirement_change, collaboration, \
+        cost_initial, cost_mid
     if not MODEL_PATH.exists():
         raise RuntimeError(
             f"No model bundle at {MODEL_PATH}. Set SPRINTIQ_MODEL_PATH or place the "
@@ -88,6 +98,12 @@ def load_model() -> None:
     else:
         log.warning("No requirement-change bundle at %s — /predict/risk/requirement-change "
                     "will answer 503", REQCHANGE_MODEL_PATH)
+
+    # Constructed unconditionally. The others answer 503 without their bundles
+    # because there is nothing else they could say; this one has the equation its
+    # corpus was labelled with, so a deployment without the 270MB of weights still
+    # scores collaboration risk — and reports that it did.
+    collaboration = CollaborationRiskPredictor(COLLABORATION_MODEL_PATH)
 
     if (COST_INITIAL_MODEL_DIR / "model.joblib").exists():
         cost_initial = CostPredictor(COST_INITIAL_MODEL_DIR, "initial")
@@ -140,6 +156,13 @@ def health() -> dict[str, Any]:
         for name, model in (("over_budget", over_budget),
                             ("requirement_change", requirement_change))
     }
+    body["risk"]["communication_collaboration"] = {
+        "loaded": collaboration is not None,
+        # Which of the two is answering, so a deployment missing the weights is
+        # visible on the health check rather than only in the response body.
+        "scorer": collaboration.scorer if collaboration else None,
+        "features": len(FEATURE_RANGES),
+    }
     body["cost"] = {
         "initial": {
             "loaded": cost_initial is not None,
@@ -184,6 +207,31 @@ def predict_over_budget(request: InferenceRequest) -> dict[str, Any]:
 @app.post("/predict/risk/requirement-change")
 def predict_requirement_change(request: InferenceRequest) -> dict[str, Any]:
     return _risk(requirement_change, "requirement-change", request)
+
+
+@app.post("/predict/risk/communication-collaboration")
+def predict_communication_collaboration(request: InferenceRequest) -> dict[str, Any]:
+    """Communication and collaboration risk for one sprint.
+
+    Never 503s for a missing bundle, unlike its two siblings — see
+    ``CollaborationRiskPredictor`` for why the fallback is the model's own
+    boundary rather than a substitute for it.
+    """
+    if collaboration is None:
+        raise HTTPException(status_code=503, detail="Collaboration model not loaded")
+
+    started = time.perf_counter()
+    try:
+        result = collaboration.predict(request.features)
+    except Exception as error:  # noqa: BLE001
+        log.exception("Collaboration prediction failed")
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    log.info("communication-collaboration risk: %s (%.0f%%) via %s in %sms",
+             result["risk_level"], result["probability"] * 100,
+             result["provenance"]["scorer"], elapsed_ms)
+    return {**result, "latency_ms": elapsed_ms}
 
 
 def _cost(model: CostPredictor | None, name: str, request: InferenceRequest) -> dict[str, Any]:
@@ -277,6 +325,16 @@ def contract() -> dict[str, Any]:
             "output_scale": predictor.fib,
             "defaults": TRAINING_MEDIANS,
         },
+    }
+    contract["communication_collaboration"] = {
+        "numeric_fields": sorted(FEATURE_RANGES),
+        "training_ranges": {k: list(v) for k, v in FEATURE_RANGES.items()},
+        # No defaults table, unlike the other models: an absent reading here is
+        # taken as zero, which is the healthy end of three of the five scales.
+        # See build_collaboration_row for why a median would be wrong.
+        "missing_value_policy": "zero (healthy), not the training median",
+        "scorer": collaboration.scorer if collaboration else None,
+        "bands": collaboration.metadata.get("bands") if collaboration else None,
     }
     if velocity is not None:
         contract["velocity"] = {

@@ -212,7 +212,7 @@ Stated plainly so the gap is visible rather than discovered:
 | Model | Capability | Where it appears |
 |---|---|---|
 | M1 | Story-point estimation + sprint velocity | Story editor, sprint planning capacity meter |
-| M2 | Over-budget + requirement-change risk | Sprint dashboard widgets, planning risk cards |
+| M2 | Over-budget, requirement-change + communication/collaboration risk | Sprint dashboard widgets, planning risk cards, AI insights page |
 | M3 | Developer ranking, consistency & learning scores | Task assignment assistant, workload board |
 | M4 | Initial + mid-sprint cost forecast (planning only) | Planning cost widget, cost trend chart |
 

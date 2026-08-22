@@ -54,6 +54,7 @@ public class MockAiModelClient implements AiModelClient {
             case M1_VELOCITY -> velocity(features);
             case M2_OVER_BUDGET -> overBudgetRisk(features);
             case M2_REQUIREMENT_CHANGE -> requirementChangeRisk(features);
+            case M2_COMMUNICATION_COLLABORATION -> collaborationRisk(features);
             case M3_ALLOCATION -> allocationFit(features);
             case M4_COST_INITIAL -> cost(features, false);
             case M4_COST_MID -> cost(features, true);
@@ -309,11 +310,30 @@ public class MockAiModelClient implements AiModelClient {
                     "%.0f%% of logged effort is overtime".formatted(overtimeRatio * 100)));
         }
 
-        return classification(logit, drivers, features,
-                List.of("Split or defer the lowest-value committed stories",
-                        "Freeze scope for the remainder of the sprint",
-                        "Clear the blockers before adding anything new"),
-                "over-budget");
+        // Tasks already behind their own estimate. The strongest of these signals,
+        // because unlike everything above it this one is not a ratio of plans — the
+        // work is measurably late and no amount of replanning makes it less so.
+        double slippageRate = features.number("task_slippage_rate");
+        if (slippageRate > 0) {
+            double contribution = Math.min(slippageRate * 3.0, 2.0);
+            logit += contribution;
+            drivers.add(driver("task_slippage_rate", "Tasks behind their estimate",
+                    BigDecimal.valueOf(contribution),
+                    "%.0f tasks past their estimate, %.0f not started past half-time".formatted(
+                            features.number("tasks_over_estimate"),
+                            features.number("tasks_not_started_past_half"))));
+        }
+
+        List<String> mitigations = new ArrayList<>(List.of(
+                "Split or defer the lowest-value committed stories",
+                "Freeze scope for the remainder of the sprint",
+                "Clear the blockers before adding anything new"));
+        if (features.number("tasks_not_started_past_half") > 0) {
+            mitigations.add("Re-estimate or reassign the tasks nobody has opened yet — "
+                    + "an untouched task past half its estimate will not land on time");
+        }
+
+        return classification(logit, drivers, features, mitigations, "over-budget");
     }
 
     /** Probability of significant requirement churn during the sprint. */
@@ -367,6 +387,90 @@ public class MockAiModelClient implements AiModelClient {
                         "Convert late changes into new backlog items rather than edits",
                         "Agree a sprint goal the team can measure changes against"),
                 "requirement-change");
+    }
+
+    /**
+     * Collaboration risk from the same five readings the real model scores.
+     *
+     * <p>The thresholds are the service's composite bands, converted to logit
+     * contributions rather than reinvented: the mock exists so the product can be
+     * demonstrated and tested without the model service, and a mock with its own
+     * opinion about what counts as a slow reply would make every test written against
+     * it a test of the wrong boundary.</p>
+     */
+    private InferenceResult collaborationRisk(FeatureVector features) {
+        List<PredictionDriver> drivers = new ArrayList<>();
+        double logit = -2.2;
+
+        // Null means no thread had two participants, which the service leaves absent
+        // rather than sending as zero. Absent is not fast — it is unmeasurable, so
+        // nothing is added either way.
+        BigDecimal replyHours = features.decimal("avg_response_time", null);
+        if (replyHours != null) {
+            double hours = replyHours.doubleValue();
+            double contribution = hours > 48 ? 1.8 : hours > 24 ? 0.9 : hours > 12 ? 0.4 : 0.0;
+            if (contribution > 0) {
+                logit += contribution;
+                drivers.add(driver("avg_response_time", "Slow replies",
+                        BigDecimal.valueOf(contribution),
+                        "%.0fh between a comment and an answer".formatted(hours)));
+            }
+        }
+
+        double commentsPerTask = features.number("comments_per_task");
+        double taskCount = features.number("collaboration_task_count");
+        if (taskCount > 0) {
+            double contribution = commentsPerTask < 1 ? 1.4
+                    : commentsPerTask < 2 ? 0.9 : commentsPerTask < 3 ? 0.4 : 0.0;
+            if (contribution > 0) {
+                logit += contribution;
+                drivers.add(driver("comments_per_task", "Little written discussion",
+                        BigDecimal.valueOf(contribution),
+                        "%.1f comments per task across %.0f tasks".formatted(commentsPerTask, taskCount)));
+            }
+        }
+
+        double inactiveDays = features.number("inactive_days");
+        double contribution = inactiveDays > 7 ? 1.8 : inactiveDays > 4 ? 0.9 : inactiveDays > 2 ? 0.4 : 0.0;
+        if (contribution > 0) {
+            logit += contribution;
+            double longest = features.number("longest_silence_days");
+            drivers.add(driver("inactive_days", "Days with nothing recorded",
+                    BigDecimal.valueOf(contribution),
+                    "%.0f silent days, the longest run being %.0f".formatted(inactiveDays, longest)));
+        }
+
+        double blockers = features.number("blockers");
+        contribution = blockers > 5 ? 1.8 : blockers > 3 ? 0.9 : blockers > 1 ? 0.4 : 0.0;
+        if (contribution > 0) {
+            logit += contribution;
+            drivers.add(driver("blockers", "Blocked tasks", BigDecimal.valueOf(contribution),
+                    "%.0f tasks the team has called stuck".formatted(blockers)));
+        }
+
+        double reopened = features.number("reopened_tasks");
+        contribution = reopened > 4 ? 1.4 : reopened > 2 ? 0.9 : reopened > 0 ? 0.4 : 0.0;
+        if (contribution > 0) {
+            logit += contribution;
+            drivers.add(driver("reopened_tasks", "Reopened work", BigDecimal.valueOf(contribution),
+                    "%.0f tasks came back after being called done".formatted(reopened)));
+        }
+
+        double unanswered = features.number("unanswered_threads");
+        if (unanswered > 0) {
+            contribution = Math.min(unanswered * 0.25, 1.0);
+            logit += contribution;
+            drivers.add(driver("unanswered_threads", "Questions left hanging",
+                    BigDecimal.valueOf(contribution),
+                    "%.0f comment thread%s with no reply after a day"
+                            .formatted(unanswered, unanswered == 1 ? "" : "s")));
+        }
+
+        return classification(logit, drivers, features,
+                List.of("Agree a reply norm — task comments acknowledged within four working hours",
+                        "Give every blocked task a named owner and review them at standup",
+                        "Move decisions onto the task rather than into direct messages"),
+                "communication-collaboration");
     }
 
     private InferenceResult classification(double logit, List<PredictionDriver> drivers,

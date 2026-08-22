@@ -9,3 +9,13 @@ venv/
 # them, and a coursework repo that needs an out-of-band 3MB download to run is a
 # repo nobody can mark. If they later grow, or a training pipeline starts
 # producing them, fetch them at deploy time instead and ignore them here.
+
+# The DistilBERT weights behind the communication-collaboration model are ~270MB,
+# past what a git remote will take, so this one bundle is the exception to the
+# rule above. The service does not need it: without the weights it scores from
+# the composite equation the corpus was labelled with and reports
+# scorer=composite_rules. Regenerate with:
+#   python -m training.create_communication_dataset
+#   python -m training.train_communication_model
+models/communication_model/
+models/communication_model_checkpoints/
