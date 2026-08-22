@@ -130,10 +130,56 @@ public class OptimizerDeveloperService {
             Developer developer = optionalDev.get();
 
             // SAFE parsing (prevents crashes)
-            developer.setConsistency(parseDoubleSafe(dev.get("consistency")));
-            developer.setLearning_rate(parseDoubleSafe(dev.get("learning_rate")));
+            double consistency = parseDoubleSafe(dev.get("consistency"));
+            double learningRate = parseDoubleSafe(dev.get("learning_rate"));
 
+            developer.setConsistency(consistency);
+            developer.setLearning_rate(learningRate);
             developerRepository.save(developer);
+
+            // Synchronize with core developer_profiles table
+            syncWithCoreProfile(developer, dev);
+        }
+    }
+
+    private void syncWithCoreProfile(Developer developer, Map<String, Object> devData) {
+        if (jdbcTemplate == null) {
+            return;
+        }
+        try {
+            String email = developer.getProfile() != null ? developer.getProfile().getEmail() : null;
+            if (email == null && developer.getDev_id() != null && developer.getDev_id().contains("@")) {
+                email = developer.getDev_id();
+            }
+            if (email == null) return;
+
+            List<UUID> userIds = jdbcTemplate.query(
+                    "SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1",
+                    (rs, rowNum) -> (UUID) rs.getObject(1),
+                    email.trim()
+            );
+            if (userIds.isEmpty()) return;
+            UUID userId = userIds.get(0);
+
+            Double consistency = developer.getConsistency();
+            Double learningRate = developer.getLearning_rate();
+            Double avgVelocity = devData.get("avg_velocity") != null ? parseDoubleSafe(devData.get("avg_velocity")) : null;
+            Double defectRate = devData.get("defect_rate") != null ? parseDoubleSafe(devData.get("defect_rate")) : null;
+            Double reopenRate = devData.get("reopen_rate") != null ? parseDoubleSafe(devData.get("reopen_rate")) : null;
+
+            jdbcTemplate.update(
+                    "UPDATE developer_profiles SET " +
+                    "consistency_score = COALESCE(?, consistency_score), " +
+                    "learning_rate = COALESCE(?, learning_rate), " +
+                    "avg_velocity = COALESCE(?, avg_velocity), " +
+                    "defect_rate = COALESCE(?, defect_rate), " +
+                    "reopen_rate = COALESCE(?, reopen_rate), " +
+                    "last_computed_at = NOW() " +
+                    "WHERE user_id = ?",
+                    consistency, learningRate, avgVelocity, defectRate, reopenRate, userId
+            );
+        } catch (Exception e) {
+            System.err.println("Note: Core profile sync from ML: " + e.getMessage());
         }
     }
 
