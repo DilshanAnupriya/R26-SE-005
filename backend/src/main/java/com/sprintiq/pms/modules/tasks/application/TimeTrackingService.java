@@ -182,6 +182,11 @@ public class TimeTrackingService {
         return timeEntryRepository.sumOvertimeMinutesInSprint(sprintId);
     }
 
+    @Transactional(readOnly = true)
+    public List<TimeEntryRepository.UserEffortSummary> effortByUserInSprint(UUID sprintId) {
+        return timeEntryRepository.effortByUserInSprint(sprintId);
+    }
+
     // ------------------------------------------------------------------ internals
 
     private void finish(TimeEntry entry, String description, boolean overtime) {

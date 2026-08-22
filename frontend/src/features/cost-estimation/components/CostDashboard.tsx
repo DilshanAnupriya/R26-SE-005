@@ -870,7 +870,7 @@ function CostExplanationPanel({
         <ExplanationMetric
           label="Confidence"
           value={confidence == null ? "-" : `${number(confidence * 100)}%`}
-          detail={confidence == null ? "History rows do not expose confidence" : "Model confidence"}
+          detail={confidence == null ? "No calibrated probability available" : "Model confidence"}
         />
       </div>
 
@@ -881,7 +881,7 @@ function CostExplanationPanel({
       ) : null}
 
       <div className="mt-4 border-t pt-3">
-        <h4 className="text-sm font-medium">Top model drivers</h4>
+        <h4 className="text-sm font-medium">Forecast drivers</h4>
         {topDrivers.length > 0 ? (
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             {topDrivers.map((driver) => (
@@ -900,7 +900,7 @@ function CostExplanationPanel({
           </div>
         ) : (
           <p className="mt-2 text-xs text-muted-foreground">
-            Detailed model drivers are available after generating a fresh forecast. Stored history keeps the cost trend and interval.
+            Detailed forecast drivers are available after generating a fresh forecast. Stored history keeps the cost trend and interval.
           </p>
         )}
       </div>
