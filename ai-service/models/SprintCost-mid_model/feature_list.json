@@ -1,14 +1,16 @@
 {
   "stage": "mid",
-  "target_name": "actual_sprint_cost",
-  "target_definition": "Observed realized sprint cost from the dataset.",
+  "target_name": "remaining_effort_minutes",
+  "target_definition": "Remaining effort minutes after a partial sprint snapshot.",
   "raw_features": [
     "team_id",
     "total_tasks",
     "team_size",
     "planned_story_points",
+    "planned_effort_minutes",
     "completed_story_points",
     "total_effort_minutes",
+    "elapsed_fraction",
     "sprint_number",
     "historical_velocity_avg",
     "developer_availability_rate",
@@ -25,13 +27,16 @@
     "availability_capacity",
     "concurrency_per_developer",
     "skill_capacity_index",
+    "planned_effort_per_task",
+    "planned_effort_per_developer",
     "completion_ratio",
     "remaining_story_points",
     "effort_per_task",
     "effort_per_developer",
     "overtime_per_developer",
     "absence_rate_per_developer",
-    "effort_per_completed_point"
+    "effort_per_completed_point",
+    "effort_burn_rate"
   ],
   "categorical_features": [
     "team_id"
@@ -40,8 +45,10 @@
     "total_tasks",
     "team_size",
     "planned_story_points",
+    "planned_effort_minutes",
     "completed_story_points",
     "total_effort_minutes",
+    "elapsed_fraction",
     "sprint_number",
     "historical_velocity_avg",
     "developer_availability_rate",
@@ -56,8 +63,10 @@
     "total_tasks",
     "team_size",
     "planned_story_points",
+    "planned_effort_minutes",
     "completed_story_points",
     "total_effort_minutes",
+    "elapsed_fraction",
     "sprint_number",
     "historical_velocity_avg",
     "developer_availability_rate",
@@ -72,12 +81,15 @@
     "availability_capacity",
     "concurrency_per_developer",
     "skill_capacity_index",
+    "planned_effort_per_task",
+    "planned_effort_per_developer",
     "completion_ratio",
     "remaining_story_points",
     "effort_per_task",
     "effort_per_developer",
     "overtime_per_developer",
     "absence_rate_per_developer",
-    "effort_per_completed_point"
+    "effort_per_completed_point",
+    "effort_burn_rate"
   ]
 }

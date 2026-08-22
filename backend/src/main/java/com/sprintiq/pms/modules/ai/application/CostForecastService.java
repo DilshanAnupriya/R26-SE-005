@@ -50,13 +50,15 @@ public class CostForecastService {
         List<DeveloperFeatureSource.DeveloperFeatures> team = developers.candidatesFor(sprint.projectId());
         long effortMinutes = effort.sprintEffortMinutes(sprintId);
         long overtimeMinutes = effort.sprintOvertimeMinutes(sprintId);
+        long plannedEffortMinutes = effort.sprintPlannedEstimateMinutes(sprintId);
         long sprintTaskCount = effort.sprintTaskCount(sprintId);
         long totalTasks = sprintTaskCount > 0 ? sprintTaskCount : Math.max(sprint.storyCount(), 1L);
         long concurrentAssignments = effort.concurrentAssignments(sprint.projectId());
         BigDecimal budget = sprint.budgetAmount() != null ? sprint.budgetAmount() : project.budgetAmount();
         BigDecimal overtimeHours = BigDecimal.valueOf(overtimeMinutes)
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
-        BigDecimal actualCostSoFar = actualCost(effortMinutes, overtimeHours, blendedRate);
+        BigDecimal actualCostSoFar = actualCost(
+                effort.sprintEffortByUser(sprintId), team, blendedRate);
         BigDecimal availabilityRate = averageAvailability(team);
         BigDecimal skillMatchRatio = skillMatchRatio(effort.sprintRequiredSkills(sprintId), team);
         BigDecimal avgSeniority = averageSeniority(team);
@@ -77,6 +79,7 @@ public class CostForecastService {
                 .put("team_id", project.key())
                 .putNumber("total_tasks", totalTasks)
                 .putNumber("planned_story_points", sprint.committedPoints())
+                .putNumber("planned_effort_minutes", plannedEffortMinutes)
                 .putNumber("completed_story_points", sprint.completedPoints())
                 .putNumber("total_effort_minutes", effortMinutes)
                 .putNumber("sprint_number", sprint.sequenceNo())
@@ -176,10 +179,11 @@ public class CostForecastService {
     public CostValidationResponse validateSprint(UUID sprintId) {
         SprintFeatureSource.SprintFeatures sprint = sprints.featuresFor(sprintId);
         BigDecimal blendedRate = developers.averageHourlyRate(sprint.projectId());
+        List<DeveloperFeatureSource.DeveloperFeatures> team =
+                developers.candidatesFor(sprint.projectId());
         long effortMinutes = effort.sprintEffortMinutes(sprintId);
-        BigDecimal overtimeHours = BigDecimal.valueOf(effort.sprintOvertimeMinutes(sprintId))
-                .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
-        BigDecimal actualCostSoFar = actualCost(effortMinutes, overtimeHours, blendedRate);
+        BigDecimal actualCostSoFar = actualCost(
+                effort.sprintEffortByUser(sprintId), team, blendedRate);
         boolean accuracyEligible = "COMPLETED".equalsIgnoreCase(sprint.status());
         BigDecimal estimatedRemainingCost = accuracyEligible
                 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
@@ -270,6 +274,27 @@ public class CostForecastService {
         BigDecimal base = hours.multiply(hourlyRate);
         BigDecimal overtimePremium = overtimeHours.multiply(hourlyRate).multiply(BigDecimal.valueOf(0.5));
         return base.add(overtimePremium).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal actualCost(
+            List<EffortFeatureSource.UserEffort> effortByUser,
+            List<DeveloperFeatureSource.DeveloperFeatures> team,
+            BigDecimal fallbackRate) {
+        return effortByUser.stream()
+                .map(row -> {
+                    BigDecimal rate = team.stream()
+                            .filter(member -> member.userId().equals(row.userId()))
+                            .map(DeveloperFeatureSource.DeveloperFeatures::hourlyRate)
+                            .filter(candidate -> candidate != null
+                                    && candidate.compareTo(BigDecimal.ZERO) > 0)
+                            .findFirst()
+                            .orElse(fallbackRate);
+                    BigDecimal overtimeHours = BigDecimal.valueOf(row.overtimeMinutes())
+                            .divide(BigDecimal.valueOf(60), 4, RoundingMode.HALF_UP);
+                    return actualCost(row.minutes(), overtimeHours, rate);
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private CostPredictionAccuracy accuracy(CostForecast forecast, BigDecimal actualCost) {

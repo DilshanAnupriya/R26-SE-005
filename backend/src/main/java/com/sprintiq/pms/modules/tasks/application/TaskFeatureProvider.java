@@ -61,6 +61,17 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
 
     @Override
     @Transactional(readOnly = true)
+    public List<UserEffort> sprintEffortByUser(UUID sprintId) {
+        return timeTracking.effortByUserInSprint(sprintId).stream()
+                .map(row -> new UserEffort(
+                        row.getUserId(),
+                        row.getMinutes() == null ? 0L : row.getMinutes(),
+                        row.getOvertimeMinutes() == null ? 0L : row.getOvertimeMinutes()))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public long sprintRemainingEstimateMinutes(UUID sprintId) {
         return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).stream()
                 .filter(task -> task.getStatus().isOpen())
@@ -71,6 +82,14 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
                     int estimate = task.getEstimateMinutes() == null ? 0 : task.getEstimateMinutes();
                     return Math.max(0, estimate - task.getSpentMinutes());
                 })
+                .sum();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long sprintPlannedEstimateMinutes(UUID sprintId) {
+        return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).stream()
+                .mapToLong(task -> task.getEstimateMinutes() == null ? 0L : task.getEstimateMinutes())
                 .sum();
     }
 

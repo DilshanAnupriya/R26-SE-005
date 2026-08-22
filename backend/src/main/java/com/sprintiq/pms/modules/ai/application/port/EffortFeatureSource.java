@@ -15,14 +15,22 @@ import java.util.UUID;
  */
 public interface EffortFeatureSource {
 
+    record UserEffort(UUID userId, long minutes, long overtimeMinutes) {}
+
     /** Minutes logged against a sprint's tasks. */
     long sprintEffortMinutes(UUID sprintId);
 
     /** The share of those minutes logged outside contracted hours. */
     long sprintOvertimeMinutes(UUID sprintId);
 
+    /** Logged sprint effort grouped by author so actual cost can use each person's rate. */
+    List<UserEffort> sprintEffortByUser(UUID sprintId);
+
     /** Remaining estimated minutes on open tasks in the sprint. */
     long sprintRemainingEstimateMinutes(UUID sprintId);
+
+    /** Original estimated minutes across all non-deleted sprint tasks. */
+    long sprintPlannedEstimateMinutes(UUID sprintId);
 
     /** Tasks currently attached to the sprint. */
     long sprintTaskCount(UUID sprintId);
