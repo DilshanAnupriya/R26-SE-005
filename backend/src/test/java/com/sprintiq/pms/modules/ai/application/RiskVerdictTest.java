@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RiskVerdictTest {
 
     /** The service under test needs no collaborators for these two decisions. */
-    private final RiskService service = new RiskService(null, null, null, null, null, null);
+    private final RiskService service = new RiskService(null, null, null, null, null, null, null);
 
     private static AiPrediction withLabel(String label) {
         return AiPrediction.builder().predictedLabel(label).build();
