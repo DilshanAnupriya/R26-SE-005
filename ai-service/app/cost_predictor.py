@@ -27,9 +27,11 @@ INITIAL_RAW_FEATURES = [
     "total_tasks",
     "team_size",
     "planned_story_points",
+    "planned_effort_minutes",
     "sprint_number",
     "historical_velocity_avg",
     "developer_availability_rate",
+    "absence_days_total",
     "concurrent_assignments",
     "skill_match_ratio",
     "avg_seniority_level",
@@ -40,8 +42,10 @@ MID_RAW_FEATURES = [
     "total_tasks",
     "team_size",
     "planned_story_points",
+    "planned_effort_minutes",
     "completed_story_points",
     "total_effort_minutes",
+    "elapsed_fraction",
     "sprint_number",
     "historical_velocity_avg",
     "developer_availability_rate",
@@ -58,8 +62,13 @@ DRIVER_LABELS = {
     "total_tasks": "tasks in sprint",
     "team_size": "team size",
     "planned_story_points": "planned story points",
+    "planned_effort_minutes": "planned task effort",
     "completed_story_points": "completed story points",
     "total_effort_minutes": "effort logged so far",
+    "remaining_effort_minutes": "predicted remaining effort",
+    "actual_cost_so_far": "actual cost so far",
+    "blended_hourly_rate": "blended hourly rate",
+    "elapsed_fraction": "elapsed sprint fraction",
     "sprint_number": "sprint number",
     "historical_velocity_avg": "historical velocity",
     "developer_availability_rate": "developer availability",
@@ -74,6 +83,8 @@ DRIVER_LABELS = {
     "availability_capacity": "available team capacity",
     "concurrency_per_developer": "assignments per developer",
     "skill_capacity_index": "skill-adjusted capacity",
+    "planned_effort_per_task": "planned effort per task",
+    "planned_effort_per_developer": "planned effort per developer",
     "completion_ratio": "completion ratio",
     "remaining_story_points": "remaining story points",
     "effort_per_task": "effort per task",
@@ -81,6 +92,7 @@ DRIVER_LABELS = {
     "overtime_per_developer": "overtime per developer",
     "absence_rate_per_developer": "absence per developer",
     "effort_per_completed_point": "effort per completed point",
+    "effort_burn_rate": "effort burn rate",
 }
 
 
@@ -103,19 +115,24 @@ class StageFeatureEngineer(BaseEstimator, TransformerMixin):
         availability = _number(frame.get("developer_availability_rate"))
         concurrent = _number(frame.get("concurrent_assignments"))
         skill_match = _number(frame.get("skill_match_ratio"))
+        seniority = _number(frame.get("avg_seniority_level"))
+        planned_effort = _number(frame.get("planned_effort_minutes"))
 
         frame["planned_points_per_task"] = planned_points / total_tasks
         frame["planned_points_per_developer"] = planned_points / team_size
         frame["historical_points_gap"] = planned_points - historical_velocity
         frame["availability_capacity"] = team_size * availability
         frame["concurrency_per_developer"] = concurrent / team_size
-        frame["skill_capacity_index"] = frame["availability_capacity"] * skill_match
+        frame["skill_capacity_index"] = skill_match * seniority * team_size
+        frame["planned_effort_per_task"] = planned_effort / total_tasks
+        frame["planned_effort_per_developer"] = planned_effort / team_size
 
         if self.stage == "mid":
             completed = _number(frame.get("completed_story_points"))
             effort = _number(frame.get("total_effort_minutes"))
             overtime = _number(frame.get("overtime_hours_total"))
             absence = _number(frame.get("absence_days_total"))
+            elapsed = _number(frame.get("elapsed_fraction"))
 
             frame["completion_ratio"] = completed / _positive(planned_points, 1.0)
             frame["remaining_story_points"] = np.maximum(planned_points - completed, 0.0)
@@ -124,8 +141,9 @@ class StageFeatureEngineer(BaseEstimator, TransformerMixin):
             frame["overtime_per_developer"] = overtime / team_size
             frame["absence_rate_per_developer"] = absence / team_size
             frame["effort_per_completed_point"] = effort / _positive(completed, 1.0)
+            frame["effort_burn_rate"] = effort / _positive(elapsed, 1.0)
 
-        return frame
+        return frame.replace([np.inf, -np.inf], np.nan)
 
 
 # The bundles were pickled from a notebook where the class lived in __main__.
@@ -171,38 +189,74 @@ class CostPredictor:
         self.metrics = json.loads((model_dir / "metrics.json").read_text())
         self.raw_features: list[str] = list(self.contract["raw_features"])
         self.all_features: list[str] = list(self.contract["all_model_features"])
-        self.test_mape = float(self.metrics.get("test_metrics", {}).get("mape", 15.0))
-        self.test_r2 = float(self.metrics.get("test_metrics", {}).get("r2", 0.0))
+        self.deployment_method = str(
+            self.metrics.get(
+                "deployment_method",
+                "planning_baseline" if stage == "initial" else "ml_remaining_effort",
+            )
+        )
+        deployment_metrics = self.metrics.get(
+            "deployment_metrics", self.metrics.get("test_metrics", {})
+        )
+        self.test_mape = float(deployment_metrics.get("mape", 30.0))
+        self.test_r2 = float(deployment_metrics.get("r2", 0.0))
 
-        log.info("Loaded %s cost model: %d raw features, MAPE %.2f, R2 %.3f",
-                 stage, len(self.raw_features), self.test_mape, self.test_r2)
+        log.info(
+            "Loaded %s cost predictor: method=%s, %d raw features, MAPE %.2f, R2 %.3f",
+            stage, self.deployment_method, len(self.raw_features), self.test_mape, self.test_r2,
+        )
 
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         row, provenance = self._row(payload)
         frame = pd.DataFrame([row], columns=self.raw_features)
+        hourly_rate = _scalar(payload.get("blended_hourly_rate"))
+        if hourly_rate <= 0:
+            raise ValueError("blended_hourly_rate must be greater than zero")
+        currency = str(payload.get("currency") or "USD")
+        actual_cost_so_far = max(0.0, _scalar(payload.get("actual_cost_so_far")))
 
-        value = max(0.0, float(self.pipeline.predict(frame)[0]))
+        if self.stage == "initial":
+            predicted_effort = max(0.0, row["planned_effort_minutes"])
+            actual_cost_so_far = 0.0
+        else:
+            predicted_effort = max(0.0, float(self.pipeline.predict(frame)[0]))
+
+        remaining_cost = predicted_effort / 60.0 * hourly_rate
+        value = actual_cost_so_far + remaining_cost
         margin_rate = self._margin_rate(row, provenance)
-        margin = value * margin_rate
-        lower = max(0.0, value - margin)
-        upper = value + margin
-
-        engineered = StageFeatureEngineer(self.stage).transform(frame).iloc[0].to_dict()
-        drivers = self._drivers(engineered)
+        effort_margin = predicted_effort * margin_rate
+        lower = actual_cost_so_far + max(0.0, predicted_effort - effort_margin) / 60.0 * hourly_rate
+        upper = actual_cost_so_far + (predicted_effort + effort_margin) / 60.0 * hourly_rate
+        drivers = self._cost_drivers(
+            predicted_effort=predicted_effort,
+            actual_cost_so_far=actual_cost_so_far,
+            remaining_cost=remaining_cost,
+            hourly_rate=hourly_rate,
+            currency=currency,
+        )
 
         return {
             "value": round(value, 2),
             "lower_bound": round(lower, 2),
             "upper_bound": round(upper, 2),
-            "confidence": self._confidence(margin_rate, provenance),
+            "confidence": None,
             "label": self.stage.upper(),
             "drivers": drivers,
-            "explanation": self._explain(value, lower, upper, drivers, provenance),
+            "explanation": self._explain(
+                value, lower, upper, predicted_effort, hourly_rate, currency, provenance
+            ),
             "raw": {
                 "stage": self.stage,
+                "prediction_method": self.deployment_method,
+                "predicted_effort_minutes": round(predicted_effort, 2),
+                "actual_cost_so_far": round(actual_cost_so_far, 2),
+                "future_labor_cost": round(remaining_cost, 2),
+                "blended_hourly_rate": round(hourly_rate, 2),
+                "currency": currency,
                 "test_mape": self.test_mape,
                 "test_r2": self.test_r2,
                 "margin_rate": round(margin_rate, 4),
+                "interval_basis": "deployment holdout MAPE; heuristic range, not calibrated probability",
             },
             "provenance": provenance,
         }
@@ -213,8 +267,10 @@ class CostPredictor:
             "total_tasks": 1,
             "team_size": 1,
             "planned_story_points": 0,
+            "planned_effort_minutes": 0,
             "completed_story_points": 0,
             "total_effort_minutes": 0,
+            "elapsed_fraction": 0,
             "sprint_number": 1,
             "historical_velocity_avg": 0,
             "developer_availability_rate": 1.0,
@@ -231,89 +287,104 @@ class CostPredictor:
             raw = payload.get(name)
             if raw is None or raw == "":
                 defaulted.append(name)
-                raw = defaults[name]
-            row[name] = _team_id(raw) if name == "team_id" else _scalar(raw, float(defaults[name]))
+                raw = defaults.get(name, 0)
+            default = defaults.get(name, 0)
+            row[name] = _team_id(raw) if name == "team_id" else _scalar(raw, float(default))
 
         provenance = {
             "stage": self.stage,
+            "prediction_method": self.deployment_method,
             "defaulted_to_service_default": defaulted,
             "model_test_mape": self.test_mape,
             "model_test_r2": self.test_r2,
         }
         return row, provenance
 
-    def _drivers(self, engineered: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
-        try:
-            regressor = self.pipeline.named_steps["model"].regressor_
-            importances = regressor.feature_importances_
-            feature_names = self.pipeline.named_steps["preprocessor"].get_feature_names_out()
-        except Exception as error:  # noqa: BLE001
-            log.warning("Could not compute %s cost drivers: %s", self.stage, error)
-            return []
-
-        ranked: list[tuple[str, float]] = []
-        for name, importance in zip(feature_names, importances):
-            plain = name.split("__", 1)[-1]
-            if plain.startswith("team_id_"):
-                plain = "team_id"
-            ranked.append((plain, float(importance)))
-
-        drivers = []
-        seen: set[str] = set()
-        for name, importance in sorted(ranked, key=lambda item: item[1], reverse=True):
-            if len(drivers) >= limit:
-                break
-            if name in seen or importance <= 0:
-                continue
-            seen.add(name)
-            value = engineered.get(name)
-            detail = None
-            if isinstance(value, (int, float, np.number)):
-                detail = f"{float(value):.2f} in this sprint"
-            elif value is not None:
-                detail = str(value)
-            drivers.append({
-                "feature": name,
-                "label": DRIVER_LABELS.get(name, name.replace("_", " ")),
-                "contribution": round(importance, 4),
+    def _cost_drivers(
+        self,
+        predicted_effort: float,
+        actual_cost_so_far: float,
+        remaining_cost: float,
+        hourly_rate: float,
+        currency: str,
+    ) -> list[dict[str, Any]]:
+        effort_feature = (
+            "planned_effort_minutes"
+            if self.stage == "initial"
+            else "remaining_effort_minutes"
+        )
+        effort_label = (
+            "Planned task effort"
+            if self.stage == "initial"
+            else "Predicted remaining effort"
+        )
+        drivers = [
+            {
+                "feature": effort_feature,
+                "label": effort_label,
+                "contribution": round(remaining_cost, 2),
                 "direction": "INCREASE",
-                "detail": detail,
-            })
+                "detail": (
+                    f"{predicted_effort / 60.0:,.1f}h at "
+                    f"{currency} {hourly_rate:,.2f}/h"
+                ),
+            }
+        ]
+        if self.stage == "mid":
+            drivers.insert(
+                0,
+                {
+                    "feature": "actual_cost_so_far",
+                    "label": "Actual cost so far",
+                    "contribution": round(actual_cost_so_far, 2),
+                    "direction": "INCREASE",
+                    "detail": f"{currency} {actual_cost_so_far:,.2f} already incurred",
+                },
+            )
         return drivers
 
     def _margin_rate(self, row: dict[str, Any], provenance: dict[str, Any]) -> float:
-        base = max(self.test_mape / 100.0, 0.08)
-        if self.stage == "initial":
-            base = max(base, 0.22)
-        else:
-            base = max(base, 0.12)
-            if row.get("total_effort_minutes", 0) <= 0:
-                base += 0.08
-            if row.get("completed_story_points", 0) <= 0:
-                base += 0.05
+        base = max(self.test_mape / 100.0, 0.10)
+        if self.stage == "mid" and row.get("total_effort_minutes", 0) <= 0:
+            base += 0.08
+        if self.stage == "mid" and row.get("completed_story_points", 0) <= 0:
+            base += 0.05
         base += 0.02 * len(provenance.get("defaulted_to_service_default", []))
         return min(base, 0.60)
 
-    def _confidence(self, margin_rate: float, provenance: dict[str, Any]) -> float:
-        confidence = 1.0 - margin_rate
-        confidence -= 0.02 * len(provenance.get("defaulted_to_service_default", []))
-        return round(max(0.0, min(0.95, confidence)), 2)
-
-    def _explain(self, value: float, lower: float, upper: float,
-                 drivers: list[dict[str, Any]], provenance: dict[str, Any]) -> str:
-        sentence = (
-            f"{self.stage.replace('_', '-').title()} sprint cost forecast is "
-            f"{value:,.0f}, typically between {lower:,.0f} and {upper:,.0f}. "
+    def _explain(
+        self,
+        value: float,
+        lower: float,
+        upper: float,
+        predicted_effort: float,
+        hourly_rate: float,
+        currency: str,
+        provenance: dict[str, Any],
+    ) -> str:
+        if self.stage == "initial":
+            sentence = (
+                f"Initial forecast {currency} {value:,.0f} uses "
+                f"{predicted_effort / 60.0:,.1f} planned task hours at the project's "
+                f"{currency} {hourly_rate:,.2f}/h blended rate. The planning baseline "
+                "is deployed because it beat the initial ML candidate on the holdout. "
+            )
+        else:
+            sentence = (
+                f"Mid-sprint final-cost forecast is {currency} {value:,.0f}: actual cost "
+                f"so far plus {predicted_effort / 60.0:,.1f} ML-predicted remaining hours "
+                f"priced at {currency} {hourly_rate:,.2f}/h. "
+            )
+        sentence += (
+            f"The {currency} {lower:,.0f}-{upper:,.0f} range uses holdout percentage "
+            "error as a heuristic and is not a probability confidence interval. "
         )
-        if drivers:
-            sentence += "Most influenced by " + " and ".join(
-                driver["label"].lower() for driver in drivers[:2]) + ". "
         missing = len(provenance.get("defaulted_to_service_default", []))
         if missing:
             sentence += (
                 f"{missing} input{'s' if missing != 1 else ''} fell back to service "
-                "defaults, so tighten the sprint plan before treating this as firm."
+                "defaults, so treat this forecast cautiously."
             )
         else:
-            sentence += "All required cost-model inputs were supplied by SprintIQ."
+            sentence += "All required effort-model inputs were supplied by SprintIQ."
         return sentence.strip()

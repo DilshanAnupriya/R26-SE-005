@@ -14,6 +14,12 @@ import java.util.UUID;
 
 public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID> {
 
+    interface UserEffortSummary {
+        UUID getUserId();
+        Long getMinutes();
+        Long getOvertimeMinutes();
+    }
+
     List<TimeEntry> findByEntityTypeAndEntityIdOrderByLoggedOnDesc(EntityType entityType, UUID entityId);
 
     /**
@@ -77,4 +83,14 @@ public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID> {
             WHERE t.sprintId = :sprintId AND t.overtime = TRUE
             """)
     long sumOvertimeMinutesInSprint(@Param("sprintId") UUID sprintId);
+
+    @Query("""
+            SELECT t.userId AS userId,
+                   SUM(t.minutes) AS minutes,
+                   SUM(CASE WHEN t.overtime = TRUE THEN t.minutes ELSE 0 END) AS overtimeMinutes
+            FROM TimeEntry t
+            WHERE t.sprintId = :sprintId
+            GROUP BY t.userId
+            """)
+    List<UserEffortSummary> effortByUserInSprint(@Param("sprintId") UUID sprintId);
 }

@@ -1,6 +1,43 @@
 # SprintIQ estimation service
 
-Serves the M1 story-point model: a point estimate plus a calibrated interval.
+Serves SprintIQ's story-point, velocity, delivery-risk, and sprint-cost models.
+
+## Sprint cost forecasting
+
+The M4 cost endpoints use a deliberately hybrid design:
+
+- `/predict/cost/initial` uses the sum of the sprint's task estimates. On the
+  untouched time holdout this planning baseline had 23.45% MAPE and beat the
+  initial ML candidate's 25.65%, so deploying the model would make the result
+  worse.
+- `/predict/cost/mid-sprint` predicts remaining effort minutes with gradient
+  boosting, then adds the actual cost already incurred. Its 28.63% holdout MAPE
+  beats the simple remaining-estimate baseline's 49.85%.
+- Both paths convert effort to money using the blended hourly rate sent by the
+  backend. Currency and rate are not hidden training constants.
+- Actual cost so far is calculated by the backend from time entries grouped by
+  developer, using each available profile rate and a 1.5x overtime rate. The
+  project blend is only the fallback when an individual rate is unavailable.
+
+The response's range is based on holdout MAPE and is explicitly a heuristic,
+not a calibrated probability interval. Accordingly, M4 returns no probability
+`confidence` value. Its drivers are additive cost components rather than
+global feature importance presented as a local explanation.
+
+The training CSV contains completed-sprint aggregates but no timestamped
+snapshots. `training/train_cost_models.py` therefore generates deterministic
+35%-65% partial snapshots for mid-sprint research. This limitation is recorded
+in the evaluation report; production snapshots should replace them when enough
+historical telemetry has been collected.
+
+```bash
+cd ai-service
+PYTHONPATH=training .venv/bin/python training/train_cost_models.py \
+  --data-path /path/to/final_agile_dataset.csv --stage both --strict-targets
+PYTHONPATH=training .venv/bin/python training/evaluate_cost_models.py \
+  --data-path /path/to/final_agile_dataset.csv --artifacts-dir models
+PYTHONPATH=. .venv/bin/pytest -q tests/test_cost_predictor.py
+```
 
 ## What the model is
 

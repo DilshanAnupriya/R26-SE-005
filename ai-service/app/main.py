@@ -166,12 +166,14 @@ def health() -> dict[str, Any]:
     body["cost"] = {
         "initial": {
             "loaded": cost_initial is not None,
+            "method": cost_initial.deployment_method if cost_initial else None,
             "features": len(cost_initial.raw_features) if cost_initial else None,
             "test_mape": cost_initial.test_mape if cost_initial else None,
             "test_r2": cost_initial.test_r2 if cost_initial else None,
         },
         "mid_sprint": {
             "loaded": cost_mid is not None,
+            "method": cost_mid.deployment_method if cost_mid else None,
             "features": len(cost_mid.raw_features) if cost_mid else None,
             "test_mape": cost_mid.test_mape if cost_mid else None,
             "test_r2": cost_mid.test_r2 if cost_mid else None,
