@@ -8,7 +8,7 @@ import { Sparkles } from "lucide-react";
  * marketing surface does the persuading; here the job is to get someone through with
  * as little to look at as possible.</p>
  */
-export default function AuthLayout({ children }: LayoutProps<"/">) {
+export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-svh flex-col items-center justify-center px-4 py-12">
       {/* Decorative only — hidden from assistive tech, which has nothing to gain here. */}

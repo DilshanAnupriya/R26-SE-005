@@ -95,7 +95,8 @@ function buildGroups(data: any[]): TaskGroup[] {
   const map = new Map<number, TaskGroup>();
 
   data.forEach((alloc: any) => {
-    const taskRawId: number = alloc.task.id;
+    const taskRawId: number = alloc.task?.id;
+    if (!taskRawId) return;
     const profile = alloc.developer?.profile;
     const fullName = profile
       ? `${profile.firstName ?? profile.first_name ?? ''} ${profile.lastName ?? profile.last_name ?? ''}`.trim()
@@ -103,28 +104,28 @@ function buildGroups(data: any[]): TaskGroup[] {
 
     const rec: DeveloperRec = {
       id: alloc.id,
-      developerId: alloc.developer.id,
-      devId: alloc.developer.dev_id,
-      name: fullName || alloc.developer.dev_id,
+      developerId: alloc.developer?.id,
+      devId: alloc.developer?.dev_id,
+      name: fullName || alloc.developer?.dev_id,
       rankPosition: alloc.rankPosition,
       finalScore: Math.round(alloc.finalScore ?? 0),
       skillMatchScore: alloc.skillMatchScore ?? 0,
       workloadBalance: alloc.workloadBalance ?? 0,
       mlScore: alloc.mlScore ?? 0,
       status: alloc.status,
-      availability: alloc.developer.availability ?? 0,
-      skillFrontend: alloc.developer.skill_frontend,
-      skillBackend: alloc.developer.skill_backend,
-      skillDb: alloc.developer.skill_db,
+      availability: alloc.developer?.availability ?? 0,
+      skillFrontend: alloc.developer?.skill_frontend,
+      skillBackend: alloc.developer?.skill_backend,
+      skillDb: alloc.developer?.skill_db,
     };
 
     if (!map.has(taskRawId)) {
       map.set(taskRawId, {
         taskId: `T-${taskRawId}`,
         taskRawId,
-        title: alloc.task.task_type,
-        priority: alloc.task.task_complexity > 3 ? "High" : "Medium",
-        complexity: `${alloc.task.story_points} Story Points`,
+        title: alloc.task?.task_type || "Task",
+        priority: alloc.task?.task_complexity > 3 ? "High" : "Medium",
+        complexity: `${alloc.task?.story_points || 0} Story Points`,
         overallStatus: "Pending Approval",
         topAllocationId: alloc.id,
         recommendations: [rec],
@@ -139,7 +140,6 @@ function buildGroups(data: any[]): TaskGroup[] {
     group.recommendations.sort((a, b) => a.rankPosition - b.rankPosition);
     group.recommendations = group.recommendations.slice(0, 5);
     group.overallStatus = deriveTaskStatus(group.recommendations);
-    // The best active recommendation
     const best = group.recommendations.find((r) => r.status === "ALLOCATED") ??
                  group.recommendations.find((r) => r.status === "RECOMMENDED");
     if (best) group.topAllocationId = best.id;
@@ -295,8 +295,8 @@ function DevCard({
   rec: DeveloperRec;
   selected: boolean;
   onSelect: () => void;
-  isApproved: boolean;           // whole task approved
-  approvedId?: number;           // which allocation was approved
+  isApproved: boolean;
+  approvedId?: number;
   onApprove: () => void;
   onDecline: () => void;
   onViewWorkload: (id: number, devId: string) => void;
@@ -392,7 +392,7 @@ function DevCard({
         <SkillBar label="Database" value={rec.skillDb} />
       </div>
 
-      {/* Action buttons — only shown when card is selected and task not yet approved */}
+      {/* Action buttons */}
       <AnimatePresence>
         {selected && isRecommended && !isApproved && (
           <motion.div
@@ -465,12 +465,11 @@ function TaskRow({
         isApproved ? "border-emerald-500/20" : "border-card-border hover:border-primary/30"
       }`}
     >
-      {/* Task header — click to expand */}
+      {/* Task header */}
       <div
         className="flex flex-col lg:flex-row items-start lg:items-center gap-4 p-5 cursor-pointer select-none"
         onClick={() => setExpanded((v) => !v)}
       >
-        {/* Task meta */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1.5">
             <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
@@ -493,7 +492,6 @@ function TaskRow({
           <h3 className="text-lg font-semibold text-foreground">{group.title}</h3>
         </div>
 
-        {/* Right section */}
         <div className="flex items-center gap-4 shrink-0">
           {isApproved && approvedRec ? (
             <div className="flex items-center gap-2">
@@ -518,7 +516,6 @@ function TaskRow({
             </div>
           )}
 
-          {/* Status badge */}
           <div
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
               isApproved
@@ -530,7 +527,6 @@ function TaskRow({
             {isApproved ? "Approved" : "Pending"}
           </div>
 
-          {/* Expand toggle */}
           <div className="text-slate-500">
             {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </div>
@@ -555,13 +551,6 @@ function TaskRow({
                     ? "Task assigned. You can view all candidates below."
                     : "Select a developer and approve or decline."}
                 </p>
-                <Link
-                  href={`/ai-allocation/${group.topAllocationId}/explanation`}
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  View full explanation →
-                </Link>
               </div>
 
               {/* Top-5 developer grid */}
@@ -595,17 +584,9 @@ function TaskRow({
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isEmbedded) {
-      router.replace("/allocation?tab=allocation");
-    }
-  }, [isEmbedded, router]);
-
+export default function AIAllocationView() {
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
   const [selectedSprintId, setSelectedSprintId] = useState<number | null>(null);
@@ -629,7 +610,6 @@ export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: 
           setLoading(false);
         }
       } else {
-        console.error("Invalid sprints response:", data);
         setSprints([]);
         setLoading(false);
       }
@@ -638,7 +618,6 @@ export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: 
       setLoading(false);
     }
   }, [selectedSprintId]);
-
 
   const fetchAllocations = useCallback(async () => {
     if (!selectedSprintId) return;
@@ -665,24 +644,13 @@ export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: 
   }, [selectedSprintId, fetchAllocations]);
 
   const generateRecommendations = async () => {
-    if (!selectedSprintId) {
-      console.warn("No sprint selected to generate recommendations for.");
-      return;
-    }
+    if (!selectedSprintId) return;
     setGenerating(true);
     try {
-      console.log(`Generating recommendations for sprint ID: ${selectedSprintId}...`);
-      const res = await authFetch(`http://localhost:8080/api/rank/recommendations/sprint/${selectedSprintId}`, {
+      await authFetch(`http://localhost:8080/api/rank/recommendations/sprint/${selectedSprintId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      if (!res.ok) {
-        const errorData = await res.text();
-        console.error("Backend error generating recommendations:", res.status, errorData);
-      } else {
-        const data = await res.json();
-        console.log("Recommendations received from ML:", data);
-      }
       await fetchAllocations();
     } catch (error) {
       console.error("Error generating recommendations:", error);
@@ -730,154 +698,80 @@ export default function AIAllocationPage({ isEmbedded = false }: { isEmbedded?: 
   };
 
   const pendingCount = taskGroups.filter((g) => g.overallStatus !== "Approved").length;
-  const approvedCount = taskGroups.filter((g) => g.overallStatus === "Approved").length;
-
-  if (!isEmbedded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   return (
-    <div className={isEmbedded ? "w-full space-y-8" : "min-h-screen bg-background p-6 lg:p-10"}>
-      <div className={isEmbedded ? "w-full space-y-8" : "max-w-7xl mx-auto space-y-8"}>
-
-        {/* ── Header ── */}
-        <div className={isEmbedded ? "flex flex-col md:flex-row md:items-center justify-between gap-6" : "flex flex-col md:flex-row md:items-start justify-between gap-6"}>
-          {!isEmbedded && (
-            <div>
-              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-                <Bot className="w-8 h-8 text-primary" />
-                AI Task Allocation
-              </h1>
-              <p className="text-slate-400 mt-2 max-w-2xl leading-relaxed">
-                Review AI-ranked developer recommendations for each task. Expand any task to see the top&nbsp;5 candidates — select one to approve or decline.
-              </p>
-            </div>
-          )}
-
-          <div className={isEmbedded ? "flex items-center gap-3 ml-auto shrink-0" : "flex items-center gap-3 shrink-0"}>
-            {/* Sprint Selector */}
-            <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
-
-              <Layers className="w-4 h-4 text-slate-400" />
-              <select
-                value={selectedSprintId || ""}
-                onChange={(e) => setSelectedSprintId(Number(e.target.value))}
-                className="bg-transparent text-sm font-medium text-slate-200 outline-none cursor-pointer"
-              >
-                {sprints.map((s) => (
-                  <option key={s.id} value={s.id} className="bg-slate-900">
-                    Sprint: {s.sprintId}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={generateRecommendations}
-              disabled={generating || !selectedSprintId}
-              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors border border-slate-700 flex items-center gap-2 disabled:opacity-50"
+    <div className="w-full space-y-8">
+      {/* ── Header Controls ── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-3 ml-auto shrink-0">
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
+            <Layers className="w-4 h-4 text-slate-400" />
+            <select
+              value={selectedSprintId || ""}
+              onChange={(e) => setSelectedSprintId(Number(e.target.value))}
+              className="bg-transparent text-sm font-medium text-slate-200 outline-none cursor-pointer"
             >
-              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              Generate Recommendations
-            </button>
+              {sprints.map((s) => (
+                <option key={s.id} value={s.id} className="bg-slate-900">
+                  Sprint: {s.sprintId}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {pendingCount > 0 && (
-              <button
-                onClick={handleApproveAll}
-                disabled={approvingAll || !selectedSprintId}
-                className="px-5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm font-semibold transition-colors border border-emerald-500/30 flex items-center gap-2 disabled:opacity-50"
-              >
-                {approvingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Approve All
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Stats Bar ── */}
-        {!loading && taskGroups.length > 0 && (
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: "Total Tasks", value: taskGroups.length, color: "text-foreground" },
-              { label: "Approved", value: approvedCount, color: "text-emerald-400" },
-              { label: "Pending", value: pendingCount, color: "text-amber-400" },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="glass rounded-xl p-4 border border-card-border text-center"
-              >
-                <div className={`text-3xl font-bold ${stat.color}`}>{stat.value}</div>
-                <div className="text-xs text-slate-400 mt-1 uppercase font-semibold tracking-wide">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Task List ── */}
-        {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="w-9 h-9 animate-spin text-primary" />
-          </div>
-        ) : sprints.length === 0 ? (
-          <div className="text-center py-20 border border-dashed border-card-border rounded-2xl bg-slate-950/30 p-8">
-            <Bot className="w-14 h-14 mx-auto text-primary/60 mb-4" />
-            <h3 className="text-xl font-semibold text-foreground">No active sprints found</h3>
-            <p className="text-sm mt-2 text-slate-400 max-w-md mx-auto">
-              Create a sprint in Backlog & Sprints and register team developers to run AI task allocation.
-            </p>
-            <div className="mt-6 flex justify-center gap-4">
-              <Link
-                href="/register-dev"
-                className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-primary/20"
-              >
-                Register Developer
-              </Link>
-            </div>
-          </div>
-        ) : taskGroups.length === 0 ? (
-          <div className="text-center py-24 text-slate-400 border border-dashed border-slate-800 rounded-xl">
-            <Bot className="w-14 h-14 mx-auto text-slate-600 mb-4" />
-            <p className="text-lg">No AI recommendations found for this sprint.</p>
-            <p className="text-sm mt-2 text-slate-500">
-              Click &apos;Generate Recommendations&apos; to analyse the sprint backlog.
-            </p>
-          </div>
-        ) : (
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-4"
+          <button
+            onClick={generateRecommendations}
+            disabled={generating || !selectedSprintId}
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors border border-slate-700 flex items-center gap-2 disabled:opacity-50"
           >
-            {taskGroups.map((group) => (
-              <TaskRow
-                key={group.taskRawId}
-                group={group}
-                onApprove={handleApprove}
-                onDecline={handleDecline}
-                onViewWorkload={(id, devId) => setWorkloadDev({ id, devId })}
-              />
-            ))}
-          </motion.div>
-        )}
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Generate Recommendations
+          </button>
+
+          {pendingCount > 0 && (
+            <button
+              onClick={handleApproveAll}
+              disabled={approvingAll || !selectedSprintId}
+              className="px-5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm font-semibold transition-colors border border-emerald-500/30 flex items-center gap-2 disabled:opacity-50"
+            >
+              {approvingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Approve All
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Developer Workload Modal */}
-      <AnimatePresence>
-        {workloadDev && (
-          <DeveloperWorkloadModal
-            developerId={workloadDev.id}
-            devId={workloadDev.devId}
-            onClose={() => setWorkloadDev(null)}
-          />
-        )}
-      </AnimatePresence>
+      {/* Task Rows */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : taskGroups.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 bg-muted/20 rounded-2xl border border-border">
+          No tasks found for this sprint.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {taskGroups.map((group) => (
+            <TaskRow
+              key={group.taskId}
+              group={group}
+              onApprove={handleApprove}
+              onDecline={handleDecline}
+              onViewWorkload={(id, devId) => setWorkloadDev({ id, devId })}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Workload Modal */}
+      {workloadDev && (
+        <DeveloperWorkloadModal
+          developerId={workloadDev.id}
+          devId={workloadDev.devId}
+          onClose={() => setWorkloadDev(null)}
+        />
+      )}
     </div>
   );
 }

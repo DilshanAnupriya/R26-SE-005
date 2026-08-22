@@ -1,9 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { getTokenStore } from "@/lib/api/token-store";
 import { getActiveOrganization } from "@/lib/api/org-context";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  AlertTriangle, 
+  TrendingUp,
+  Clock,
+  GripVertical,
+  Plus,
+  RefreshCw,
+  Search,
+  Wand2
+} from "lucide-react";
 
 async function authFetch(url: string, options: RequestInit = {}) {
   const tokenStore = getTokenStore();
@@ -34,25 +44,7 @@ async function authFetch(url: string, options: RequestInit = {}) {
   
   return res;
 }
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  LayoutDashboard, 
-  Users, 
-  Zap, 
-  AlertTriangle, 
-  Info,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  ChevronRight,
-  GripVertical,
-  Plus,
-  RefreshCw,
-  Search,
-  Wand2
-} from "lucide-react";
 
-// Types
 interface Task {
   id: number;
   title: string;
@@ -66,24 +58,16 @@ interface Developer {
   firstName: string;
   lastName: string;
   specialization: string;
-  efficiency: number; // 0.5 to 1.5 multiplier
-  capacity: number; // Max story points per sprint
+  efficiency: number;
+  capacity: number;
 }
 
-export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isEmbedded) {
-      router.replace("/allocation?tab=simulator");
-    }
-  }, [isEmbedded, router]);
-
+export default function SimulatorView() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
   const [selectedSprintId, setSelectedSprintId] = useState<number | null>(null);
-  const [assignments, setAssignments] = useState<Record<number, number>>({}); // TaskID -> DevID
+  const [assignments, setAssignments] = useState<Record<number, number>>({});
   const [simulationMetrics, setSimulationMetrics] = useState({
     totalAssignedPoints: 0,
     predictedVelocity: 0,
@@ -92,7 +76,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Fetch initial data
   useEffect(() => {
     const fetchSprintsAndDevs = async () => {
       try {
@@ -110,7 +93,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
             setSelectedSprintId(sprintsData[0].id);
           }
         } else {
-          console.error("Invalid sprints response:", sprintsData);
           setSprints([]);
         }
 
@@ -124,7 +106,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
             capacity: (d.experience_level || 2) * 10 
           })));
         } else {
-          console.error("Invalid developers response:", devsData);
           setDevelopers([]);
         }
       } catch (err) {
@@ -136,7 +117,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
     fetchSprintsAndDevs();
   }, []);
 
-  // Fetch tasks when sprint changes
   useEffect(() => {
     if (!selectedSprintId) return;
 
@@ -146,7 +126,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
         const tasksData = await tasksRes.json();
         
         if (Array.isArray(tasksData)) {
-          // Only include tasks that ARE NOT assigned to a developer yet
           const unassignedTasks = tasksData.filter((t: any) => t.developer === null);
           
           setTasks(unassignedTasks.map((t: any) => ({
@@ -157,11 +136,9 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
             priority: t.task_complexity > 4 ? "High" : (t.task_complexity > 2 ? "Medium" : "Low")
           })));
         } else {
-          console.error("Invalid tasks response:", tasksData);
           setTasks([]);
         }
         
-        // Reset assignments when switching sprints
         setAssignments({});
       } catch (err) {
         console.error("Error fetching tasks for sprint:", err);
@@ -170,7 +147,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
     fetchTasks();
   }, [selectedSprintId]);
 
-  // Call Backend Simulation API
   useEffect(() => {
     const runSimulation = async () => {
       const assignmentList = Object.entries(assignments).map(([taskId, devId]) => ({
@@ -242,7 +218,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
   const overallHealth = healthScore;
 
   const handleAssign = (taskId: number, devId: number) => {
-    // If taskId is null, it means we are coming from a drop event
     if (taskId === null) {
       const draggedId = Number(localStorage.getItem("draggedTaskId"));
       if (draggedId) {
@@ -256,7 +231,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
 
   const onDragStart = (e: React.DragEvent, taskId: number) => {
     e.dataTransfer.setData("taskId", taskId.toString());
-    // Fallback for some browsers or if handleAssign needs it
     localStorage.setItem("draggedTaskId", taskId.toString());
   };
 
@@ -266,7 +240,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
     if (taskId) {
       setAssignments(prev => ({ ...prev, [Number(taskId)]: devId }));
     } else {
-      // Use fallback
       handleAssign(null as any, devId);
     }
   };
@@ -311,25 +284,6 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
     });
   };
 
-  if (!isEmbedded && loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center space-y-4">
-          <RefreshCw className="w-10 h-10 text-primary animate-spin" />
-          <p className="text-slate-400 font-medium">Initializing Simulator Environment...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isEmbedded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <RefreshCw className="w-10 h-10 text-primary animate-spin" />
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="w-full flex items-center justify-center py-20">
@@ -342,60 +296,57 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
   }
 
   return (
-    <div className={isEmbedded ? "w-full space-y-8" : "p-8 max-w-[1600px] mx-auto space-y-8"}>
+    <div className="w-full space-y-8">
       {/* Header */}
-        <div className={isEmbedded ? "flex flex-col md:flex-row md:items-center justify-between gap-6 w-full" : "flex flex-col md:flex-row md:items-end justify-between gap-6"}>
-          <div className="space-y-4">
-            {!isEmbedded && <h1 className="text-4xl font-bold text-white mb-2 italic">What-If <span className="text-gradient">Simulator</span></h1>}
-            
-            <div className="flex items-center space-x-4">
-              <div className="glass px-4 py-2 rounded-xl border border-card-border flex items-center space-x-3">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Sprint:</span>
-                <select 
-                  value={selectedSprintId || ""} 
-                  onChange={(e) => setSelectedSprintId(Number(e.target.value))}
-                  className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer"
-                >
-                  {sprints.map(s => (
-                    <option key={s.id} value={s.id} className="bg-slate-900 text-white">
-                      {s.sprintId}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <p className="text-slate-400 text-sm">Drag tasks to developers to see real-time impact.</p>
-            </div>
-          </div>
-
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 w-full">
+        <div className="space-y-4">
           <div className="flex items-center space-x-4">
-            <button 
-              onClick={handleAutoOptimize}
-              className="bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
-            >
-              <Wand2 className="w-4 h-4" />
-              <span>AI Smart Fill</span>
-            </button>
-            <button 
-              onClick={() => setAssignments({})}
-              className="glass px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 hover:bg-slate-800 transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Reset Simulation</span>
-            </button>
-            <button 
-              onClick={handleApplyConfiguration}
-              className="bg-primary hover:bg-primary-dark px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-primary/20"
-            >
-              Apply Configuration
-            </button>
+            <div className="glass px-4 py-2 rounded-xl border border-card-border flex items-center space-x-3">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Sprint:</span>
+              <select 
+                value={selectedSprintId || ""} 
+                onChange={(e) => setSelectedSprintId(Number(e.target.value))}
+                className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer"
+              >
+                {sprints.map(s => (
+                  <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                    {s.sprintId}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-slate-400 text-sm">Drag tasks to developers to see real-time impact.</p>
           </div>
         </div>
 
+        <div className="flex items-center space-x-4">
+          <button 
+            onClick={handleAutoOptimize}
+            className="bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+          >
+            <Wand2 className="w-4 h-4" />
+            <span>AI Smart Fill</span>
+          </button>
+          <button 
+            onClick={() => setAssignments({})}
+            className="glass px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 hover:bg-slate-800 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Reset Simulation</span>
+          </button>
+          <button 
+            onClick={handleApplyConfiguration}
+            className="bg-primary hover:bg-primary-dark px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-primary/20"
+          >
+            Apply Configuration
+          </button>
+        </div>
+      </div>
 
-      {/* Main Simulation Area - Fixed Height Viewport */}
+      {/* Main Simulation Area */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-250px)]">
         
-        {/* Left Sidebar: Stats & Health - Sticky */}
+        {/* Left Sidebar: Stats & Health */}
         <div className="lg:col-span-3 space-y-6 overflow-y-auto pr-2 scrollbar-hide">
           <div className="glass p-6 rounded-3xl border border-card-border sticky top-0">
             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-6">Sprint Health</h3>
@@ -466,7 +417,7 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
           </div>
         </div>
 
-        {/* Center: Developer Drop Zones - Scrollable */}
+        {/* Center: Developer Drop Zones */}
         <div className="lg:col-span-6 space-y-6 overflow-y-auto pr-2 scrollbar-hide pb-10">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {developers.map((dev) => (
@@ -532,7 +483,7 @@ export default function SimulatorPage({ isEmbedded = false }: { isEmbedded?: boo
           </div>
         </div>
 
-        {/* Right Column: Backlog List - Scrollable */}
+        {/* Right Column: Backlog List */}
         <div className="lg:col-span-3 h-full overflow-hidden">
           <div className="glass p-6 rounded-3xl border border-card-border h-full flex flex-col">
             <div className="flex items-center justify-between mb-6">
