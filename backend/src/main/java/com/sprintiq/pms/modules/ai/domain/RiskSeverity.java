@@ -21,6 +21,18 @@ public enum RiskSeverity {
     }
 
     /**
+     * One band louder, stopping at CRITICAL.
+     *
+     * <p>Used when an overall figure was assembled from incomplete evidence. The
+     * direction is the point: a number the models were less sure about is treated as
+     * more dangerous, not less. Rounding uncertainty downward is how a dashboard ends
+     * up reassuring a team about a sprint nobody could actually score.</p>
+     */
+    public RiskSeverity bumpUp() {
+        return this == CRITICAL ? CRITICAL : values()[ordinal() + 1];
+    }
+
+    /**
      * Bands a 0–1 risk probability.
      *
      * <p>Lives here rather than in the scoring service because two callers need it and

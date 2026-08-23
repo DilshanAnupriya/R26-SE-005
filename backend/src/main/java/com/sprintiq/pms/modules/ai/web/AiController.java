@@ -44,6 +44,7 @@ public class AiController {
     private final AiFeedbackService feedback;
     private final AiInsightsService insights;
     private final SprintRiskTrendService riskTrend;
+    private final RiskAdvisorService advisor;
 
     // -------------------------------------------------------- M1 · estimation
 
@@ -144,6 +145,17 @@ public class AiController {
     @GetMapping("/risk/sprint/{sprintId}/adjustments")
     public List<RiskAdjustmentResponse> riskAdjustments(@PathVariable UUID sprintId) {
         return risk.adjustments(sprintId);
+    }
+
+    @Operation(summary = "Narrative advice over a sprint's risk",
+            description = "Turns the scores and findings into prose a scrum master can act on. "
+                    + "Unlike every other model here this one calls an external provider, so it "
+                    + "is disabled unless an API key is configured — in which case the response "
+                    + "says so rather than failing.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @PostMapping("/risk/sprint/{sprintId}/advise")
+    public RiskAdvisorResponse advise(@PathVariable UUID sprintId) {
+        return advisor.advise(risk.latest(sprintId), risk.adjustments(sprintId));
     }
 
     @Operation(summary = "Compare the risk profile of several sprints",

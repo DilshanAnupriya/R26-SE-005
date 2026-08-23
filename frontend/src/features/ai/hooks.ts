@@ -95,6 +95,22 @@ export function useSprintRisk(sprintId: string | undefined) {
   });
 }
 
+/**
+ * The ledger behind a sprint's adjusted score — the board activity since it was scored.
+ *
+ * <p>Read separately from the assessment because it answers a different question. The
+ * assessment says how risky the sprint is; this says which specific things are making
+ * it so, each naming a task and each withdrawable by fixing that task.</p>
+ */
+export function useRiskAdjustments(sprintId: string | undefined) {
+  const { api, status } = useSession();
+  return useQuery({
+    queryKey: [...queryKeys.ai.risk(sprintId ?? ""), "adjustments"],
+    queryFn: () => aiApi.riskAdjustments(api, sprintId!),
+    enabled: status === "authenticated" && Boolean(sprintId),
+  });
+}
+
 export function useAssessSprintRisk() {
   const { api } = useSession();
   const queryClient = useQueryClient();

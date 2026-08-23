@@ -2,6 +2,7 @@ package com.sprintiq.pms.modules.ai.application.port;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -88,4 +89,59 @@ public interface CollaborationFeatureSource {
      *                    never the future, or every unstarted day counts as silence
      */
     SprintCollaboration collaborationFor(UUID sprintId, Instant windowStart, Instant windowEnd);
+
+    /**
+     * One task, reduced to the timing facts the watch rules need.
+     *
+     * @param taskId          the task
+     * @param title           for the ledger entry, so the reason reads as a sentence
+     * @param status          TODO / IN_PROGRESS / BLOCKED / DONE / …
+     * @param estimateMinutes null when nobody sized it — the deadline rules then have no
+     *                        clock to measure against and skip the task entirely
+     * @param createdAt       when the clock starts
+     * @param commentCount    comments on this task
+     * @param lastCommentAt   null when there are none
+     */
+    record WatchedTask(UUID taskId,
+                       String title,
+                       String status,
+                       Integer estimateMinutes,
+                       Instant createdAt,
+                       long commentCount,
+                       Instant lastCommentAt) {
+
+        /** Half the estimated time from creation — the point the timing rules check. */
+        public Instant halfTimeMark() {
+            if (estimateMinutes == null || estimateMinutes <= 0 || createdAt == null) {
+                return null;
+            }
+            return createdAt.plusSeconds(estimateMinutes * 30L);
+        }
+
+        /** The whole estimate from creation — the point a task is overdue. */
+        public Instant deadline() {
+            if (estimateMinutes == null || estimateMinutes <= 0 || createdAt == null) {
+                return null;
+            }
+            return createdAt.plusSeconds(estimateMinutes * 60L);
+        }
+
+        public boolean isFinished() {
+            return "DONE".equals(status) || "CANCELLED".equals(status);
+        }
+
+        public boolean hasStarted() {
+            return !"TODO".equals(status);
+        }
+    }
+
+    /**
+     * The tasks of one sprint, for the between-assessment watch.
+     *
+     * <p>Separate from {@link #collaborationFor} because the two answer different
+     * questions: that one aggregates a sprint into five model inputs, this one needs
+     * each task individually so a penalty can name the task it came from and be
+     * withdrawn when that task recovers.</p>
+     */
+    List<WatchedTask> watchedTasks(UUID sprintId);
 }

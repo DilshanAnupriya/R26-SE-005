@@ -289,4 +289,47 @@ public class CollaborationFeatureProvider implements CollaborationFeatureSource 
         // manufacture responsiveness out of missing data.
         return a.authorId() == null || b.authorId() == null || a.authorId().equals(b.authorId());
     }
+
+    /**
+     * Each task's timing facts, for the between-assessment watch.
+     *
+     * <p>Comments are fetched once for the whole sprint and grouped, rather than
+     * queried per task. A sprint with forty tasks would otherwise issue forty queries
+     * on a schedule that runs every few minutes.</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<WatchedTask> watchedTasks(UUID sprintId) {
+        List<Task> tasks = taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId);
+        if (tasks.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> ids = tasks.stream().map(Task::getId).toList();
+        // Unbounded window: the watch rules ask "has anyone said anything at all",
+        // which a window would answer wrongly for a comment made just before it opened.
+        Map<UUID, List<CommentThreadReader.ThreadEntry>> byTask = commentThreads
+                .threadEntries(EntityType.TASK, ids, Instant.EPOCH, Instant.now())
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        CommentThreadReader.ThreadEntry::itemId));
+
+        List<WatchedTask> watched = new ArrayList<>(tasks.size());
+        for (Task task : tasks) {
+            List<CommentThreadReader.ThreadEntry> comments =
+                    byTask.getOrDefault(task.getId(), List.of());
+            Instant lastComment = comments.isEmpty()
+                    ? null
+                    : comments.get(comments.size() - 1).postedAt();
+            watched.add(new WatchedTask(
+                    task.getId(),
+                    task.getTitle(),
+                    task.getStatus() == null ? TaskStatus.TODO.name() : task.getStatus().name(),
+                    task.getEstimateMinutes(),
+                    task.getCreatedAt(),
+                    comments.size(),
+                    lastComment));
+        }
+        return watched;
+    }
 }

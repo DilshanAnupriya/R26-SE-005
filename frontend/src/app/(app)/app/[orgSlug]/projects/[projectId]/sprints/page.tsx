@@ -21,6 +21,8 @@ import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { LineChart, chartPalette } from "@/components/charts";
 import { CostWidget } from "@/features/ai/components/cost-widget";
 import { RiskCard } from "@/features/ai/components/risk-card";
+import { GuidedFixWizard } from "@/features/ai/components/guided-fix-wizard";
+import { OverallRiskPanel } from "@/features/ai/components/overall-risk-panel";
 import { VelocityPanel } from "@/features/ai/components/velocity-panel";
 import { useBacklog } from "@/features/backlog/hooks";
 import {
@@ -180,6 +182,7 @@ function SprintDetail({
   const predictVelocity = usePredictVelocity();
 
   const [closing, setClosing] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [strategy, setStrategy] = useState<"BACKLOG" | "NEXT_SPRINT">("BACKLOG");
   const [summary, setSummary] = useState("");
   const [addingFromBacklog, setAddingFromBacklog] = useState(false);
@@ -485,6 +488,13 @@ function SprintDetail({
 
         {predictVelocity.data ? <VelocityPanel velocity={predictVelocity.data} /> : null}
 
+        {(assessRisk.data?.overall ?? risk.data?.overall) ? (
+          <OverallRiskPanel
+            overall={(assessRisk.data?.overall ?? risk.data?.overall)!}
+            onFix={() => setFixing(true)}
+          />
+        ) : null}
+
         <div className="grid gap-3 lg:grid-cols-2">
           {(assessRisk.data?.overBudget ?? risk.data?.overBudget) ? (
             <RiskCard assessment={(assessRisk.data?.overBudget ?? risk.data?.overBudget)!} />
@@ -497,6 +507,8 @@ function SprintDetail({
           {forecastCost.data ? <CostWidget forecast={forecastCost.data} /> : null}
         </div>
       </section>
+
+      <GuidedFixWizard sprintId={sprint.id} open={fixing} onOpenChange={setFixing} />
 
       <Dialog open={closing} onOpenChange={setClosing}>
         <DialogContent>
