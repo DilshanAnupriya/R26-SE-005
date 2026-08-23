@@ -18,6 +18,18 @@ The M4 cost endpoints use a deliberately hybrid design:
 - Actual cost so far is calculated by the backend from time entries grouped by
   developer, using each available profile rate and a 1.5x overtime rate. The
   project blend is only the fallback when an individual rate is unavailable.
+- Initial forecast drivers are exact formula components: planned effort hours
+  multiplied by the blended rate. They are not presented as ML attributions.
+- Mid-sprint drivers decompose predicted remaining effort with exact,
+  reference-based Shapley values over completion, logged effort, historical
+  velocity, availability, absence, overtime, concurrent work, skill coverage,
+  and seniority. All 512 coalitions are scored in one batch. Contributions are
+  converted from effort minutes to the selected currency and, together with
+  actual cost and the neutral model reference, add up to the displayed forecast.
+- The Shapley reference represents expected progress and effort burn at the
+  current elapsed fraction, full availability and skill coverage, no absence or
+  overtime, one concurrent assignment per developer, planned velocity, and
+  seniority level 2. This makes every comparison explicit and reproducible.
 
 The response's range is based on holdout MAPE and is explicitly a heuristic,
 not a calibrated probability interval. Accordingly, M4 returns no probability

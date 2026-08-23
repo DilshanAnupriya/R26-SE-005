@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   Activity,
+  ArrowDown,
+  ArrowUp,
   CalendarDays,
+  CircleHelp,
   CircleDollarSign,
   Gauge,
   History,
@@ -27,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { CostWidget } from "@/features/ai/components/cost-widget";
 import { aiApi } from "@/features/ai/api";
@@ -64,6 +68,57 @@ const TASK_STATUS_TONE: Record<Task["status"], string> = {
   CANCELLED: "bg-muted text-muted-foreground",
 };
 
+const HELP_TEXT: Record<string, string> = {
+  Project: "Selects the project whose team rates, budget, tasks, and sprints supply the cost data.",
+  Sprint: "Selects the sprint used by every summary, forecast, team, task, and history panel below.",
+  "Initial forecast": "Estimates the full sprint cost from planned task effort and the team's blended hourly rate before execution data is needed.",
+  "Mid-sprint forecast": "Combines labor cost already incurred with ML-predicted remaining effort. Very early sprints use the initial model until enough progress exists.",
+  "Story points": "Total points committed to the sprint, with completed and remaining points shown underneath.",
+  "Team capacity": "Sum of effective developer hours after allocation and planned absence adjustments.",
+  "Average rate": "Blended hourly rate calculated from delivery members who have an hourly rate in their developer profile.",
+  "Planned labor": "Sum of each task's estimated minutes multiplied by its assignee's hourly rate; the blended rate is used when needed.",
+  "Actual labor": "Cost of logged time using developer rates. Overtime entries are priced at 1.5 times the normal rate.",
+  "Sprint budget": "The spending limit stored for the sprint, or the project budget when the sprint has no separate value.",
+  "Forecast result": "The selected initial or mid-sprint model's predicted final labor cost, including its estimated range.",
+  "Planning signals": "Live sprint inputs that provide context for the forecast and help explain delivery pressure.",
+  "Sprint completion": "Completed story points divided by committed story points.",
+  "Developer availability": "Average profile availability across delivery members, alongside planned absence days.",
+  "Capacity utilisation": "Planned sprint points divided by the team's available point capacity. Values above 100% indicate overcommitment.",
+  "Skill coverage": "Required task skills covered by at least one delivery member with proficiency level 3 or higher.",
+  "Average velocity": "Average story points completed in the project's recent completed sprints.",
+  "Sprint number": "The sprint's sequence number, used to give the model delivery-history context.",
+  Tasks: "Number of tasks currently assigned to the selected sprint.",
+  "Cost explanation": "Shows the financial and human-aware signals supplied with the forecast so the result can be reviewed rather than treated as a black box.",
+  "Forecast amount": "The model's predicted total labor cost for the selected forecast stage.",
+  "Actual labor so far": "Labor cost already incurred from time entries grouped by developer and priced at individual rates.",
+  "Overtime signal": "Total logged overtime hours. Overtime contributes at 1.5 times the normal hourly rate.",
+  "Availability signal": "Average developer availability used to represent reduced capacity from planned absence.",
+  "Workload pressure": "The highest individual developer load: open estimated hours divided by that developer's effective capacity.",
+  "Budget variance": "Forecast amount minus sprint budget. A positive value means the forecast is over budget.",
+  "Prediction interval": "A heuristic likely range based on held-out model error; it is not a probability confidence interval.",
+  Confidence: "Calibrated model probability when available. Sprint cost models leave this blank rather than presenting the heuristic range as confidence.",
+  "Cost drivers": "Initial forecasts show exact formula components. Mid-sprint forecasts add signed local Shapley influences that reconcile to the final amount.",
+  "Latest stored forecast": "Most recently saved forecast for this sprint, loaded from forecast history.",
+  "Team cost and workload": "Developer rates, availability, effective capacity, allocation, skills, and assigned workload used by sprint planning.",
+  "Sprint task costs": "Task-level plan and actual labor view. Actual cost comes from time entries or, when unavailable, task spent minutes.",
+  "Prediction history": "Every stored forecast snapshot for the selected sprint, allowing initial and mid-sprint estimates to be compared over time.",
+  "Cost record": "Retains incurred labor for a cancelled sprint without including it in model accuracy evaluation.",
+  "Forecast tracking": "Compares the latest model forecast with actual cost plus the estimated cost of remaining open work.",
+  "Actual cost so far": "Cost of all labor logged so far, including the overtime multiplier where applicable.",
+  "Estimated remaining": "Estimated cost of unfinished task effort using assignee rates or the blended fallback rate.",
+  "Projected final cost": "Actual cost so far plus the estimated cost of remaining work. This is live tracking, not final accuracy.",
+  "Latest forecast": "The newest stored initial or mid-sprint model prediction.",
+  "Live variance": "Projected final cost minus the latest forecast. Positive means the live projection is higher.",
+  "Final accuracy validation": "Evaluates stored forecasts only after sprint completion, when final actual labor cost is available.",
+  "Actual cost": "Final completed-sprint labor cost calculated from logged minutes, developer rates, and overtime.",
+  MAE: "Mean Absolute Error: the average monetary distance between forecasts and final actual cost. Lower is better.",
+  RMSE: "Root Mean Squared Error: similar to MAE but penalizes large forecasting errors more strongly. Lower is better.",
+  MAPE: "Mean Absolute Percentage Error: average forecast error as a percentage of final actual cost. Lower is better.",
+  "Mid-sprint error": "Percentage difference between the latest mid-sprint prediction and the completed sprint's final actual cost.",
+  "Accuracy pending sprint completion": "Accuracy is intentionally withheld until the sprint is completed, preventing a total-cost forecast from being compared with partial actual cost.",
+  "Prediction accuracy": "Forecast-by-forecast comparison against final actual labor cost for this completed sprint.",
+};
+
 type TeamRow = {
   member: SprintCostMember;
   profile?: SprintCostProfile;
@@ -77,12 +132,43 @@ type TeamRow = {
   loadPct: number | null;
 };
 
-function money(amount?: number | null, currency = "USD") {
+function HelpHint({ label }: { label: string }) {
+  const explanation = HELP_TEXT[label];
+  if (!explanation) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Explain ${label}`}
+        >
+          <CircleHelp className="size-3.5" aria-hidden />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-72 leading-relaxed">
+        {explanation}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function LabelWithHelp({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{label}</span>
+      <HelpHint label={label} />
+    </span>
+  );
+}
+
+function money(amount?: number | null, currency = "USD", maximumFractionDigits = 0) {
   if (amount == null || !Number.isFinite(amount)) return "-";
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
+    maximumFractionDigits,
   }).format(amount);
 }
 
@@ -461,9 +547,10 @@ export default function CostDashboard() {
       <section className="rounded-lg border bg-card p-4 shadow-card" aria-label="Sprint cost scope">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-60 flex-1 space-y-1.5">
-            <label htmlFor="cost-project" className="text-xs font-medium text-muted-foreground">
-              Project
-            </label>
+            <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <label htmlFor="cost-project">Project</label>
+              <HelpHint label="Project" />
+            </div>
             <Select
               value={projectId}
               onValueChange={(next) => {
@@ -486,9 +573,10 @@ export default function CostDashboard() {
           </div>
 
           <div className="min-w-60 flex-1 space-y-1.5">
-            <label htmlFor="cost-sprint" className="text-xs font-medium text-muted-foreground">
-              Sprint
-            </label>
+            <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <label htmlFor="cost-sprint">Sprint</label>
+              <HelpHint label="Sprint" />
+            </div>
             <Select
               value={sprintId}
               onValueChange={setChosenSprintId}
@@ -508,31 +596,37 @@ export default function CostDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!selectedSprint || forecast.isPending}
-              onClick={() => runForecast("initial")}
-            >
-              {pendingStage === "initial" ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <LineChart className="size-4" aria-hidden />
-              )}
-              Initial forecast
-            </Button>
-            <Button
-              type="button"
-              disabled={!selectedSprint || forecast.isPending}
-              onClick={() => runForecast("mid-sprint")}
-            >
-              {pendingStage === "mid-sprint" ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <Activity className="size-4" aria-hidden />
-              )}
-              Mid-sprint forecast
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!selectedSprint || forecast.isPending}
+                onClick={() => runForecast("initial")}
+              >
+                {pendingStage === "initial" ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <LineChart className="size-4" aria-hidden />
+                )}
+                Initial forecast
+              </Button>
+              <HelpHint label="Initial forecast" />
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                disabled={!selectedSprint || forecast.isPending}
+                onClick={() => runForecast("mid-sprint")}
+              >
+                {pendingStage === "mid-sprint" ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Activity className="size-4" aria-hidden />
+                )}
+                Mid-sprint forecast
+              </Button>
+              <HelpHint label="Mid-sprint forecast" />
+            </div>
           </div>
         </div>
       </section>
@@ -617,7 +711,9 @@ export default function CostDashboard() {
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
               <section className="min-w-0 space-y-3" aria-labelledby="forecast-result">
                 <div>
-                  <h3 id="forecast-result" className="font-semibold">Forecast result</h3>
+                  <h3 id="forecast-result" className="font-semibold">
+                    <LabelWithHelp label="Forecast result" />
+                  </h3>
                   <p className="text-xs text-muted-foreground">Planning estimate, not an invoice.</p>
                 </div>
 
@@ -667,7 +763,9 @@ export default function CostDashboard() {
               </section>
 
               <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="planning-signals">
-                <h3 id="planning-signals" className="font-semibold">Planning signals</h3>
+                <h3 id="planning-signals" className="font-semibold">
+                  <LabelWithHelp label="Planning signals" />
+                </h3>
                 <div className="mt-4 space-y-4">
                   <SignalRow
                     label="Sprint completion"
@@ -741,7 +839,7 @@ export default function CostDashboard() {
                 <div>
                   <h3 id="forecast-history" className="flex items-center gap-2 font-semibold">
                     <History className="size-4 text-primary" aria-hidden />
-                    Prediction history
+                    <LabelWithHelp label="Prediction history" />
                   </h3>
                   <p className="text-xs text-muted-foreground">Every stored forecast for this sprint.</p>
                 </div>
@@ -818,13 +916,15 @@ function CostExplanationPanel({
   const topDrivers = drivers
     .slice()
     .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
-    .slice(0, 4);
+    .slice(0, 8);
 
   return (
     <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="cost-explanation">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 id="cost-explanation" className="font-semibold">Cost explanation</h3>
+          <h3 id="cost-explanation" className="font-semibold">
+            <LabelWithHelp label="Cost explanation" />
+          </h3>
           <p className="text-xs text-muted-foreground">
             Breakdown of the planning signals behind this forecast.
           </p>
@@ -881,22 +981,70 @@ function CostExplanationPanel({
       ) : null}
 
       <div className="mt-4 border-t pt-3">
-        <h4 className="text-sm font-medium">Forecast drivers</h4>
+        <h4 className="text-sm font-medium">
+          <LabelWithHelp label="Cost drivers" />
+        </h4>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {forecast.stage === "INITIAL"
+            ? "Exact formula contribution: planned effort priced at the blended hourly rate."
+            : "Actual cost plus the neutral ML reference and signed local Shapley impacts equals the forecast amount."}
+        </p>
         {topDrivers.length > 0 ? (
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {topDrivers.map((driver) => (
-              <div key={`${driver.feature}-${driver.label}`} className="rounded-md border bg-background/40 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm font-medium">{driver.label ?? driver.feature}</p>
-                  <Badge variant="outline" className="shrink-0 tabular-nums">
-                    {driver.contribution > 0 ? "+" : ""}{number(driver.contribution)}
-                  </Badge>
+            {topDrivers.map((driver) => {
+              const isComponent = [
+                "planned_effort_minutes",
+                "actual_cost_so_far",
+                "model_reference",
+              ].includes(driver.feature);
+              const increasing = driver.contribution >= 0;
+              const DirectionIcon = increasing ? ArrowUp : ArrowDown;
+              const driverType = driver.feature === "model_reference"
+                ? "ML reference"
+                : isComponent
+                  ? "Cost component"
+                  : "Model influence";
+              return (
+                <div key={`${driver.feature}-${driver.label}`} className="rounded-md border bg-background/40 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 text-sm font-medium">
+                        <DirectionIcon
+                          className={cn(
+                            "size-3.5 shrink-0",
+                            isComponent
+                              ? "text-muted-foreground"
+                              : increasing
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-emerald-600 dark:text-emerald-400",
+                          )}
+                          aria-hidden
+                        />
+                        <span>{driver.label ?? driver.feature}</span>
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+                        {driverType}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "shrink-0 tabular-nums",
+                        !isComponent && (increasing
+                          ? "text-amber-700 dark:text-amber-400"
+                          : "text-emerald-700 dark:text-emerald-400"),
+                      )}
+                    >
+                      {driver.contribution > 0 ? "+" : ""}
+                      {money(driver.contribution, currency, 2)}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {driver.detail ?? enumLabel(driver.direction)}
+                  </p>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {driver.detail ?? enumLabel(driver.direction)}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="mt-2 text-xs text-muted-foreground">
@@ -921,7 +1069,9 @@ function ExplanationMetric({
 }) {
   return (
     <div className="rounded-md border bg-background/40 p-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">
+        <LabelWithHelp label={label} />
+      </p>
       <p className={cn("mt-1 text-lg font-semibold tabular-nums", tone)}>{value}</p>
       {detail ? <p className="mt-1 text-[11px] text-muted-foreground">{detail}</p> : null}
     </div>
@@ -931,7 +1081,9 @@ function ExplanationMetric({
 function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-lg border bg-card p-4 shadow-card">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">
+        <LabelWithHelp label={label} />
+      </p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
@@ -941,7 +1093,7 @@ function MetricCard({ label, value, hint }: { label: string; value: string; hint
 function InputRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b py-2 first:pt-0 last:border-b-0 last:pb-0">
-      <dt className="text-muted-foreground">{label}</dt>
+      <dt className="text-muted-foreground"><LabelWithHelp label={label} /></dt>
       <dd className="font-medium tabular-nums">{value}</dd>
     </div>
   );
@@ -962,7 +1114,7 @@ function SignalRow({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="font-medium">{label}</span>
+        <span className="font-medium"><LabelWithHelp label={label} /></span>
         <span className="tabular-nums text-muted-foreground">
           {value == null ? "-" : `${number(value)}%`}
         </span>
@@ -987,7 +1139,9 @@ function StoredForecast({ forecast, currency }: { forecast: CostTrendPoint; curr
     <div className="rounded-lg border bg-card p-4 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Latest stored forecast</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            <LabelWithHelp label="Latest stored forecast" />
+          </p>
           <p className="mt-1 text-3xl font-semibold tabular-nums">
             {money(forecast.forecastAmount, currency)}
           </p>
@@ -1028,7 +1182,9 @@ function TeamTable({
   return (
     <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="team-cost-plan">
       <div className="mb-4">
-        <h3 id="team-cost-plan" className="font-semibold">Team cost and workload</h3>
+        <h3 id="team-cost-plan" className="font-semibold">
+          <LabelWithHelp label="Team cost and workload" />
+        </h3>
         <p className="text-xs text-muted-foreground">Rates, availability, capacity, allocation, and sprint load.</p>
       </div>
       <div className="overflow-x-auto">
@@ -1131,7 +1287,9 @@ function TaskTable({
   return (
     <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="sprint-cost-tasks">
       <div className="mb-4">
-        <h3 id="sprint-cost-tasks" className="font-semibold">Sprint task costs</h3>
+        <h3 id="sprint-cost-tasks" className="font-semibold">
+          <LabelWithHelp label="Sprint task costs" />
+        </h3>
         <p className="text-xs text-muted-foreground">Planned hours, logged effort, required skills, and labor cost.</p>
       </div>
       <div className="overflow-x-auto">
@@ -1222,7 +1380,7 @@ function ValidationSummary({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 id="cost-tracking-summary" className="font-semibold">
-              {isCancelled ? "Cost record" : "Forecast tracking"}
+              <LabelWithHelp label={isCancelled ? "Cost record" : "Forecast tracking"} />
             </h3>
             <p className="text-xs text-muted-foreground">
               {isCancelled
@@ -1281,9 +1439,11 @@ function ValidationSummary({
     <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="cost-validation-summary">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 id="cost-validation-summary" className="font-semibold">Final accuracy validation</h3>
+          <h3 id="cost-validation-summary" className="font-semibold">
+            <LabelWithHelp label="Final accuracy validation" />
+          </h3>
           <p className="text-xs text-muted-foreground">
-            Stored predictions compared with the completed sprint's final logged labor cost.
+            Stored predictions compared with the completed sprint&apos;s final logged labor cost.
           </p>
           {isFallback ? (
             <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
@@ -1333,7 +1493,9 @@ function ValidationDetails({
   if (validation?.accuracyEligible === false) {
     return (
       <section className="border-t pt-4" aria-labelledby="cost-validation-pending">
-        <h3 id="cost-validation-pending" className="font-semibold">Accuracy pending sprint completion</h3>
+        <h3 id="cost-validation-pending" className="font-semibold">
+          <LabelWithHelp label="Accuracy pending sprint completion" />
+        </h3>
         <p className="mt-1 text-xs text-muted-foreground">
           Forecast history is retained now and will be scored against final actual cost when this sprint is completed.
         </p>
@@ -1348,7 +1510,9 @@ function ValidationDetails({
     <section aria-labelledby="cost-validation-details">
       <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
         <div>
-          <h3 id="cost-validation-details" className="font-semibold">Prediction accuracy</h3>
+          <h3 id="cost-validation-details" className="font-semibold">
+            <LabelWithHelp label="Prediction accuracy" />
+          </h3>
           <p className="text-xs text-muted-foreground">
             Actual cost is calculated from logged minutes, overtime, and developer rates.
           </p>
