@@ -197,12 +197,44 @@ public final class AiDtos {
                                          RiskType riskType,
                                          BigDecimal delta,
                                          String reason,
-                                         Instant createdAt) {
+                                         Instant createdAt,
+                                         /**
+                                          * What produced this entry, when something
+                                          * specific did — {@code TASK_SILENT:<uuid>}.
+                                          * Null for one-off events that describe a
+                                          * moment rather than a standing condition.
+                                          */
+                                         String sourceKey,
+                                         /**
+                                          * The {@code sourceKey}'s prefix, so a client can
+                                          * offer guidance for a kind of problem without
+                                          * parsing ids out of a string. Null when the
+                                          * entry has no source.
+                                          */
+                                         String code,
+                                         /**
+                                          * Whether this entry withdraws itself once the
+                                          * condition stops holding. Only standing
+                                          * conditions do; a logged event is history and
+                                          * stays. The distinction matters to a user being
+                                          * asked to fix something — it says whether doing
+                                          * so will actually move the number.
+                                          */
+                                         boolean resolvable) {
 
         public static RiskAdjustmentResponse from(SprintRiskAdjustment adjustment) {
+            String sourceKey = adjustment.getSourceKey();
             return new RiskAdjustmentResponse(adjustment.getId(), adjustment.getSprintId(),
                     adjustment.getRiskType(), adjustment.getDelta(), adjustment.getReason(),
-                    adjustment.getCreatedAt());
+                    adjustment.getCreatedAt(), sourceKey, codeOf(sourceKey), sourceKey != null);
+        }
+
+        private static String codeOf(String sourceKey) {
+            if (sourceKey == null) {
+                return null;
+            }
+            int colon = sourceKey.indexOf(':');
+            return colon < 0 ? sourceKey : sourceKey.substring(0, colon);
         }
     }
 
@@ -255,7 +287,49 @@ public final class AiDtos {
                                       * untouched sprint is not a well-coordinated one.
                                       */
                                      RiskAssessmentResponse communicationCollaboration,
-                                     RiskSeverity highestSeverity) {}
+                                     RiskSeverity highestSeverity,
+                                     /** The three weighted into one figure. Null when none scored. */
+                                     OverallRiskResponse overall) {}
+
+    @Schema(name = "RiskAdvisorResponse",
+            description = "A narrative advisory over a sprint's risk, or why there is none")
+    public record RiskAdvisorResponse(boolean available,
+                                      /** Markdown. Null when unavailable. */
+                                      String report,
+                                      /** Which model wrote it, for the record. */
+                                      String model,
+                                      /** Why there is no advice, when there is none. */
+                                      String reason) {
+
+        public static RiskAdvisorResponse ok(String report, String model) {
+            return new RiskAdvisorResponse(true, report, model, null);
+        }
+
+        /**
+         * No advice, and the honest reason. Not an error: the advisory is commentary on
+         * numbers the user can already see, so its absence must not read as a failure of
+         * the risk screen.
+         */
+        public static RiskAdvisorResponse unavailable(String reason) {
+            return new RiskAdvisorResponse(false, null, null, reason);
+        }
+    }
+
+    @Schema(name = "OverallRiskResponse",
+            description = "The three risk models weighted into a single sprint figure")
+    public record OverallRiskResponse(
+            /** 0–1, on the same scale as each model's own score. */
+            BigDecimal score,
+            RiskSeverity level,
+            /**
+             * True when the figure was assembled from incomplete evidence — a model
+             * declined to score, or answered but was marked degraded. The level has
+             * already been bumped one band; this says why.
+             */
+            boolean degraded,
+            /** Which models actually contributed, and at what weight after renormalising. */
+            Map<String, BigDecimal> weights,
+            String rationale) {}
 
     // ------------------------------------------------------------ M3 · allocation
 

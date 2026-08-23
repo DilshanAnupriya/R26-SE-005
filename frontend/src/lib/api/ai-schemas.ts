@@ -145,6 +145,16 @@ export const riskAdjustmentSchema = z.object({
   delta: z.coerce.number(),
   reason: z.string(),
   createdAt: z.string(),
+  /** Names the task this came from, when something specific produced it. */
+  sourceKey: z.string().nullish(),
+  /** The sourceKey's prefix — what kind of problem this is, without parsing ids. */
+  code: z.string().nullish(),
+  /**
+   * Whether fixing the underlying thing withdraws this entry. Only standing conditions
+   * do; a logged event is history and stays. It decides whether the fix flow can
+   * honestly promise the number will move.
+   */
+  resolvable: z.boolean().default(false),
 });
 export type RiskAdjustment = z.infer<typeof riskAdjustmentSchema>;
 
@@ -190,6 +200,22 @@ export const sprintRiskComparisonSchema = z.object({
 });
 export type SprintRiskComparison = z.infer<typeof sprintRiskComparisonSchema>;
 
+
+export const overallRiskSchema = z.object({
+  /** 0–1, on the same scale as each individual model's score. */
+  score: z.coerce.number(),
+  level: riskSeveritySchema,
+  /**
+   * The figure rests on incomplete evidence — a model declined to score, or answered
+   * outside its latency budget. `level` has already been bumped one band; this is why.
+   */
+  degraded: z.boolean(),
+  /** Which models contributed, at what weight after renormalising. */
+  weights: z.record(z.string(), z.coerce.number()).default({}),
+  rationale: z.string().nullish(),
+});
+export type OverallRisk = z.infer<typeof overallRiskSchema>;
+
 export const sprintRiskSchema = z.object({
   sprintId: z.uuid(),
   overBudget: riskAssessmentSchema.nullish(),
@@ -199,6 +225,10 @@ export const sprintRiskSchema = z.object({
   // untouched sprint would otherwise be scored as a well-coordinated one.
   communicationCollaboration: riskAssessmentSchema.nullish(),
   highestSeverity: riskSeveritySchema.nullish(),
+  // The three weighted into one figure. Null when none of them scored — which is a
+  // different statement from zero, and the panel says so rather than showing a dial
+  // at the calm end for a sprint nobody could assess.
+  overall: overallRiskSchema.nullish(),
 });
 export type SprintRisk = z.infer<typeof sprintRiskSchema>;
 

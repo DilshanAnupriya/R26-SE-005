@@ -16,6 +16,14 @@ public interface SprintRepository extends JpaRepository<Sprint, UUID> {
 
     List<Sprint> findByProjectIdAndDeletedAtIsNullOrderBySequenceNoDesc(UUID projectId);
 
+    /**
+     * Every sprint in one status, across all organizations.
+     *
+     * <p>Unfiltered by tenant on purpose: the only caller is the scheduled watch, which
+     * runs outside a request and re-enters each sprint's own tenant before writing.</p>
+     */
+    List<Sprint> findByStatusAndDeletedAtIsNull(SprintStatus status);
+
     /** At most one sprint per project may be ACTIVE — enforced by a partial unique index too. */
     Optional<Sprint> findByProjectIdAndStatusAndDeletedAtIsNull(UUID projectId, SprintStatus status);
 

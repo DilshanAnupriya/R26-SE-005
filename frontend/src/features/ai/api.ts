@@ -9,6 +9,7 @@ import {
   costTrendPointSchema,
   costValidationSchema,
   feedbackSchema,
+  riskAdjustmentSchema,
   riskAssessmentSchema,
   sprintRiskSchema,
   storyPointEstimateSchema,
@@ -47,6 +48,11 @@ export const aiApi = {
 
   latestRisk: (api: ApiClient, sprintId: string) =>
     api.request(`/ai/risk/sprint/${sprintId}`, { schema: sprintRiskSchema }),
+
+  riskAdjustments: (api: ApiClient, sprintId: string) =>
+    api.request(`/ai/risk/sprint/${sprintId}/adjustments`, {
+      schema: z.array(riskAdjustmentSchema),
+    }),
 
   acknowledgeRisk: (api: ApiClient, assessmentId: string) =>
     api.request(`/ai/risk/${assessmentId}/acknowledge`, {

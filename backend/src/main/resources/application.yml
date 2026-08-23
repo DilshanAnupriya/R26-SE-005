@@ -119,6 +119,15 @@ app:
     provider: ${AI_PROVIDER:mock}           # mock | http
     timeout-ms: ${AI_TIMEOUT_MS:4000}
     cache-ttl: ${AI_CACHE_TTL:PT6H}
+    advisor:
+      # Empty by default: this is the one model that sends sprint data off the machine,
+      # so it stays off until somebody sets a key on purpose.
+      api-key: ${ADVISOR_API_KEY:}
+      base-url: ${ADVISOR_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai}
+      path: ${ADVISOR_API_PATH:/chat/completions}
+      model: ${ADVISOR_MODEL:gemini-2.0-flash}
+      max-tokens: ${ADVISOR_MAX_TOKENS:2048}
+      timeout-ms: ${ADVISOR_TIMEOUT_MS:60000}
     max-batch-size: 50
   seed:
     enabled: ${SEED_ENABLED:false}

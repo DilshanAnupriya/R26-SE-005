@@ -88,4 +88,17 @@ public interface SprintFeatureSource {
 
     /** Sprint ids of a project, newest first — used to build project-level insights. */
     List<UUID> recentSprintIds(UUID projectId, int limit);
+
+    /** An in-flight sprint and the tenant it belongs to. */
+    record ActiveSprint(UUID sprintId, UUID organizationId, UUID projectId) {}
+
+    /**
+     * Every ACTIVE sprint, across every organization.
+     *
+     * <p>For the scheduled watch, which runs outside any request and therefore outside
+     * any tenant. The organization comes back with each row so the caller can re-enter
+     * that tenant before writing anything — the sweep reads across tenants, but every
+     * write it makes is still attributed to exactly one.</p>
+     */
+    List<ActiveSprint> activeSprints();
 }

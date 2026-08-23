@@ -5,6 +5,7 @@ import com.sprintiq.pms.modules.ai.application.port.SprintFeatureSource;
 import com.sprintiq.pms.modules.backlog.application.SprintBacklogService;
 import com.sprintiq.pms.modules.sprints.domain.Sprint;
 import com.sprintiq.pms.modules.sprints.domain.SprintRepository;
+import com.sprintiq.pms.modules.sprints.domain.SprintStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
@@ -112,5 +113,21 @@ public class SprintFeatureProvider implements SprintFeatureSource {
             return null;
         }
         return (int) Math.max(ChronoUnit.DAYS.between(LocalDate.now(), sprint.getEndDate()), 0);
+    }
+
+    /**
+     * Every ACTIVE sprint with the tenant that owns it.
+     *
+     * <p>Runs unfiltered so the scheduled watch can see all organizations at once; the
+     * organization id travels with each row so every write it triggers is still scoped
+     * to one tenant.</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ActiveSprint> activeSprints() {
+        return sprintRepository.findByStatusAndDeletedAtIsNull(SprintStatus.ACTIVE).stream()
+                .map(sprint -> new ActiveSprint(
+                        sprint.getId(), sprint.getOrganizationId(), sprint.getProjectId()))
+                .toList();
     }
 }

@@ -80,6 +80,31 @@ public class AppProperties {
          */
         private Duration cacheTtl = Duration.ofHours(6);
         private int maxBatchSize = 50;
+        private Advisor advisor = new Advisor();
+    }
+
+    /**
+     * The narrative risk advisor, which is off unless a key is configured.
+     *
+     * <p>Off by default deliberately. Every other model in this product runs locally
+     * against bundles in the repo; this one posts sprint data — task titles, comment
+     * counts, risk drivers — to a third party. That is a decision an operator makes
+     * knowingly, not a default they discover afterwards, so an absent key disables the
+     * feature rather than silently degrading it.</p>
+     */
+    @Getter @Setter
+    public static class Advisor {
+        /** Never commit this. Absent means the feature is simply off. */
+        private String apiKey = "";
+        private String baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
+        private String path = "/chat/completions";
+        private String model = "gemini-2.0-flash";
+        private int maxTokens = 2048;
+        private int timeoutMs = 60000;
+
+        public boolean isConfigured() {
+            return apiKey != null && !apiKey.isBlank();
+        }
     }
 
     @Getter @Setter

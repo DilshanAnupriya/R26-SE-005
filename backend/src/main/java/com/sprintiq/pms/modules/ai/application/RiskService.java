@@ -21,7 +21,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -53,28 +55,52 @@ public class RiskService {
     private final RiskAssessmentRepository assessments;
     private final SprintRiskAdjustmentService adjustmentService;
 
+    // Over-budget carries the most weight: it is the best calibrated of the three
+    // (0.91 grouped CV AUC against 0.76 for requirement change) and it is the outcome
+    // a delivery lead is usually judged on. The other two split the remainder evenly —
+    // neither has an evidential claim to more than the other.
+    private static final double WEIGHT_OVER_BUDGET = 0.40;
+    private static final double WEIGHT_REQUIREMENT_CHANGE = 0.30;
+    private static final double WEIGHT_COLLABORATION = 0.30;
+
+    /**
+     * One model's outcome, with the one fact the stored response cannot carry.
+     *
+     * <p>{@code degraded} lives on the prediction, not on the assessment row, so it is
+     * captured here on the way past. Internal to this service — it exists so the
+     * aggregate can tell "answered slowly" from "answered well", which is a distinction
+     * the wire DTO has no reason to carry per model.</p>
+     */
+    private record Scored(RiskAssessmentResponse response, boolean degraded) {}
+
     @Transactional
     public SprintRiskResponse assess(UUID sprintId) {
         SprintFeatureSource.SprintFeatures sprint = sprints.featuresFor(sprintId);
         ProjectContextSource.ProjectContext project = projects.contextFor(sprint.projectId());
         FeatureVector shared = sharedFeatures(sprint, project);
 
-        RiskAssessmentResponse overBudget = assessOne(RiskType.OVER_BUDGET, sprint, project, shared);
-        RiskAssessmentResponse requirementChange =
+        Scored overBudget = assessOne(RiskType.OVER_BUDGET, sprint, project, shared);
+        Scored requirementChange =
                 assessOne(RiskType.REQUIREMENT_CHANGE, sprint, project, shared);
-        RiskAssessmentResponse communicationCollaboration =
+        Scored communicationCollaboration =
                 assessOne(RiskType.COMMUNICATION_COLLABORATION, sprint, project, shared);
 
-        RiskSeverity highest = highestOf(overBudget, requirementChange, communicationCollaboration);
-        return new SprintRiskResponse(sprintId, overBudget, requirementChange,
-                communicationCollaboration, highest);
+        RiskAssessmentResponse ob = overBudget == null ? null : overBudget.response();
+        RiskAssessmentResponse rc = requirementChange == null ? null : requirementChange.response();
+        RiskAssessmentResponse cc = communicationCollaboration == null
+                ? null : communicationCollaboration.response();
+
+        RiskSeverity highest = highestOf(ob, rc, cc);
+        return new SprintRiskResponse(sprintId, ob, rc, cc, highest,
+                aggregate(overBudget, requirementChange, communicationCollaboration));
     }
 
     @Transactional
     public RiskAssessmentResponse assess(UUID sprintId, RiskType riskType) {
         SprintFeatureSource.SprintFeatures sprint = sprints.featuresFor(sprintId);
         ProjectContextSource.ProjectContext project = projects.contextFor(sprint.projectId());
-        return assessOne(riskType, sprint, project, sharedFeatures(sprint, project));
+        Scored scored = assessOne(riskType, sprint, project, sharedFeatures(sprint, project));
+        return scored == null ? null : scored.response();
     }
 
     /**
@@ -93,8 +119,13 @@ public class RiskService {
                 adjusted(sprintId, RiskType.REQUIREMENT_CHANGE, ledger);
         RiskAssessmentResponse collaboration =
                 adjusted(sprintId, RiskType.COMMUNICATION_COLLABORATION, ledger);
+        // Degraded is a property of the inference call, not of the row it wrote, so a
+        // stored assessment cannot say whether the model answered slowly. These are
+        // passed as not-degraded: the missing-model bump still applies, and inventing
+        // a degraded flag we no longer know would be worse than omitting it.
         return new SprintRiskResponse(sprintId, overBudget, requirementChange, collaboration,
-                highestOf(overBudget, requirementChange, collaboration));
+                highestOf(overBudget, requirementChange, collaboration),
+                aggregate(scored(overBudget), scored(requirementChange), scored(collaboration)));
     }
 
     /** The ledger behind an adjusted score — what the board has recorded since each scoring. */
@@ -383,10 +414,10 @@ public class RiskService {
         return history.get(history.size() - 1).subtract(history.get(history.size() - 2));
     }
 
-    private RiskAssessmentResponse assessOne(RiskType riskType,
-                                             SprintFeatureSource.SprintFeatures sprint,
-                                             ProjectContextSource.ProjectContext project,
-                                             FeatureVector features) {
+    private Scored assessOne(RiskType riskType,
+                             SprintFeatureSource.SprintFeatures sprint,
+                             ProjectContextSource.ProjectContext project,
+                             FeatureVector features) {
         // A fresh copy per model. Both risk types are assessed from the same shared
         // vector in one call, so mutating it in place would hand the second model the
         // first one's columns — and since the feature hash is the cache key, the
@@ -447,7 +478,8 @@ public class RiskService {
                 .build();
         assessment.setOrganizationId(TenantContext.requireOrganizationId());
 
-        return RiskAssessmentResponse.from(assessments.save(assessment));
+        return new Scored(RiskAssessmentResponse.from(assessments.save(assessment)),
+                prediction.getStatus() == PredictionStatus.DEGRADED);
     }
 
     /**
@@ -489,6 +521,149 @@ public class RiskService {
      * this morning's blockers, still headed "Medium risk" because that is what the model
      * said on Monday, is the exact failure the overlay exists to prevent.</p>
      */
+    /**
+     * The three models weighted into one figure.
+     *
+     * <p>Over-budget carries the most weight because it is the best calibrated of the
+     * three — 0.91 grouped CV AUC against 0.76 for requirement change — and because a
+     * sprint going over budget is the outcome a delivery lead is usually judged on.</p>
+     *
+     * <p>Two behaviours here are the whole point, and both concern what happens when
+     * the evidence is incomplete:</p>
+     *
+     * <ol>
+     *   <li><b>A model that did not score contributes no weight, and the rest are
+     *   renormalised.</b> The alternative — counting it as zero — is actively
+     *   dangerous: a sprint nobody could assess for collaboration would score
+     *   <em>lower</em> than one assessed as perfectly healthy, and the worse-understood
+     *   sprint would look like the safer one.</li>
+     *   <li><b>Incomplete evidence bumps the level one band up.</b> Same reasoning in
+     *   the other direction: uncertainty is rounded toward caution, never away.</li>
+     * </ol>
+     *
+     * <p>The banding deliberately reuses {@link RiskSeverity#forScore} rather than the
+     * 35/70 split the source system used. Two banding rules in one product means the
+     * overall badge can read MEDIUM while a component at the same number reads HIGH,
+     * and nobody can tell which to believe.</p>
+     */
+    private OverallRiskResponse aggregate(Scored overBudget, Scored requirementChange,
+                                          Scored collaboration) {
+        return aggregateScores(
+                contributes(overBudget) ? effectiveScore(overBudget.response()) : null,
+                contributes(requirementChange) ? effectiveScore(requirementChange.response()) : null,
+                contributes(collaboration) ? effectiveScore(collaboration.response()) : null,
+                isDegraded(overBudget) || isDegraded(requirementChange) || isDegraded(collaboration));
+    }
+
+    /**
+     * The arithmetic, over three scores that may individually be absent.
+     *
+     * <p>Package-private and taking plain numbers rather than assessments: the rules
+     * worth pinning are about missing evidence, and a test should be able to state
+     * "over-budget 0.5, collaboration absent" without assembling three seventeen-field
+     * DTOs to say it.</p>
+     */
+    OverallRiskResponse aggregateScores(BigDecimal overBudgetScore,
+                                        BigDecimal requirementChangeScore,
+                                        BigDecimal collaborationScore,
+                                        boolean anyDegraded) {
+        double wOb = overBudgetScore != null ? WEIGHT_OVER_BUDGET : 0.0;
+        double wRc = requirementChangeScore != null ? WEIGHT_REQUIREMENT_CHANGE : 0.0;
+        double wCc = collaborationScore != null ? WEIGHT_COLLABORATION : 0.0;
+        double total = wOb + wRc + wCc;
+
+        if (total == 0.0) {
+            // Nothing scored. Returning null rather than a zero says "not assessed"
+            // instead of "assessed, and fine" — the same distinction the panels make.
+            return null;
+        }
+
+        wOb /= total;
+        wRc /= total;
+        wCc /= total;
+
+        double overall = wOb * value(overBudgetScore)
+                + wRc * value(requirementChangeScore)
+                + wCc * value(collaborationScore);
+
+        // Degraded means the figure rests on less than it should: a model that could
+        // not be scored at all, or one that answered outside its latency budget and
+        // was recorded DEGRADED.
+        boolean missing = overBudgetScore == null || requirementChangeScore == null
+                || collaborationScore == null;
+        boolean degraded = missing || anyDegraded;
+
+        BigDecimal score = BigDecimal.valueOf(overall).setScale(4, RoundingMode.HALF_UP);
+        RiskSeverity level = RiskSeverity.forScore(score);
+        if (degraded) {
+            level = level.bumpUp();
+        }
+
+        Map<String, BigDecimal> weights = new LinkedHashMap<>();
+        weights.put("overBudget", weight(wOb));
+        weights.put("requirementChange", weight(wRc));
+        weights.put("communicationCollaboration", weight(wCc));
+
+        return new OverallRiskResponse(score, level, degraded, weights,
+                rationale(overall, weights, missing, anyDegraded, level));
+    }
+
+    private String rationale(double overall, Map<String, BigDecimal> weights,
+                             boolean missing, boolean anyDegraded, RiskSeverity level) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("Overall %.0f%% risk, weighting over-budget %s, "
+                        + "requirement change %s and collaboration %s. ",
+                overall * 100, weights.get("overBudget"),
+                weights.get("requirementChange"),
+                weights.get("communicationCollaboration")));
+        if (missing) {
+            sb.append("At least one model had nothing to score, so the remaining "
+                    + "weights were renormalised rather than counting the gap as zero. ");
+        }
+        if (anyDegraded) {
+            sb.append("At least one model answered outside its latency budget. ");
+        }
+        if (missing || anyDegraded) {
+            sb.append("The level is shown as ").append(level)
+              .append(" — one band above the number, because a figure built on "
+                      + "incomplete evidence should not read as the safer one.");
+        }
+        return sb.toString().trim();
+    }
+
+    /** Wraps a stored assessment, whose degraded status is no longer recoverable. */
+    private Scored scored(RiskAssessmentResponse response) {
+        return response == null ? null : new Scored(response, false);
+    }
+
+    /** A model counts toward the aggregate only if it produced a score. */
+    private boolean contributes(Scored scored) {
+        return scored != null && scored.response() != null
+                && effectiveScore(scored.response()) != null;
+    }
+
+    private boolean isDegraded(Scored scored) {
+        return scored != null && scored.degraded();
+    }
+
+    /**
+     * The adjusted score where the board has moved it, otherwise the model's own.
+     *
+     * <p>Matches what {@link #highestOf} reads, so the overall figure and the loudest
+     * badge cannot disagree about the same sprint.</p>
+     */
+    private BigDecimal effectiveScore(RiskAssessmentResponse response) {
+        return response.adjustedScore() == null ? response.riskScore() : response.adjustedScore();
+    }
+
+    private double value(BigDecimal score) {
+        return score == null ? 0.0 : score.doubleValue();
+    }
+
+    private BigDecimal weight(double value) {
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+    }
+
     private RiskSeverity highestOf(RiskAssessmentResponse... responses) {
         RiskSeverity highest = RiskSeverity.LOW;
         for (RiskAssessmentResponse response : responses) {
