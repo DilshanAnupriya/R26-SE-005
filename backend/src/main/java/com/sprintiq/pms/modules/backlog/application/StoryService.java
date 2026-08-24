@@ -72,6 +72,14 @@ public class StoryService {
     }
 
     @Transactional(readOnly = true)
+    public List<StoryResponse> getAssignedStories(UUID assigneeId) {
+        UUID effectiveAssignee = assigneeId != null ? assigneeId : TenantContext.getCurrentUserId();
+        if (effectiveAssignee == null) return List.of();
+        List<Story> stories = storyRepository.findByAssigneeIdAndDeletedAtIsNull(effectiveAssignee);
+        return stories.stream().map(enrichmentFor(stories)).toList();
+    }
+
+    @Transactional(readOnly = true)
     public PageResponse<HistoryEntryResponse> history(UUID storyId, Pageable pageable) {
         require(storyId);
         return PageResponse.from(activityService.history(EntityType.STORY, storyId, pageable),

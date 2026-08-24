@@ -131,7 +131,7 @@ export default function SimulatorView() {
             title: t.task_type || "Unknown Task",
             storyPoints: t.story_points || 0,
             type: (t.req_frontend || 0) > (t.req_backend || 0) ? "Frontend" : "Backend",
-            priority: (t.task_complexity || 3) > 4 ? "High" : ((t.task_complexity || 3) > 2 ? "Medium" : "Low")
+            priority: (t.task_complexity || 3) >= 4 ? "High" : ((t.task_complexity || 3) >= 3 ? "Medium" : "Low")
           })));
 
           const initialAssignments: Record<number, number> = {};
@@ -466,7 +466,18 @@ export default function SimulatorView() {
                             <GripVertical className="w-4 h-4 text-slate-700" />
                             <div>
                               <div className="text-xs font-medium text-white line-clamp-1">{task.title}</div>
-                              <div className="text-[10px] text-slate-500 font-bold uppercase">{task.type}</div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] text-slate-500 font-bold uppercase">{task.type}</span>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase border ${
+                                  task.priority === 'High' 
+                                    ? 'bg-red-500/10 text-red-400 border-red-500/20' 
+                                    : task.priority === 'Medium'
+                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                }`}>
+                                  {task.priority}
+                                </span>
+                              </div>
                             </div>
                           </div>
                           <button 
@@ -529,12 +540,16 @@ export default function SimulatorView() {
                       className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-primary/40 transition-all cursor-grab active:cursor-grabbing group"
                     >
                       <div className="flex justify-between items-start mb-2">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                          task.priority === 'High' ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${
+                          task.priority === 'High' 
+                            ? 'bg-red-500/10 text-red-400 border-red-500/20' 
+                            : task.priority === 'Medium'
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                         }`}>
-                          {task.priority}
+                          {task.priority} Priority
                         </span>
-                        <div className="text-xs font-bold text-white bg-slate-800 px-2 py-0.5 rounded-lg">
+                        <div className="text-xs font-bold text-white bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700/50">
                           {task.storyPoints} SPs
                         </div>
                       </div>
