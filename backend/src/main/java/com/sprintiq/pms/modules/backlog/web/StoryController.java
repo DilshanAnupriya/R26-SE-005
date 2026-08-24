@@ -50,6 +50,13 @@ public class StoryController {
                 backlogOnly, query);
     }
 
+    @Operation(summary = "Get all stories assigned to a developer across projects")
+    @PreAuthorize("@perm.has('backlog:read')")
+    @GetMapping("/my")
+    public List<StoryResponse> getMyStories(@RequestParam(required = false) UUID assigneeId) {
+        return storyService.getAssignedStories(assigneeId);
+    }
+
     @Operation(summary = "Get one story")
     @PreAuthorize("@perm.has('backlog:read')")
     @GetMapping("/{storyId}")
