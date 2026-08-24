@@ -87,8 +87,11 @@ export function DailyRiskTrend({
           <LineChart
             labels={points.map((point) => shortDate(point.date))}
             series={series}
-            height={240}
+            height={260}
             yLabel="Risk %"
+            showXAxis
+            hover
+            valueSuffix="%"
           />
         )}
       </div>

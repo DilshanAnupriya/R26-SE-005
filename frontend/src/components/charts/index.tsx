@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,6 +40,34 @@ export interface LineSeries {
   points: (number | null)[];
 }
 
+/**
+ * The contiguous runs of scored points in a series.
+ *
+ * <p>A series is drawn as one path per run rather than as a single path with the nulls
+ * dropped. Dropping them joins the two sides of a gap with a straight line, which
+ * invents a reading for every day nobody scored; and a run reduced to a single point
+ * would disappear, because the first command of a path is a move and a move draws
+ * nothing. Runs of one are rendered as a dot instead.</p>
+ */
+function runsOf(points: (number | null)[]): number[][] {
+  const runs: number[][] = [];
+  let current: number[] = [];
+  points.forEach((value, index) => {
+    if (value == null) {
+      if (current.length > 0) {
+        runs.push(current);
+      }
+      current = [];
+      return;
+    }
+    current.push(index);
+  });
+  if (current.length > 0) {
+    runs.push(current);
+  }
+  return runs;
+}
+
 /** Burndown and burn-up: two or three series over the same x-axis. */
 export function LineChart({
   labels,
@@ -47,88 +75,196 @@ export function LineChart({
   height = 200,
   yLabel,
   className,
+  showXAxis = false,
+  hover = false,
+  valueSuffix = "",
 }: {
   labels: string[];
   series: LineSeries[];
   height?: number;
   yLabel?: string;
   className?: string;
+  /** Draw a tick under every point. Off by default — long labels need the room. */
+  showXAxis?: boolean;
+  /** Follow the cursor with a guide line and a readout of every series at that point. */
+  hover?: boolean;
+  /** Appended to values in the readout. `%` for a chart of percentages. */
+  valueSuffix?: string;
 }) {
   const titleId = useId();
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
   const width = 640;
-  const padding = { top: 12, right: 12, bottom: 24, left: 36 };
-  const plotWidth = width - padding.left - padding.right;
+  const sideInset = { left: 36, right: 12 };
+  const plotWidth = width - sideInset.left - sideInset.right;
+  const step = labels.length <= 1 ? plotWidth : plotWidth / (labels.length - 1);
+  /**
+   * Ticks lie down once they would collide.
+   *
+   * <p>Every day of the sprint gets a tick, so the threshold is what keeps a four-week
+   * sprint legible rather than a smear of overlapping dates.</p>
+   */
+  const rotateTicks = showXAxis && step < 34;
+  const padding = {
+    top: 12,
+    right: sideInset.right,
+    bottom: showXAxis ? (rotateTicks ? 48 : 32) : 24,
+    left: sideInset.left,
+  };
   const plotHeight = height - padding.top - padding.bottom;
 
   const allValues = series.flatMap((line) => line.points).filter((value): value is number => value != null);
   const max = niceMax(Math.max(1, ...allValues));
 
-  const x = (index: number) =>
-    padding.left + (labels.length <= 1 ? 0 : (index / (labels.length - 1)) * plotWidth);
+  const x = (index: number) => padding.left + (labels.length <= 1 ? 0 : index * step);
   const y = (value: number) => padding.top + plotHeight - (value / max) * plotHeight;
+  const tickY = padding.top + plotHeight + 14;
 
   if (labels.length === 0) {
     return <ChartEmpty className={className} />;
   }
 
+  const active = hover && activeIndex != null && activeIndex < labels.length ? activeIndex : null;
+
+  /** Pointer position to nearest point. Measured off the box, so any scaling is included. */
+  const trackPointer = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    if (box.width === 0) {
+      return;
+    }
+    const local = ((event.clientX - box.left) / box.width) * width;
+    const nearest = labels.length <= 1 ? 0 : Math.round((local - padding.left) / step);
+    setActiveIndex(Math.min(labels.length - 1, Math.max(0, nearest)));
+  };
+
   return (
     <figure className={cn("w-full", className)}>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-auto w-full"
-        role="img"
-        aria-labelledby={titleId}
-        preserveAspectRatio="none"
-      >
-        <title id={titleId}>
-          {series.map((line) => line.label).join(" and ")} over {labels.length} points
-        </title>
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-auto w-full"
+          role="img"
+          aria-labelledby={titleId}
+          preserveAspectRatio="none"
+          onPointerMove={hover ? trackPointer : undefined}
+          onPointerLeave={hover ? () => setActiveIndex(null) : undefined}
+        >
+          <title id={titleId}>
+            {series.map((line) => line.label).join(" and ")} over {labels.length} points
+          </title>
 
-        {/* Gridlines, quarters. More would be clutter; fewer would make the scale a guess. */}
-        {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
-          <g key={fraction}>
+          {/* Gridlines, quarters. More would be clutter; fewer would make the scale a guess. */}
+          {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
+            <g key={fraction}>
+              <line
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y(max * fraction)}
+                y2={y(max * fraction)}
+                stroke="currentColor"
+                strokeOpacity={0.1}
+              />
+              <text
+                x={padding.left - 6}
+                y={y(max * fraction) + 3}
+                textAnchor="end"
+                className="fill-current text-[9px] opacity-50"
+              >
+                {Math.round(max * fraction)}
+              </text>
+            </g>
+          ))}
+
+          {showXAxis
+            ? labels.map((label, index) => (
+                <text
+                  key={`tick-${label}-${index}`}
+                  x={x(index)}
+                  y={tickY}
+                  textAnchor={rotateTicks ? "end" : "middle"}
+                  transform={rotateTicks ? `rotate(-45 ${x(index)} ${tickY})` : undefined}
+                  className={cn(
+                    "fill-current text-[9px]",
+                    index === active ? "font-semibold opacity-100" : "opacity-60",
+                  )}
+                >
+                  {label}
+                </text>
+              ))
+            : null}
+
+          {active != null ? (
             <line
-              x1={padding.left}
-              x2={width - padding.right}
-              y1={y(max * fraction)}
-              y2={y(max * fraction)}
+              x1={x(active)}
+              x2={x(active)}
+              y1={padding.top}
+              y2={padding.top + plotHeight}
               stroke="currentColor"
-              strokeOpacity={0.1}
+              strokeOpacity={0.28}
+              strokeWidth={1}
+              strokeDasharray="3 3"
             />
-            <text
-              x={padding.left - 6}
-              y={y(max * fraction) + 3}
-              textAnchor="end"
-              className="fill-current text-[9px] opacity-50"
-            >
-              {Math.round(max * fraction)}
-            </text>
-          </g>
-        ))}
+          ) : null}
 
-        {series.map((line) => {
-          const path = line.points
-            .map((value, index) =>
-              value == null ? null : `${index === 0 ? "M" : "L"}${x(index)},${y(value)}`,
-            )
-            .filter(Boolean)
-            .join(" ");
+          {series.map((line) => {
+            const stroke = line.color ?? PALETTE.primary;
+            return (
+              <g key={line.label}>
+                {runsOf(line.points).map((run) => {
+                  const first = run[0];
+                  if (run.length === 1) {
+                    return (
+                      <circle
+                        key={`dot-${first}`}
+                        cx={x(first)}
+                        cy={y(line.points[first] as number)}
+                        r={2.5}
+                        fill={stroke}
+                      />
+                    );
+                  }
+                  const path = run
+                    .map(
+                      (index, position) =>
+                        `${position === 0 ? "M" : "L"}${x(index)},${y(line.points[index] as number)}`,
+                    )
+                    .join(" ");
+                  return (
+                    <path
+                      key={`run-${first}`}
+                      d={path}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={2}
+                      strokeDasharray={line.dashed ? "4 4" : undefined}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  );
+                })}
 
-          return (
-            <path
-              key={line.label}
-              d={path}
-              fill="none"
-              stroke={line.color ?? PALETTE.primary}
-              strokeWidth={2}
-              strokeDasharray={line.dashed ? "4 4" : undefined}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          );
-        })}
-      </svg>
+                {active != null && line.points[active] != null ? (
+                  <circle cx={x(active)} cy={y(line.points[active] as number)} r={3.5} fill={stroke} />
+                ) : null}
+              </g>
+            );
+          })}
+        </svg>
+
+        {active != null ? (
+          <ChartReadout
+            label={labels[active]}
+            rows={series.map((line) => ({
+              label: line.label,
+              color: line.color ?? PALETTE.primary,
+              value: line.points[active],
+            }))}
+            suffix={valueSuffix}
+            offset={x(active) / width}
+          />
+        ) : null}
+      </div>
 
       <ChartLegend items={series.map((line) => ({ label: line.label, color: line.color ?? PALETTE.primary, dashed: line.dashed }))} />
       <DataTable
@@ -137,6 +273,56 @@ export function LineChart({
         rows={labels.map((label, index) => [label, ...series.map((line) => line.points[index] ?? "—")])}
       />
     </figure>
+  );
+}
+
+/**
+ * The hover readout.
+ *
+ * <p>Every series is listed, including the ones with nothing at this point. Dropping
+ * them would make the popup change height as the cursor moves and, worse, would make
+ * "nothing recorded" indistinguishable from "not in this chart".</p>
+ */
+function ChartReadout({
+  label,
+  rows,
+  suffix,
+  offset,
+}: {
+  label: string;
+  rows: { label: string; color: string; value: number | null | undefined }[];
+  suffix: string;
+  offset: number;
+}) {
+  // Flipped past the middle so the popup never hangs off the right edge.
+  const flip = offset > 0.6;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-none absolute top-2 z-10 min-w-[9rem] rounded-md border bg-popover px-2.5 py-2 text-popover-foreground shadow-md"
+      style={{
+        left: `${offset * 100}%`,
+        transform: flip ? "translateX(calc(-100% - 10px))" : "translateX(10px)",
+      }}
+    >
+      <p className="mb-1 text-[11px] font-semibold whitespace-nowrap">{label}</p>
+      <ul className="space-y-0.5">
+        {rows.map((row) => (
+          <li key={row.label} className="flex items-center gap-2 text-[11px] whitespace-nowrap">
+            <span
+              aria-hidden
+              className="inline-block size-2 shrink-0 rounded-full"
+              style={{ background: row.color }}
+            />
+            <span className="text-muted-foreground">{row.label}</span>
+            <span className="ml-auto font-medium tabular-nums">
+              {row.value == null ? "—" : `${row.value}${suffix}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
