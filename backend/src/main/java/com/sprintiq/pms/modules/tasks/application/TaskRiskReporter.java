@@ -42,6 +42,26 @@ public class TaskRiskReporter {
     /** No single task's rework may dominate a sprint's collaboration score. */
     private static final BigDecimal REOPEN_CAP = BigDecimal.valueOf(12);
 
+    /**
+     * Budget cost of the first reopen, before weighting.
+     *
+     * <p>Lower than the collaboration charge because the first bounce is mostly a
+     * communication failure: the estimate has usually not been blown yet by one pass.</p>
+     */
+    private static final BigDecimal REOPEN_BUDGET_BASE = BigDecimal.valueOf(2.5);
+
+    /**
+     * Budget cost of each reopen after the first — larger than the first, the opposite
+     * of the collaboration weighting and deliberately so. Each further pass is work
+     * nobody estimated, spent on a task whose estimate was already accounted for, so the
+     * budget consequence grows as the count does even though the diagnostic value of the
+     * signal falls.
+     */
+    private static final BigDecimal REOPEN_BUDGET_REPEAT = BigDecimal.valueOf(3);
+
+    /** Nor may one task's rework dominate the over-budget score. */
+    private static final BigDecimal REOPEN_BUDGET_CAP = BigDecimal.valueOf(14);
+
     /** Blocking pressure for a full-day task; scaled from there. */
     private static final BigDecimal BLOCKED_BASE = BigDecimal.valueOf(8);
     private static final BigDecimal BLOCKED_CAP = BigDecimal.valueOf(10);
@@ -81,9 +101,15 @@ public class TaskRiskReporter {
             // Finishing inside the estimate is the evidence that the plan was sound, and
             // a ledger that only ever accumulates bad news would drift upward all sprint
             // for a team that was doing fine.
+            //
+            // Revised, not appended: "this task finished inside its estimate" is a state,
+            // and one task can only be in it once. Appending banked a fresh credit every
+            // time a card touched Done, so a task bouncing Done → review → Done earned
+            // -3 per lap and cancelled the rework it was accumulating — the sprint's
+            // over-budget score sat still through exactly the pattern it exists to catch.
             if (!task.isOverEstimate() && task.getEstimateMinutes() != null) {
-                adjustments.record(task.getSprintId(), RiskType.OVER_BUDGET, ON_TIME_CREDIT,
-                        "Completed within estimate: " + task.getItemKey());
+                adjustments.revise(task.getSprintId(), RiskType.OVER_BUDGET, onTimeKey(task),
+                        ON_TIME_CREDIT, "Completed within estimate: " + task.getItemKey());
             }
             // The task made it out; whatever it was going to cost for running late, it
             // no longer does. Leaving the penalty behind would mean a sprint that
@@ -91,8 +117,14 @@ public class TaskRiskReporter {
             adjustments.clear(task.getSprintId(), overdueKey(task));
         }
 
-        if (task.getReopenedCount() > 0 && previous.isTerminal() && !current.isTerminal()) {
-            reopened(task);
+        if (previous.isTerminal() && !current.isTerminal()) {
+            // It is no longer finished, so it is no longer finished on time. Withdrawing
+            // the credit is half of what makes a reopen move the score at all; the charge
+            // below is the other half.
+            adjustments.clear(task.getSprintId(), onTimeKey(task));
+            if (task.getReopenedCount() > 0) {
+                reopened(task);
+            }
         }
     }
 
@@ -103,18 +135,31 @@ public class TaskRiskReporter {
      * with a worse reading. Six rows would claim six separate breakdowns and would grow
      * without bound; one row that goes up keeps the ledger a description of the sprint
      * rather than a count of clicks.</p>
+     *
+     * <p>Charged to two risks, because a reopen is evidence about both and the two
+     * curves are shaped differently. Collaboration hears the first bounce loudest — that
+     * is where the misunderstanding shows — while over-budget hears the later ones
+     * loudest, because by then the estimate is long spent and every further pass is
+     * unplanned work on the same card.</p>
      */
     public void reopened(Task task) {
         int reopens = task.getReopenedCount();
         if (reopens <= 0) {
             return;
         }
-        BigDecimal raw = REOPEN_BASE.add(REOPEN_REPEAT.multiply(BigDecimal.valueOf(reopens - 1L)));
-        BigDecimal points = cap(weight(task).multiply(raw), REOPEN_CAP);
+        BigDecimal repeats = BigDecimal.valueOf(reopens - 1L);
+        BigDecimal size = weight(task);
 
+        BigDecimal raw = REOPEN_BASE.add(REOPEN_REPEAT.multiply(repeats));
         adjustments.revise(task.getSprintId(), RiskType.COMMUNICATION_COLLABORATION,
-                "TASK_REOPENED:" + task.getId(), points,
+                reopenKey(task), cap(size.multiply(raw), REOPEN_CAP),
                 "Reopened %d time%s: %s".formatted(reopens, reopens == 1 ? "" : "s", task.getItemKey()));
+
+        BigDecimal budgetRaw = REOPEN_BUDGET_BASE.add(REOPEN_BUDGET_REPEAT.multiply(repeats));
+        adjustments.revise(task.getSprintId(), RiskType.OVER_BUDGET,
+                reopenBudgetKey(task), cap(size.multiply(budgetRaw), REOPEN_BUDGET_CAP),
+                "Rework on %s: %d reopen%s beyond the estimate"
+                        .formatted(task.getItemKey(), reopens, reopens == 1 ? "" : "s"));
     }
 
     /**
@@ -141,13 +186,27 @@ public class TaskRiskReporter {
     /** Withdraws everything a task contributed — it is being deleted. */
     public void removed(Task task) {
         adjustments.clear(task.getSprintId(), overdueKey(task));
-        adjustments.clear(task.getSprintId(), "TASK_REOPENED:" + task.getId());
+        adjustments.clear(task.getSprintId(), reopenKey(task));
+        adjustments.clear(task.getSprintId(), reopenBudgetKey(task));
+        adjustments.clear(task.getSprintId(), onTimeKey(task));
     }
 
     // --------------------------------------------------------------- internals
 
     private static String overdueKey(Task task) {
         return "TASK_OVERDUE:" + task.getId();
+    }
+
+    private static String reopenKey(Task task) {
+        return "TASK_REOPENED:" + task.getId();
+    }
+
+    private static String reopenBudgetKey(Task task) {
+        return "TASK_REOPEN_BUDGET:" + task.getId();
+    }
+
+    private static String onTimeKey(Task task) {
+        return "TASK_ON_TIME:" + task.getId();
     }
 
     /**

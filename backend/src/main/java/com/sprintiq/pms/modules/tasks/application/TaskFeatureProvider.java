@@ -172,8 +172,14 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
         long notStartedPastHalf = 0;
         long overEstimate = 0;
         long minutesOver = 0;
+        long reopens = 0;
 
         for (Task task : tasks) {
+            // Counted before the estimate guard below, unlike everything else here: a
+            // task with no estimate can still be reworked five times, and dropping those
+            // reopens would make the count depend on whether anybody sized the card.
+            reopens += Math.max(0, task.getReopenedCount());
+
             Integer estimateMinutes = task.getEstimateMinutes();
             if (estimateMinutes == null || estimateMinutes <= 0) {
                 continue;
@@ -193,7 +199,7 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
             }
         }
 
-        return new SprintSlippage(estimated, notStartedPastHalf, overEstimate, minutesOver);
+        return new SprintSlippage(estimated, notStartedPastHalf, overEstimate, minutesOver, reopens);
     }
 
     /**

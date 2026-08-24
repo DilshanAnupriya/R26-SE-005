@@ -308,6 +308,31 @@ public class TaskService {
     }
 
     /**
+     * Counts a reopen for a task somebody has opened for another look.
+     *
+     * <p>Separate from {@link #reopen}, which is the reviewer's verb and moves the card
+     * out of the finished column. This one moves nothing: it is called when a task is
+     * opened for inspection, which is rework being done on work that was taken as
+     * settled, and it applies to a card in any column rather than only a finished one.
+     * The two never fire for the same event, so the counter is never bumped twice.</p>
+     *
+     * <p>No activity row. A reopen that moves a card is a decision worth a line in the
+     * feed; one look at a card is not, and logging every one would bury the feed under
+     * entries nobody can act on. The counter on the task is the record.</p>
+     */
+    @Transactional
+    public TaskResponse countReopen(UUID taskId) {
+        Task task = require(taskId);
+        task.countReopen();
+        task = taskRepository.save(task);
+        // Both the collaboration and the over-budget ledgers read this count, and both
+        // are revised rather than appended, so the sprint's risk tracks the count itself
+        // instead of the number of times somebody looked.
+        riskReporter.reopened(task);
+        return toResponse(task);
+    }
+
+    /**
      * Records that a task's countdown has run out while it is still open.
      *
      * <p>Reported by the client rather than polled by a scheduler. The board is already

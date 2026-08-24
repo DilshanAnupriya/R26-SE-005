@@ -62,15 +62,23 @@ public interface EffortFeatureSource {
      * @param minutesOverEstimate     by how much, in total — one task 400% over and four
      *                                tasks slightly over are the same count and different
      *                                problems
+     * @param taskReopens             every reopen across the sprint's tasks, summed rather
+     *                                than counted by task. Rework is unplanned work against
+     *                                an estimate that was already spent, so it belongs to
+     *                                the over-budget picture as much as to the
+     *                                collaboration one — and the sprint metric next to it
+     *                                sums story reopens only, so without this a team that
+     *                                tracks work as tasks reports no rework at all
      */
     record SprintSlippage(long estimatedTaskCount,
                           long tasksNotStartedPastHalf,
                           long tasksOverEstimate,
-                          long minutesOverEstimate) {
+                          long minutesOverEstimate,
+                          long taskReopens) {
 
-        /** A sprint with no estimated tasks — nothing that can be behind. */
+        /** A sprint with no tasks — nothing that can be behind, and nothing reworked. */
         public static SprintSlippage none() {
-            return new SprintSlippage(0, 0, 0, 0);
+            return new SprintSlippage(0, 0, 0, 0, 0);
         }
 
         /** Slipping tasks as a share of the estimated ones, 0..1. */

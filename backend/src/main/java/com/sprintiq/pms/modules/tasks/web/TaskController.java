@@ -124,6 +124,16 @@ public class TaskController {
         return taskService.reopen(taskId, request);
     }
 
+    @Operation(summary = "Count a reopen without moving the card",
+            description = "Called when a task is opened for another look. Bumps the reopen "
+                    + "counter and raises the sprint's collaboration and over-budget risk with "
+                    + "it. Use /reopen instead to send a finished card back for rework.")
+    @PreAuthorize("@perm.has('task:read')")
+    @PostMapping("/{taskId}/reopen-count")
+    public TaskResponse countReopen(@PathVariable UUID taskId) {
+        return taskService.countReopen(taskId);
+    }
+
     @Operation(summary = "Report that a task's countdown has run out",
             description = "Charges the sprint's over-budget risk once, however many clients "
                     + "report it. A finished task is ignored.")

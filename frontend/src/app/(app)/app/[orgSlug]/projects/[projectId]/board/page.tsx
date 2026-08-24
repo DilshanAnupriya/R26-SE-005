@@ -10,13 +10,16 @@ import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useProjectRealtime, useRealtime } from "@/components/realtime-provider";
 import { AddTaskDialog } from "@/features/board/components/add-task-dialog";
 import { KanbanBoard } from "@/features/board/components/kanban-board";
+import { TaskDetailDialog } from "@/features/board/components/task-detail-dialog";
 import {
   useAssignTask,
+  useCountReopen,
   useMoveTask,
   useReopenTask,
   useReportOverdue,
   useTaskBoard,
 } from "@/features/board/hooks";
+import type { Task } from "@/lib/api/delivery-schemas";
 import { useProject } from "@/features/projects/hooks";
 import { useSprints } from "@/features/sprints/hooks";
 import { useMembers } from "@/features/organizations/hooks";
@@ -31,6 +34,7 @@ export default function BoardPage({
   const [sprintFilter, setSprintFilter] = useState<string>("");
   const [createOpen, setCreateOpen] = useState(false);
   const [addTaskOpen, setAddTaskOpen] = useState(false);
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
 
   const project = useProject(projectId);
   const sprints = useSprints(projectId);
@@ -49,8 +53,30 @@ export default function BoardPage({
   const move = useMoveTask(projectId);
   const assign = useAssignTask(projectId);
   const reopen = useReopenTask(projectId);
+  const countReopen = useCountReopen(projectId);
   const reportOverdue = useReportOverdue();
   const { connected } = useRealtime();
+
+  /*
+   * The dialog is held by id rather than by the task object, so the copy it renders is
+   * the one in the board cache. That is what lets the reopen count it just incremented
+   * appear in the open dialog instead of only on the card behind it.
+   */
+  const detailTask: Task | null =
+    (detailTaskId
+      ? board.data?.columns.flatMap((column) => column.tasks).find((task) => task.id === detailTaskId)
+      : null) ?? null;
+
+  /**
+   * Opening a card counts as a reopen — the work was taken as settled and somebody is
+   * handling it again — so the sprint's over-budget and collaboration risk hear about it.
+   * Fired here, once per click, rather than from inside the dialog: a dialog that
+   * reported on mount would charge the sprint again on every re-render.
+   */
+  function openTask(task: Task) {
+    setDetailTaskId(task.id);
+    countReopen.mutate({ taskId: task.id });
+  }
 
   // Someone else's drag or assignment updates this board without a refresh.
   useProjectRealtime(projectId);
@@ -104,9 +130,10 @@ export default function BoardPage({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Drag a card to move between columns, or click the Assignee button on any card to assign or
-        reassign developers. Each card counts down against its estimate while it is open, and freezes
-        when it is finished.
+        Click a card to see everything about it — each time you open one it counts as a reopen, and
+        the reopen count drives the sprint&rsquo;s over-budget risk. Drag a card to move between
+        columns, or click the Assignee button to assign or reassign developers. Each card counts down
+        against its estimate while it is open, and freezes when it is finished.
       </p>
 
       {board.isPending ? (
@@ -125,6 +152,7 @@ export default function BoardPage({
           onAssign={(taskId, assigneeId) => assign.mutate({ taskId, assigneeId })}
           onAddTask={() => setAddTaskOpen(true)}
           onReopen={(task) => reopen.mutate({ taskId: task.id })}
+          onOpenTask={openTask}
           onTaskOverdue={(task) => reportOverdue(task.id, task.sprintId)}
           members={memberList}
         />
@@ -134,6 +162,19 @@ export default function BoardPage({
           description="This project has no workflow states configured yet."
         />
       )}
+
+      <TaskDetailDialog
+        task={detailTask}
+        open={detailTaskId !== null}
+        onOpenChange={(next) => {
+          if (!next) setDetailTaskId(null);
+        }}
+        reopenPending={reopen.isPending}
+        onReopen={(task) => {
+          reopen.mutate({ taskId: task.id });
+          setDetailTaskId(null);
+        }}
+      />
 
       <AddTaskDialog
         projectId={projectId}

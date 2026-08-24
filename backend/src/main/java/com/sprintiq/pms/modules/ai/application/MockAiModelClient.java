@@ -256,10 +256,10 @@ public class MockAiModelClient implements AiModelClient {
     /**
      * Probability that the sprint overruns its effort budget.
      *
-     * <p>Built from four independent stressors — over-commitment against velocity,
-     * effort burned ahead of schedule, scope added after the freeze, and work stuck —
-     * combined through a logistic so that no single factor can pin the score at
-     * certainty on its own.</p>
+     * <p>Built from independent stressors — over-commitment against velocity, effort
+     * burned ahead of schedule, scope added after the freeze, work stuck, overtime,
+     * tasks past their estimate and work being redone — combined through a logistic so
+     * that no single factor can pin the score at certainty on its own.</p>
      */
     private InferenceResult overBudgetRisk(FeatureVector features) {
         List<PredictionDriver> drivers = new ArrayList<>();
@@ -322,6 +322,26 @@ public class MockAiModelClient implements AiModelClient {
                     "%.0f tasks past their estimate, %.0f not started past half-time".formatted(
                             features.number("tasks_over_estimate"),
                             features.number("tasks_not_started_past_half"))));
+        }
+
+        // Rework. Every reopen is work being done a second time against an estimate that
+        // was only ever paid for once, which is the plainest way a sprint goes over
+        // budget — and the only stressor here that a team can watch accumulate in real
+        // time on the board.
+        //
+        // This term is why the score survives a re-assessment. Without it the heuristic
+        // was blind to rework, so pressing Assess re-scored on six stressors that had not
+        // moved, handed back the number it started with, and discarded the reopen ledger
+        // that had been correctly raising it. The trained CatBoost bundle reads the same
+        // two columns, so both models now answer the same question the same way.
+        double reopens = features.number("prev_reopened_tasks");
+        if (reopens > 0) {
+            double contribution = Math.min(reopens * 0.22, 1.8);
+            logit += contribution;
+            drivers.add(driver("prev_reopened_tasks", "Work being redone",
+                    BigDecimal.valueOf(contribution),
+                    "%.0f reopen%s across this sprint's work".formatted(
+                            reopens, reopens == 1 ? "" : "s")));
         }
 
         List<String> mitigations = new ArrayList<>(List.of(

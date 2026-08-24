@@ -45,6 +45,24 @@ export function statusForColumn(state: { code: string; category: string }): stri
   return TASK_STATUSES.has(code) ? code : state.category;
 }
 
+/**
+ * Whether a board row is a real task, as opposed to a story rendered through the task
+ * shape.
+ *
+ * <p>The board mixes the two: a committed story with no subtasks of its own is sent as a
+ * task so it appears on the board at all, and those rows carry the story's id in both
+ * `id` and `storyId`. Nothing else can — a task's id is never its parent story's — which
+ * makes the comparison exact where the earlier test, "does it have a work clock", was a
+ * proxy that also excluded every real task nobody had started yet.</p>
+ *
+ * <p>It matters because the story rows have no `/tasks/{id}` behind them. Anything that
+ * calls one for a row that is a story gets a 404: the reopen count, the detail dialog and
+ * the countdown all depend on this being right.</p>
+ */
+export function isBoardTask(task: { id: string; storyId?: string | null }): boolean {
+  return task.storyId !== task.id;
+}
+
 export const boardApi = {
   board: (api: ApiClient, projectId: string, sprintId?: string, assigneeId?: string) =>
     api.request(`/projects/${projectId}/board`, {
@@ -117,6 +135,17 @@ export const boardApi = {
       body: body ?? {},
       schema: taskSchema,
     }),
+
+  /**
+   * Counts a reopen for a card somebody has opened to look at.
+   *
+   * <p>Not the same call as `reopen`, which is the reviewer sending a finished card
+   * back and which moves it out of its column. This one moves nothing — it records that
+   * settled work is being handled again, which is what the reopen counter and the
+   * sprint's over-budget risk are reading.</p>
+   */
+  countReopen: (api: ApiClient, taskId: string) =>
+    api.request(`/tasks/${taskId}/reopen-count`, { method: "POST", schema: taskSchema }),
 
   /**
    * Reports that a card's countdown has hit zero while the task is still open.
