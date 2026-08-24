@@ -8,6 +8,7 @@ import com.sprintiq.pms.common.error.BusinessRuleException;
 import com.sprintiq.pms.common.error.ResourceNotFoundException;
 import com.sprintiq.pms.common.web.PageQuery;
 import com.sprintiq.pms.common.web.PageResponse;
+import com.sprintiq.pms.modules.comments.application.port.WorkItemThreadListener;
 import com.sprintiq.pms.modules.comments.domain.Comment;
 import com.sprintiq.pms.modules.comments.domain.CommentRepository;
 import com.sprintiq.pms.modules.comments.web.dto.CommentDtos.*;
@@ -38,6 +39,13 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class CommentService {
+
+    /**
+     * Whoever wants to know when a thread moves. A list rather than one collaborator, and
+     * empty in tests: this module must keep working when nothing is listening.
+     */
+    private final List<WorkItemThreadListener> threadListeners;
+
 
     static final Set<String> SORT_FIELDS = Set.of("createdAt", "updatedAt");
 
@@ -84,6 +92,9 @@ public class CommentService {
         realtime.projectEvent(item.projectId(), "comment.created",
                 Map.of("entityType", request.entityType(), "entityId", request.entityId(),
                         "commentId", saved.getId()));
+        // A reply may have just answered a question the sprint is being charged for.
+        threadListeners.forEach(listener ->
+                listener.threadChanged(request.entityType(), request.entityId()));
 
         return toResponse(saved, summaries(List.of(saved)), List.of());
     }
@@ -139,6 +150,8 @@ public class CommentService {
 
         realtime.projectEvent(comment.getProjectId(), "comment.deleted",
                 Map.of("commentId", commentId));
+        threadListeners.forEach(listener ->
+                listener.threadChanged(comment.getEntityType(), comment.getEntityId()));
     }
 
     // -------------------------------------------------------------------- reading

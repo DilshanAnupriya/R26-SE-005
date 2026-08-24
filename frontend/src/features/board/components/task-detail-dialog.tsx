@@ -15,7 +15,11 @@ import {
 import type { Task } from "@/lib/api/delivery-schemas";
 import { clockLabel, computeTaskClock, formatCompact } from "@/lib/task-clock";
 import { cn } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/api/query-keys";
+import { CommentThread } from "@/features/comments/components/comment-thread";
 import { isBoardTask } from "../api";
+import type { BoardMember } from "./kanban-board";
 
 /** Each status in the tone the board already uses for it. */
 const STATUS_TONE: Record<string, string> = {
@@ -99,6 +103,7 @@ export function TaskDetailDialog({
   onOpenChange,
   onReopen,
   reopenPending,
+  members = [],
 }: {
   task: Task | null;
   open: boolean;
@@ -106,7 +111,11 @@ export function TaskDetailDialog({
   /** Sends a finished card back for rework. Omit to hide the control. */
   onReopen?: (task: Task) => void;
   reopenPending?: boolean;
+  /** Candidates for the comment composer's mention picker. */
+  members?: BoardMember[];
 }) {
+  const queryClient = useQueryClient();
+
   if (!task) {
     return null;
   }
@@ -115,6 +124,16 @@ export function TaskDetailDialog({
   const timer = clockLabel(clock);
   const finished = task.status === "DONE" || task.status === "CANCELLED";
   const reopens = task.reopenedCount ?? 0;
+
+  // The mention picker wants a flat {id, fullName} shape; board members carry either
+  // `userId` or `id` depending on which endpoint supplied them.
+  const people = members
+    .map((member) => ({
+      id: member.userId || member.id || "",
+      fullName: member.fullName || member.email || "Developer",
+      avatarUrl: member.avatarUrl,
+    }))
+    .filter((person) => person.id !== "");
 
   // Built as a list and filtered rather than written out as markup with a guard around
   // each line: most cards carry half of these, and fifteen conditionals in the JSX is
@@ -230,6 +249,27 @@ export function TaskDetailDialog({
               ? "Opening this task counts as a reopen. Every one of them raises this sprint's over-budget risk, and each raises it by more than the last — the estimate is already spent by then."
               : "Opening this task counts as a reopen, which raises this sprint's over-budget risk."}
           </p>
+        </div>
+
+        {/*
+          The conversation, under the facts. A question asked here and left alone past
+          half this task's estimate is what the sprint's collaboration risk reads, so the
+          thread is not decoration on this dialog — it is one of the two inputs the card's
+          badges are reporting.
+        */}
+        <div className="max-h-72 overflow-y-auto rounded-md border border-border p-3">
+          <CommentThread
+            entityType="TASK"
+            entityId={task.id}
+            people={people}
+            // The card behind this dialog shows the same counts. Refetching the board is
+            // what stops it reading one comment behind for the next fifteen seconds.
+            onChanged={() => {
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.projects.board(task.projectId),
+              });
+            }}
+          />
         </div>
 
         <DialogFooter showCloseButton>

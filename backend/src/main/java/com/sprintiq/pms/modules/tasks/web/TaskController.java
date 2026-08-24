@@ -134,6 +134,17 @@ public class TaskController {
         return taskService.countReopen(taskId);
     }
 
+    @Operation(summary = "Report a comment on this task that nobody has answered",
+            description = "Charges the sprint's collaboration risk once the oldest unanswered "
+                    + "comment has waited longer than half the task's estimate. The server "
+                    + "re-checks the condition, so a stale board cannot charge for a question "
+                    + "that has since been answered.")
+    @PreAuthorize("@perm.has('task:read')")
+    @PostMapping("/{taskId}/comment-unanswered")
+    public TaskResponse reportUnansweredComment(@PathVariable UUID taskId) {
+        return taskService.registerUnansweredComment(taskId);
+    }
+
     @Operation(summary = "Report that a task's countdown has run out",
             description = "Charges the sprint's over-budget risk once, however many clients "
                     + "report it. A finished task is ignored.")

@@ -71,4 +71,21 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
     }
 
     List<Comment> findByParentCommentIdAndDeletedAtIsNull(UUID parentCommentId);
+
+    /**
+     * Every live comment and reply on a set of items, oldest first.
+     *
+     * <p>Hydrated rather than projected, unlike {@link #findTimingsForEntities}: the
+     * caller needs the parent link and the id to tell a thread from a reply to it, and
+     * a projection carrying four of the five columns saves nothing worth the second
+     * query shape.</p>
+     */
+    @Query("""
+            SELECT c FROM Comment c
+            WHERE c.entityType = :entityType AND c.entityId IN :itemIds
+              AND c.deletedAt IS NULL
+            ORDER BY c.createdAt ASC
+            """)
+    List<Comment> findAllForEntities(@Param("entityType") EntityType entityType,
+                                     @Param("itemIds") Collection<UUID> itemIds);
 }

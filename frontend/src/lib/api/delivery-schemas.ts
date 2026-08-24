@@ -301,6 +301,18 @@ export const taskSchema = z.object({
   startedAt: z.string().nullish(),
   completedAt: z.string().nullish(),
   createdAt: z.string(),
+  /** Top-level comments, and replies to them, counted separately. */
+  commentCount: z.coerce.number().default(0),
+  replyCount: z.coerce.number().default(0),
+  /**
+   * When the longest-waiting unanswered comment was posted, or null when every comment
+   * has a reply from somebody other than its author.
+   *
+   * <p>A timestamp rather than a flag, because how long is too long depends on the
+   * task: the deadline is half its own estimate, which only the client rendering that
+   * card can weigh against a live clock.</p>
+   */
+  oldestUnansweredCommentAt: z.string().nullish(),
 });
 export type Task = z.infer<typeof taskSchema>;
 

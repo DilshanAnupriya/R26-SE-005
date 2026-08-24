@@ -32,6 +32,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** Tasks and subtasks: create, edit, move, assign, rank and block. */
 @Service
@@ -55,6 +56,7 @@ public class TaskService {
     private final RealtimePublisher realtime;
     private final com.sprintiq.pms.modules.backlog.domain.StoryRepository storyRepository;
     private final TaskRiskReporter riskReporter;
+    private final CommentThreadReader commentThreads;
 
     // ------------------------------------------------------------------ queries
 
@@ -242,6 +244,9 @@ public class TaskService {
                         story.getCreatedAt(),
                         story.getUpdatedAt(),
                     0L,
+                    null,
+                    0L,
+                    0L,
                     null
                 );
             }
@@ -329,6 +334,34 @@ public class TaskService {
         // are revised rather than appended, so the sprint's risk tracks the count itself
         // instead of the number of times somebody looked.
         riskReporter.reopened(task);
+        return toResponse(task);
+    }
+
+    /**
+     * Records that a comment on this task has gone unanswered past half its estimate.
+     *
+     * <p>Reported by the client for the same reason the overdue countdown is: the board
+     * already holds each card's estimate and the age of its oldest unanswered comment, so
+     * it knows the moment one crosses, whereas a sweep would run for every sprint in
+     * every tenant to catch the few that matter.</p>
+     *
+     * <p>The condition is re-checked here rather than trusted. A client that has the
+     * arithmetic wrong — or is simply looking at a stale board — must not be able to
+     * charge a sprint for a question that was answered a minute ago.</p>
+     */
+    @Transactional
+    public TaskResponse registerUnansweredComment(UUID taskId) {
+        Task task = require(taskId);
+        CommentThreadReader.ThreadStats thread =
+                threadStatsFor(List.of(taskId)).get(taskId);
+        if (thread == null || thread.oldestUnansweredAt() == null) {
+            // Somebody answered, or the comment was deleted. Withdraw the charge — a
+            // risk adjustment that can only ever go up stops describing the sprint and
+            // starts describing its history.
+            riskReporter.commentAnswered(task);
+            return toResponse(task);
+        }
+        riskReporter.commentUnanswered(task, thread.oldestUnansweredAt());
         return toResponse(task);
     }
 
@@ -498,6 +531,9 @@ public class TaskService {
                 story.getCreatedAt(),
                 story.getUpdatedAt(),
                     0L,
+                    null,
+                    0L,
+                    0L,
                     null
         );
     }
@@ -650,18 +686,39 @@ public class TaskService {
 
     TaskResponse toResponse(Task task) {
         return toResponse(task, task.getAssigneeId() == null ? null
-                : userService.summariesFor(List.of(task.getAssigneeId())).get(task.getAssigneeId()));
+                : userService.summariesFor(List.of(task.getAssigneeId())).get(task.getAssigneeId()),
+                threadStatsFor(List.of(task.getId())).get(task.getId()));
     }
 
     /** Batch enrichment, for the same reason as the backlog's — boards render many rows. */
     Function<Task, TaskResponse> enrichmentFor(List<Task> tasks) {
         Map<UUID, UserSummary> assignees = userService.summariesFor(
                 tasks.stream().map(Task::getAssigneeId).filter(Objects::nonNull).toList());
+        Map<UUID, CommentThreadReader.ThreadStats> threads =
+                threadStatsFor(tasks.stream().map(Task::getId).toList());
         return task -> toResponse(task,
-                task.getAssigneeId() == null ? null : assignees.get(task.getAssigneeId()));
+                task.getAssigneeId() == null ? null : assignees.get(task.getAssigneeId()),
+                threads.get(task.getId()));
     }
 
-    private TaskResponse toResponse(Task task, UserSummary assignee) {
+    /**
+     * Comment counts for these tasks, in one query.
+     *
+     * <p>Tasks with no comments are absent from the result rather than present as zero —
+     * that is the reader's contract, and the callers above substitute
+     * {@link CommentThreadReader.ThreadStats#none} so a quiet task still renders.</p>
+     */
+    private Map<UUID, CommentThreadReader.ThreadStats> threadStatsFor(List<UUID> taskIds) {
+        return commentThreads.threadStats(EntityType.TASK, taskIds).stream()
+                .collect(Collectors.toMap(CommentThreadReader.ThreadStats::itemId,
+                        Function.identity(), (first, second) -> first));
+    }
+
+    private TaskResponse toResponse(Task task, UserSummary assignee,
+                                    CommentThreadReader.ThreadStats threadStats) {
+        CommentThreadReader.ThreadStats thread = threadStats == null
+                ? CommentThreadReader.ThreadStats.none(task.getId())
+                : threadStats;
         int subtaskCount = task.isSubtask()
                 ? 0
                 : taskRepository.findByParentTaskIdAndDeletedAtIsNullOrderByRankAsc(task.getId()).size();
@@ -678,6 +735,7 @@ public class TaskService {
                 task.getDueDate(), task.getRank(), task.isBlocked(), task.getBlockedReason(),
                 task.getReopenedCount(), subtaskCount, task.getStartedAt(), task.getCompletedAt(),
                 task.getCreatedAt(), task.getUpdatedAt(),
-                task.getElapsedSeconds(), task.getRunningSince());
+                task.getElapsedSeconds(), task.getRunningSince(),
+                thread.commentCount(), thread.replyCount(), thread.oldestUnansweredAt());
     }
 }

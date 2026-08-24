@@ -15,7 +15,7 @@ import {
 import type { Task, WorkflowState } from "@/lib/api/delivery-schemas";
 import { isBoardTask, type TaskBoard } from "../api";
 import { cn } from "@/lib/utils";
-import { OverdueBadge, ReopenBadge, TaskClockRow } from "./task-clock-row";
+import { CommentBadge, OverdueBadge, ReopenBadge, TaskClockRow } from "./task-clock-row";
 
 function initials(name?: string | null) {
   if (!name) return "?";
@@ -41,6 +41,7 @@ export function KanbanBoard({
   onAddTask,
   onReopen,
   onOpenTask,
+  onCommentUnanswered,
   onTaskOverdue,
   members = [],
   disabled,
@@ -57,6 +58,12 @@ export function KanbanBoard({
    * decides whether it does — the board only reports that a card was clicked.
    */
   onOpenTask?: (task: Task) => void;
+  /**
+   * Fires when a card's oldest unanswered comment passes half its estimate. Same
+   * arrangement as `onTaskOverdue`: the board is ticking anyway to draw the wait, so it
+   * is the only thing that knows the moment it crosses.
+   */
+  onCommentUnanswered?: (task: Task) => void;
   /**
    * Fires the first time an open card's countdown crosses its estimate. The board is
    * the only thing that knows the moment it happens — it is already ticking to draw it.
@@ -152,6 +159,7 @@ export function KanbanBoard({
                     onAssign={onAssign}
                     onReopen={onReopen}
                     onOpenTask={onOpenTask}
+                    onCommentUnanswered={onCommentUnanswered}
                     onTaskOverdue={onTaskOverdue}
                     carried={carrying?.taskId === task.id}
                     disabled={disabled}
@@ -199,6 +207,7 @@ function TaskCard({
   onAssign,
   onReopen,
   onOpenTask,
+  onCommentUnanswered,
   onTaskOverdue,
   carried,
   disabled,
@@ -212,6 +221,7 @@ function TaskCard({
   onAssign?: (taskId: string, assigneeId: string | null) => void;
   onReopen?: (task: Task) => void;
   onOpenTask?: (task: Task) => void;
+  onCommentUnanswered?: (task: Task) => void;
   onTaskOverdue?: (task: Task) => void;
   carried?: boolean;
   disabled?: boolean;
@@ -323,6 +333,7 @@ function TaskCard({
               </span>
             ) : null}
             <ReopenBadge count={task.reopenedCount ?? 0} />
+            <CommentBadge task={task} onUnanswered={onCommentUnanswered} />
             <OverdueBadge task={task} />
           </div>
 

@@ -41,14 +41,36 @@ import java.util.UUID;
 public class CollaborationFeatureProvider implements CollaborationFeatureSource {
 
     /**
-     * How long a comment waits before it counts as unanswered.
+     * How long a comment waits before it counts as unanswered, when its task carries no
+     * estimate.
      *
      * <p>A working day, not an hour. The source system this rule came from used one
      * hour, which is right for a co-located team on a shared clock and wrong for
      * everyone else — it flags every question asked after lunch. A day is long enough
      * that a breach means nobody picked it up rather than that nobody was online.</p>
+     *
+     * <p>Only the fallback. Where the task has an estimate, half of it is the deadline
+     * instead — see {@link #patienceFor}. The board's ledger charges on that same rule,
+     * and a model measuring a different one would undo the charge at the next scoring
+     * while the screen went on claiming the silence mattered.</p>
      */
     private static final Duration UNANSWERED_AFTER = Duration.ofHours(24);
+
+    /**
+     * How long a question on this task may wait before it is unanswered: half the
+     * estimate, or a day when there is no estimate to halve.
+     *
+     * <p>Relative to the task because the same silence means different things at
+     * different scales. Two hours of nothing on a one-hour task has already sunk it; on
+     * a three-day task it is a normal morning.</p>
+     */
+    private static Duration patienceFor(Task task) {
+        Integer minutes = task.getEstimateMinutes();
+        if (minutes == null || minutes <= 0) {
+            return UNANSWERED_AFTER;
+        }
+        return Duration.ofMinutes(Math.max(1L, minutes / 2L));
+    }
 
     /**
      * Reply gaps longer than this are dropped from the average rather than clamped.
@@ -101,7 +123,7 @@ public class CollaborationFeatureProvider implements CollaborationFeatureSource 
                 longestSilenceDays(active, firstDay, elapsed),
                 blocked,
                 reopened,
-                unansweredThreads(byTask, windowEnd),
+                unansweredThreads(byTask, tasks, windowEnd),
                 contributorCount(tasks, entries));
     }
 
@@ -154,21 +176,32 @@ public class CollaborationFeatureProvider implements CollaborationFeatureSource 
     }
 
     /**
-     * Threads whose last comment is a day old and was never answered by anyone else.
+     * Threads whose last comment has waited past its task's patience without anyone else
+     * answering it.
      *
      * <p>Not one of the five the model scores — it is the concrete thing behind an
      * abstract reply-time average, so the UI can name the tasks rather than only report
      * a number nobody can act on.</p>
+     *
+     * <p>The deadline is per task rather than one cutoff for the sprint; see
+     * {@link #patienceFor}.</p>
      */
     private static long unansweredThreads(Map<UUID, List<CommentThreadReader.ThreadEntry>> byTask,
+                                          List<Task> tasks,
                                           Instant windowEnd) {
-        Instant cutoff = windowEnd.minus(UNANSWERED_AFTER);
+        Map<UUID, Duration> patience = new HashMap<>();
+        for (Task task : tasks) {
+            patience.put(task.getId(), patienceFor(task));
+        }
         long unanswered = 0;
 
-        for (List<CommentThreadReader.ThreadEntry> thread : byTask.values()) {
+        for (Map.Entry<UUID, List<CommentThreadReader.ThreadEntry>> item : byTask.entrySet()) {
+            List<CommentThreadReader.ThreadEntry> thread = item.getValue();
             if (thread.isEmpty()) {
                 continue;
             }
+            Instant cutoff = windowEnd.minus(
+                    patience.getOrDefault(item.getKey(), UNANSWERED_AFTER));
             CommentThreadReader.ThreadEntry last = thread.get(thread.size() - 1);
             if (last.postedAt().isAfter(cutoff)) {
                 continue; // Too recent to call unanswered.
