@@ -6,6 +6,13 @@ import { Card, CardHeader } from "@/components/design/surfaces";
 import type { RiskAdjustment, RiskAssessment, SprintRisk } from "@/lib/api/ai-schemas";
 import { asPercent, RiskGauge, SeverityBadge } from "./risk-gauge";
 
+/** The weight keys as the aggregate names them, in the words the panels already use. */
+const WEIGHT_LABEL: Record<string, string> = {
+  overBudget: "Over-budget",
+  requirementChange: "Requirement change",
+  communicationCollaboration: "Collaboration",
+};
+
 const MODELS = [
   {
     key: "overBudget",
@@ -66,45 +73,144 @@ export function SprintRiskOverview({
               : "This sprint has not been assessed yet."
           }
           action={
-            <div className="flex items-center gap-3">
-              {risk?.highestSeverity ? (
-                <SeverityBadge severity={risk.highestSeverity} scored={anyScored} />
-              ) : null}
-              <Button size="sm" variant="outline" onClick={onAssess} disabled={assessing || !onAssess}>
-                {assessing ? (
-                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                ) : (
-                  <RefreshCw className="size-3.5" aria-hidden />
-                )}
-                Assess now
-              </Button>
-            </div>
+            <Button size="sm" variant="outline" onClick={onAssess} disabled={assessing || !onAssess}>
+              {assessing ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <RefreshCw className="size-3.5" aria-hidden />
+              )}
+              Assess now
+            </Button>
           }
         />
 
         {loading ? (
-          <div className="grid gap-4 p-4 sm:grid-cols-3">
-            {MODELS.map((model) => (
-              <div key={model.key} className="h-56 animate-pulse rounded-xl bg-surface-3" />
-            ))}
-          </div>
+          <>
+            <div className="h-50 animate-pulse border-b border-line bg-surface-3" />
+            <div className="grid gap-4 p-4 sm:grid-cols-3">
+              {MODELS.map((model) => (
+                <div key={model.key} className="h-56 animate-pulse rounded-xl bg-surface-3" />
+              ))}
+            </div>
+          </>
         ) : (
-          <div className="grid gap-4 p-4 sm:grid-cols-3">
-            {MODELS.map((model) => (
-              <ModelPanel
-                key={model.key}
-                title={model.title}
-                question={model.question}
-                assessment={risk?.[model.key] ?? undefined}
-              />
-            ))}
-          </div>
+          <>
+            <OverallBand risk={risk} scored={anyScored} />
+            <div className="grid gap-4 p-4 sm:grid-cols-3">
+              {MODELS.map((model) => (
+                <ModelPanel
+                  key={model.key}
+                  title={model.title}
+                  question={model.question}
+                  assessment={risk?.[model.key] ?? undefined}
+                />
+              ))}
+            </div>
+          </>
         )}
       </Card>
 
       <AdjustmentLedger adjustments={adjustments ?? []} />
     </div>
   );
+}
+
+/**
+ * The three models as one figure, above the three that make it.
+ *
+ * <p>The headline a delivery lead acts on. It sits above the breakdown rather than
+ * replacing it, because an aggregate on its own asks to be trusted on faith, and the
+ * three panels underneath are what make it arguable.</p>
+ *
+ * <p>Two different verdicts live here and they are labelled rather than merged. The
+ * weighted figure is what the sprint is worth overall; the loudest single model can be a
+ * band higher and is the one somebody has to go and look at. Showing only the first
+ * hides an emergency inside an average; showing only the second, which is what this card
+ * did before as an unlabelled badge, reports every sprint at its worst corner.</p>
+ *
+ * <p>The weights are on show because a model that could not be scored contributes
+ * nothing and the rest are renormalised. A sprint assessed on two models out of three is
+ * then visibly that, rather than quietly averaging the gap as zero.</p>
+ */
+function OverallBand({ risk, scored }: { risk?: SprintRisk; scored: boolean }) {
+  const overall = risk?.overall ?? null;
+  const level = overall?.level ?? null;
+  const highest = risk?.highestSeverity ?? null;
+  const contributing = Object.entries(overall?.weights ?? {}).filter(([, weight]) => weight > 0);
+  const missing = MODELS.length - contributing.length;
+
+  return (
+    <section
+      aria-labelledby="overall-risk-heading"
+      className="flex flex-col items-center gap-4 border-b border-line bg-surface-2/50 p-4 sm:flex-row sm:items-start"
+    >
+      <RiskGauge score={overall?.score ?? null} size={132} label="Overall" className="shrink-0" />
+
+      <div className="min-w-0 flex-1 text-center sm:text-left">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+          <h3 id="overall-risk-heading" className="text-sm font-semibold">
+            Overall sprint risk
+          </h3>
+          <SeverityBadge severity={level} scored={scored && overall != null} />
+          {overall?.degraded ? (
+            <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-amber">
+              incomplete evidence
+            </span>
+          ) : null}
+        </div>
+
+        {overall ? (
+          <>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
+              {asPercent(overall.score)}%
+              <span className="ml-2 align-middle text-xs font-normal text-ink-3">
+                the three models weighted into one figure
+              </span>
+            </p>
+
+            {/*
+              Only when it disagrees. Where the worst model already sits in the overall
+              band, a second line saying so is noise.
+            */}
+            {highest && highest !== level ? (
+              <p className="mt-1 text-xs text-ink-2">
+                Loudest single model reads{" "}
+                <span className="font-semibold">{titleCase(highest)}</span> — the weighted figure
+                sits lower because the other two are calmer.
+              </p>
+            ) : null}
+
+            <div className="mt-2 flex flex-wrap justify-center gap-1.5 sm:justify-start">
+              {contributing.map(([key, weight]) => (
+                <span
+                  key={key}
+                  className="rounded-md bg-surface-3 px-1.5 py-0.5 text-[11px] text-ink-3 tabular-nums"
+                >
+                  {WEIGHT_LABEL[key] ?? key} {Math.round(weight * 100)}%
+                </span>
+              ))}
+              {missing > 0 ? (
+                <span className="rounded-md bg-surface-3 px-1.5 py-0.5 text-[11px] text-amber">
+                  {missing} model{missing === 1 ? "" : "s"} not scored
+                </span>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <p className="mt-1 text-xs leading-relaxed text-ink-3">
+            {scored
+              ? "Not enough of the three models answered to weigh them into one figure."
+              : "Assess the sprint to get a single figure across the three models."}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** CRITICAL reads as shouting inside a sentence; Critical does not. */
+function titleCase(value: string): string {
+  return value.charAt(0) + value.slice(1).toLowerCase();
 }
 
 function ModelPanel({
