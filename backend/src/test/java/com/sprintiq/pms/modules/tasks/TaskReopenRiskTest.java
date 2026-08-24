@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -30,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * recorder reads better than five captors — it also keeps the test off the inline mock
  * maker, which the JDK this builds on does not support.</p>
  */
-@DisplayName("Reopen risk")
+@DisplayName("Board events as risk")
 class TaskReopenRiskTest {
 
     private static final UUID SPRINT = UUID.randomUUID();
@@ -254,6 +256,96 @@ class TaskReopenRiskTest {
             reporter.statusChanged(task, TaskStatus.DONE);
 
             assertThat(ledger.keys()).doesNotContain("TASK_ON_TIME:" + task.getId());
+        }
+    }
+
+    /**
+     * A question nobody answered, charged against half the task's own estimate.
+     *
+     * <p>Relative rather than a fixed number of hours: two hours of silence on a one-hour
+     * task has already sunk it, and on a three-day task is a normal morning.</p>
+     */
+    @Nested
+    @DisplayName("an unanswered comment")
+    class UnansweredComments {
+
+        private Task estimated(int minutes) {
+            Task task = Task.builder()
+                    .sprintId(SPRINT)
+                    .itemKey("SIQ-4")
+                    .status(TaskStatus.IN_PROGRESS)
+                    .estimateMinutes(minutes)
+                    .build();
+            task.setId(UUID.randomUUID());
+            return task;
+        }
+
+        private BigDecimal chargeAfter(int estimateMinutes, int waitedMinutes) {
+            Recorder fresh = new Recorder();
+            new TaskRiskReporter(fresh).commentUnanswered(estimated(estimateMinutes),
+                    Instant.now().minus(Duration.ofMinutes(waitedMinutes)));
+            return fresh.charged(RiskType.COMMUNICATION_COLLABORATION);
+        }
+
+        @Test
+        @DisplayName("costs nothing before half the estimate has passed")
+        void quietInsideThePatience() {
+            // A one-hour task tolerates thirty minutes.
+            assertThat(chargeAfter(60, 20)).isEqualByComparingTo(BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("is charged once the wait passes half the estimate")
+        void chargedPastThePatience() {
+            assertThat(chargeAfter(60, 45)).isPositive();
+        }
+
+        @Test
+        @DisplayName("gets louder the longer it is ignored")
+        void growsWithTheWait() {
+            BigDecimal justOver = chargeAfter(60, 35);
+            BigDecimal allDay = chargeAfter(60, 300);
+
+            assertThat(allDay).isGreaterThan(justOver);
+        }
+
+        @Test
+        @DisplayName("measures against the task's own clock, not a fixed hour")
+        void scaledToTheEstimate() {
+            // Ninety minutes of silence: past half of a one-hour task, nowhere near half
+            // of a three-day one.
+            assertThat(chargeAfter(60, 90)).isPositive();
+            assertThat(chargeAfter(1440, 90)).isEqualByComparingTo(BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("is silent on a task nobody estimated")
+        void silentWithoutAnEstimate() {
+            Recorder fresh = new Recorder();
+            Task unestimated = Task.builder().sprintId(SPRINT).itemKey("SIQ-5")
+                    .status(TaskStatus.IN_PROGRESS).build();
+            unestimated.setId(UUID.randomUUID());
+
+            new TaskRiskReporter(fresh)
+                    .commentUnanswered(unestimated, Instant.now().minus(Duration.ofDays(3)));
+
+            // There is no half of an unstated duration. Guessing one would charge every
+            // unestimated card the moment somebody commented on it.
+            assertThat(fresh.entries).isEmpty();
+        }
+
+        @Test
+        @DisplayName("is withdrawn once somebody answers")
+        void withdrawnWhenAnswered() {
+            Task task = estimated(60);
+            reporter.commentUnanswered(task, Instant.now().minus(Duration.ofMinutes(90)));
+            assertThat(ledger.charged(RiskType.COMMUNICATION_COLLABORATION)).isPositive();
+
+            reporter.commentAnswered(task);
+
+            // A charge that can only ever go up stops describing the sprint and starts
+            // describing its history.
+            assertThat(ledger.keys()).doesNotContain("TASK_UNANSWERED:" + task.getId());
         }
     }
 }

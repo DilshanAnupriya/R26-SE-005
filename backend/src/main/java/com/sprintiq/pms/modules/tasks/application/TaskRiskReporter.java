@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 
 /**
  * Turns board events into risk points.
@@ -71,6 +73,26 @@ public class TaskRiskReporter {
 
     /** An overdue task cannot cost the sprint more than this, however large its estimate. */
     private static final BigDecimal OVERDUE_CAP = BigDecimal.valueOf(15);
+
+    /**
+     * A question nobody has answered, charged once the wait passes half the task's
+     * estimate.
+     *
+     * <p>Half the estimate rather than a fixed number of hours, because the same silence
+     * means different things at different scales: two hours of nothing on a one-hour task
+     * has already sunk it, and on a three-day task is a normal morning. The estimate is
+     * the team's own statement of the pace this piece of work runs at, so it is the right
+     * clock to measure the silence against.</p>
+     */
+    private static final BigDecimal UNANSWERED_BASE = BigDecimal.valueOf(5);
+
+    /**
+     * Added per further half-estimate of silence, so a question ignored all week keeps
+     * getting louder rather than costing what it did in the first hour.
+     */
+    private static final BigDecimal UNANSWERED_PER_PERIOD = BigDecimal.valueOf(2.5);
+
+    private static final BigDecimal UNANSWERED_CAP = BigDecimal.valueOf(12);
 
     private static final BigDecimal MINUTES_PER_DAY = BigDecimal.valueOf(8 * 60);
 
@@ -163,6 +185,44 @@ public class TaskRiskReporter {
     }
 
     /**
+     * Charges the sprint for a question on this task that nobody has answered.
+     *
+     * <p>Collaboration rather than over-budget: an unanswered comment is the team failing
+     * to talk to itself, which may or may not end up costing effort. The over-budget
+     * model hears about it only if the silence turns into a task that misses its
+     * estimate, which it measures for itself.</p>
+     *
+     * <p>Revised, not appended, and keyed on the task: one card with a stale question is
+     * one problem however many times the board notices it. Silent when the task has no
+     * estimate — there is no half of an unstated duration, and guessing one would charge
+     * every unestimated card the moment somebody commented on it.</p>
+     */
+    public void commentUnanswered(Task task, Instant askedAt) {
+        Integer estimateMinutes = task.getEstimateMinutes();
+        if (askedAt == null || estimateMinutes == null || estimateMinutes <= 0) {
+            return;
+        }
+        long patienceMinutes = Math.max(1L, estimateMinutes / 2L);
+        long waitedMinutes = Duration.between(askedAt, Instant.now()).toMinutes();
+        long periods = waitedMinutes / patienceMinutes;
+        if (periods < 1) {
+            adjustments.clear(task.getSprintId(), unansweredKey(task));
+            return;
+        }
+
+        BigDecimal raw = UNANSWERED_BASE
+                .add(UNANSWERED_PER_PERIOD.multiply(BigDecimal.valueOf(periods - 1L)));
+        adjustments.revise(task.getSprintId(), RiskType.COMMUNICATION_COLLABORATION,
+                unansweredKey(task), cap(weight(task).multiply(raw), UNANSWERED_CAP),
+                "Unanswered on %s for %s".formatted(task.getItemKey(), humanise(waitedMinutes)));
+    }
+
+    /** The question was answered, or the comment went away. Withdraw the charge. */
+    public void commentAnswered(Task task) {
+        adjustments.clear(task.getSprintId(), unansweredKey(task));
+    }
+
+    /**
      * Charges the sprint for a task that has run past its estimate and is still open.
      *
      * <p>Deliberately distinct from the overdue badge, which is about how a task
@@ -189,6 +249,7 @@ public class TaskRiskReporter {
         adjustments.clear(task.getSprintId(), reopenKey(task));
         adjustments.clear(task.getSprintId(), reopenBudgetKey(task));
         adjustments.clear(task.getSprintId(), onTimeKey(task));
+        adjustments.clear(task.getSprintId(), unansweredKey(task));
     }
 
     // --------------------------------------------------------------- internals
@@ -207,6 +268,19 @@ public class TaskRiskReporter {
 
     private static String onTimeKey(Task task) {
         return "TASK_ON_TIME:" + task.getId();
+    }
+
+    private static String unansweredKey(Task task) {
+        return "TASK_UNANSWERED:" + task.getId();
+    }
+
+    /** "3h" and "2d" read on a ledger row; "185 minutes" does not. */
+    private static String humanise(long minutes) {
+        if (minutes < 60) {
+            return minutes + "m";
+        }
+        long hours = minutes / 60;
+        return hours < 24 ? hours + "h" : (hours / 24) + "d";
     }
 
     /**

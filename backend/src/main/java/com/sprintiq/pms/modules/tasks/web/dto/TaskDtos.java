@@ -122,7 +122,21 @@ public final class TaskDtos {
              */
             long elapsedSeconds,
             /** Null while the clock is paused, which is exactly when the task is terminal. */
-            Instant runningSince) {}
+            Instant runningSince,
+            /** Top-level comments on this task. */
+            long commentCount,
+            /** Replies to them, counted separately: a card wants to show both. */
+            long replyCount,
+            /**
+             * When the longest-waiting comment nobody has answered was posted, or null
+             * when every comment has a reply from somebody other than its author.
+             *
+             * <p>Sent as the timestamp rather than as a "waiting too long" boolean so the
+             * threshold stays a client-side judgement against this task's own estimate.
+             * A boolean computed here would have to pick one deadline for every task on
+             * the board, which is the thing that makes such a flag useless.</p>
+             */
+            Instant oldestUnansweredCommentAt) {}
 
     @Schema(name = "ReopenTaskRequest",
             description = "Send a finished task back for rework. Both fields are optional.")

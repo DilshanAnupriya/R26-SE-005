@@ -17,6 +17,7 @@ import {
   useMoveTask,
   useReopenTask,
   useReportOverdue,
+  useReportUnansweredComment,
   useTaskBoard,
 } from "@/features/board/hooks";
 import type { Task } from "@/lib/api/delivery-schemas";
@@ -55,6 +56,7 @@ export default function BoardPage({
   const reopen = useReopenTask(projectId);
   const countReopen = useCountReopen(projectId);
   const reportOverdue = useReportOverdue();
+  const reportUnanswered = useReportUnansweredComment();
   const { connected } = useRealtime();
 
   /*
@@ -130,8 +132,9 @@ export default function BoardPage({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Click a card to see everything about it — each time you open one it counts as a reopen, and
-        the reopen count drives the sprint&rsquo;s over-budget risk. Drag a card to move between
+        Click a card to see everything about it, and to comment or reply. Each time you open one it
+        counts as a reopen, and the reopen count drives the sprint&rsquo;s over-budget risk; a comment
+        left unanswered for longer than half the task&rsquo;s estimate drives its collaboration risk. Drag a card to move between
         columns, or click the Assignee button to assign or reassign developers. Each card counts down
         against its estimate while it is open, and freezes when it is finished.
       </p>
@@ -153,6 +156,7 @@ export default function BoardPage({
           onAddTask={() => setAddTaskOpen(true)}
           onReopen={(task) => reopen.mutate({ taskId: task.id })}
           onOpenTask={openTask}
+          onCommentUnanswered={(task) => reportUnanswered(task.id, task.sprintId)}
           onTaskOverdue={(task) => reportOverdue(task.id, task.sprintId)}
           members={memberList}
         />
@@ -170,6 +174,7 @@ export default function BoardPage({
           if (!next) setDetailTaskId(null);
         }}
         reopenPending={reopen.isPending}
+        members={memberList}
         onReopen={(task) => {
           reopen.mutate({ taskId: task.id });
           setDetailTaskId(null);

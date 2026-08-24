@@ -237,6 +237,41 @@ export function useReportOverdue() {
   );
 }
 
+/**
+ * Reports a comment nobody has answered, at most once per task per session.
+ *
+ * <p>Same shape as {@link useReportOverdue} and for the same reasons: the board is the
+ * only thing holding both the estimate and the age of the oldest unanswered comment, the
+ * server is idempotent per task, and the local guard stops a board of forty stale threads
+ * firing forty POSTs on every mount.</p>
+ */
+export function useReportUnansweredComment() {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+  const reported = useRef(new Set<string>());
+
+  return useCallback(
+    (taskId: string, sprintId?: string | null) => {
+      if (reported.current.has(taskId)) return;
+      reported.current.add(taskId);
+      boardApi
+        .reportUnansweredComment(api, taskId)
+        .then(() => {
+          if (sprintId) {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(sprintId) });
+          }
+        })
+        .catch(() => {
+          // Silent, like the overdue report. The waiting badge on the card is the
+          // user-visible signal; a toast about a background bookkeeping call would
+          // interrupt work to report something nobody can act on.
+          reported.current.delete(taskId);
+        });
+    },
+    [api, queryClient],
+  );
+}
+
 export function useAssignTask(projectId: string) {
   const { api } = useSession();
   const queryClient = useQueryClient();

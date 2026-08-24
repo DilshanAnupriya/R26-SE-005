@@ -148,6 +148,16 @@ export const boardApi = {
     api.request(`/tasks/${taskId}/reopen-count`, { method: "POST", schema: taskSchema }),
 
   /**
+   * Reports a comment on this card that nobody has answered in time.
+   *
+   * <p>"In time" is half the task's own estimate. The server re-checks it before
+   * charging anything, so a board left open overnight cannot bill a sprint for a
+   * question that was answered while nobody was looking at this tab.</p>
+   */
+  reportUnansweredComment: (api: ApiClient, taskId: string) =>
+    api.request(`/tasks/${taskId}/comment-unanswered`, { method: "POST", schema: taskSchema }),
+
+  /**
    * Reports that a card's countdown has hit zero while the task is still open.
    *
    * <p>Reported from here rather than swept for on the server: the board is already

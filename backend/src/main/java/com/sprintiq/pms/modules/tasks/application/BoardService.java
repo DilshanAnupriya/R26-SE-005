@@ -136,6 +136,9 @@ public class BoardService {
                     story.getCreatedAt(),
                     story.getUpdatedAt(),
                     0L,
+                    null,
+                    0L,
+                    0L,
                     null
             );
 

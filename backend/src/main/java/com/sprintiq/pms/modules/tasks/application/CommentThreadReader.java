@@ -46,4 +46,30 @@ public interface CommentThreadReader {
                                     Collection<UUID> itemIds,
                                     Instant from,
                                     Instant to);
+
+    /**
+     * How much conversation each item carries, and how long its oldest question has been
+     * waiting.
+     *
+     * <p>Distinct from {@link #threadEntries} rather than derived from it. That one is
+     * windowed to a sprint and flattens replies in with their parents, which is right for
+     * a latency average and wrong for a badge on a card: a card has to show its whole
+     * history, and it has to tell a comment from a reply.</p>
+     *
+     * @param oldestUnansweredAt when the longest-waiting unanswered comment was posted,
+     *                           or null when every comment has an answer. A comment is
+     *                           answered by a reply from somebody else — the author
+     *                           adding a second thought is not the thread being picked
+     *                           up, and counting it as one would make the least
+     *                           responsive threads look like the most
+     */
+    record ThreadStats(UUID itemId, long commentCount, long replyCount, Instant oldestUnansweredAt) {
+
+        public static ThreadStats none(UUID itemId) {
+            return new ThreadStats(itemId, 0, 0, null);
+        }
+    }
+
+    /** Stats for each of these items. Items with no comments may be omitted. */
+    List<ThreadStats> threadStats(EntityType entityType, Collection<UUID> itemIds);
 }

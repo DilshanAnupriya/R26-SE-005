@@ -57,11 +57,18 @@ export function CommentThread({
   entityType,
   entityId,
   people = [],
+  onChanged,
 }: {
   entityType: string;
   entityId: string;
   /** Candidates for the mention picker — usually the project's members. */
   people?: { id: string; fullName: string; avatarUrl?: string | null }[];
+  /**
+   * Called after a comment is posted or removed, for callers holding a count of their
+   * own. This component invalidates its own thread and count; it cannot know that a
+   * kanban card three components away is also showing the number.
+   */
+  onChanged?: () => void;
 }) {
   const { api, user } = useSession();
   const queryClient = useQueryClient();
@@ -76,6 +83,7 @@ export function CommentThread({
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.comments.list(entityType, entityId) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.comments.count(entityType, entityId) });
+    onChanged?.();
   };
 
   const post = useMutation({
