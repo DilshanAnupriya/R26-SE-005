@@ -269,8 +269,9 @@ def predict_developer_ranking(data: dict) -> dict[str, Any]:
             feature_columns=allocation_feature_columns
         )
 
+        # Generate explanations for top 3
         explained_rankings = explain_ranking(
-            ranking_df=ranking_df.head(5),
+            ranking_df=ranking_df.head(3),
             dev_features=dev_df,
             task_profile=task,
             explainability_engine=explainability_engine
@@ -377,7 +378,7 @@ def rank_sprint_endpoint(data: dict) -> dict[str, Any]:
 
     tasks = data.get("tasks", [])
     developers = data.get("developers", [])
-    top_n = data.get("top_n", 5)
+    top_n = data.get("top_n", 3)
 
     log.info("📋 SPRINT TASK RANKING: %d tasks, %d developers", len(tasks), len(developers))
     try:

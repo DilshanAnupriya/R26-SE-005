@@ -367,7 +367,7 @@ def rank_sprint_tasks(
         dev_df: pd.DataFrame,
         model,
         feature_columns: list,
-        top_n: int = 5
+        top_n: int = 3
 ) -> list:
     """
     Rank developers for each task in a sprint without final allocation.

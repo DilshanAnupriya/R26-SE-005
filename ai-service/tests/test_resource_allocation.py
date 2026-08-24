@@ -86,6 +86,30 @@ def test_predict_developer_ranking_endpoint(client, sample_task, sample_develope
     assert "strengths" in top
 
 
+def test_predict_caps_at_top_3_recommendations(client, sample_task):
+    developers = [
+        {
+            "dev_id": f"DEV-00{i}",
+            "experience_level": 3,
+            "skill_frontend": 4,
+            "skill_backend": 4,
+            "skill_db": 3,
+            "current_workload": 10 * i,
+            "availability": 0.8,
+            "current_tasks": 1,
+            "consistency": 0.8,
+            "learning_rate": 0.1
+        }
+        for i in range(1, 6)
+    ]
+    payload = {"task": sample_task, "developers": developers}
+    res = client.post("/predict", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["recommendations"]) == 3
+    assert [r["rank"] for r in data["recommendations"]] == [1, 2, 3]
+
+
 def test_allocate_sprint_endpoint(client, sample_task, sample_developers):
     tasks = [
         sample_task,

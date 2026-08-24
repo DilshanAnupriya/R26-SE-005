@@ -241,7 +241,9 @@ public class OptimizerRankingService {
 
                 if (devRecs == null) continue;
 
+                int devCount = 0;
                 for (Map<String, Object> devData : devRecs) {
+                    if (++devCount > 3) break;
 
                     String devId = devData.get("dev_id").toString();
 
