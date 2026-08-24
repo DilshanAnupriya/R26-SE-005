@@ -152,6 +152,58 @@ export function useReopenTask(projectId: string) {
 }
 
 /**
+ * Counts a reopen for a card that has been opened for a look.
+ *
+ * <p>Fired when the detail dialog opens, not on every render of it — the count is what
+ * the sprint's over-budget and collaboration risk read, so a component that re-rendered
+ * twice would charge the sprint twice for one look.</p>
+ *
+ * <p>The board is patched in place with the new count instead of refetched. Nothing
+ * about the card has moved, so a full board refetch would be a round trip to change one
+ * badge, and the dialog sitting on top of it would flicker as its task was replaced.</p>
+ */
+export function useCountReopen(projectId: string) {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { taskId: string }) => boardApi.countReopen(api, input.taskId),
+
+    onSuccess: (task) => {
+      queryClient.setQueriesData<TaskBoard>(
+        { queryKey: queryKeys.projects.board(projectId) },
+        (board) =>
+          board
+            ? {
+                ...board,
+                columns: board.columns.map((column) => ({
+                  ...column,
+                  tasks: column.tasks.map((existing) =>
+                    existing.id === task.id
+                      ? { ...existing, reopenedCount: task.reopenedCount }
+                      : existing,
+                  ),
+                })),
+              }
+            : board,
+      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.detail(task.id) });
+      if (task.sprintId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(task.sprintId) });
+      }
+    },
+
+    onError: (error) => {
+      // Loud rather than silent: the count is visible on the card the user just opened,
+      // and a badge that quietly failed to move would read as the feature not working.
+      toast.error(
+        error instanceof ApiError ? error.message : "Could not count that reopen.",
+      );
+    },
+  });
+}
+
+/**
  * Reports an expired countdown, at most once per task per session.
  *
  * <p>The server is idempotent per task, so a duplicate report is harmless rather than a

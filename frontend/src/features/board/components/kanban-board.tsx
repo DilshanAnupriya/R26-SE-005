@@ -13,9 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Task, WorkflowState } from "@/lib/api/delivery-schemas";
-import type { TaskBoard } from "../api";
+import { isBoardTask, type TaskBoard } from "../api";
 import { cn } from "@/lib/utils";
-import { computeTaskClock } from "@/lib/task-clock";
 import { OverdueBadge, ReopenBadge, TaskClockRow } from "./task-clock-row";
 
 function initials(name?: string | null) {
@@ -41,6 +40,7 @@ export function KanbanBoard({
   onAssign,
   onAddTask,
   onReopen,
+  onOpenTask,
   onTaskOverdue,
   members = [],
   disabled,
@@ -52,6 +52,11 @@ export function KanbanBoard({
   onAddTask?: () => void;
   /** Sends a finished card back for rework. Only offered on finished cards. */
   onReopen?: (task: Task) => void;
+  /**
+   * Opens a card's detail dialog. Every open counts as a reopen, so the handler is what
+   * decides whether it does — the board only reports that a card was clicked.
+   */
+  onOpenTask?: (task: Task) => void;
   /**
    * Fires the first time an open card's countdown crosses its estimate. The board is
    * the only thing that knows the moment it happens — it is already ticking to draw it.
@@ -146,6 +151,7 @@ export function KanbanBoard({
                     members={members}
                     onAssign={onAssign}
                     onReopen={onReopen}
+                    onOpenTask={onOpenTask}
                     onTaskOverdue={onTaskOverdue}
                     carried={carrying?.taskId === task.id}
                     disabled={disabled}
@@ -192,6 +198,7 @@ function TaskCard({
   members,
   onAssign,
   onReopen,
+  onOpenTask,
   onTaskOverdue,
   carried,
   disabled,
@@ -204,6 +211,7 @@ function TaskCard({
   members: BoardMember[];
   onAssign?: (taskId: string, assigneeId: string | null) => void;
   onReopen?: (task: Task) => void;
+  onOpenTask?: (task: Task) => void;
   onTaskOverdue?: (task: Task) => void;
   carried?: boolean;
   disabled?: boolean;
@@ -214,10 +222,29 @@ function TaskCard({
 }) {
   const draggable = !disabled && Boolean(onPickUp);
   const finished = task.status === "DONE" || task.status === "CANCELLED";
-  // Stories are rendered through the task shape on this board and have no clock and no
-  // /tasks/{id} of their own — offering them a Reopen button would show a control that
-  // 404s. `tracked` is the same discriminator the countdown uses.
-  const isTask = computeTaskClock(task).tracked;
+  // Stories are rendered through the task shape on this board and have no /tasks/{id} of
+  // their own, so every control here that calls one is hidden for them — a Reopen button
+  // or a detail dialog on a story row would 404.
+  const isTask = isBoardTask(task);
+  const openable = Boolean(onOpenTask) && isTask;
+
+  /**
+   * Opens the detail dialog from a click anywhere on the card that was not aimed at one
+   * of the controls living on it.
+   *
+   * <p>The guard is a `closest` rather than a `stopPropagation` on each control, because
+   * the assignee menu's items are portalled and the drag handle is focus-visible only:
+   * one rule here is checkable, whereas six scattered ones are how the "assign" click
+   * quietly starts costing the sprint a reopen too.</p>
+   */
+  function handleCardClick(event: React.MouseEvent<HTMLElement>) {
+    if (!openable) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, a, input, select, textarea, [role='menuitem']")) {
+      return;
+    }
+    onOpenTask?.(task);
+  }
 
   return (
     <article
@@ -226,9 +253,11 @@ function TaskCard({
         event.dataTransfer.setData("text/plain", task.id);
         event.dataTransfer.effectAllowed = "move";
       }}
+      onClick={handleCardClick}
       className={cn(
         "group rounded-md border bg-background p-2.5 shadow-sm transition-shadow",
         draggable && "cursor-grab active:cursor-grabbing hover:shadow",
+        openable && "hover:border-primary/40 hover:shadow",
         carried && "ring-2 ring-primary",
         task.blocked && "border-destructive/40",
       )}
@@ -264,7 +293,23 @@ function TaskCard({
         ) : null}
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm leading-snug">{task.title}</p>
+          {/*
+            The title doubles as the keyboard route into the details. The whole card is
+            clickable, but a div with an onClick is reachable by nothing but a mouse, and
+            the drag handle next to it is already the card's only other focus stop.
+          */}
+          {openable ? (
+            <button
+              type="button"
+              onClick={() => onOpenTask?.(task)}
+              className="w-full rounded text-left text-sm leading-snug hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              title={`Open ${task.itemKey}. Counts as a reopen.`}
+            >
+              {task.title}
+            </button>
+          ) : (
+            <p className="text-sm leading-snug">{task.title}</p>
+          )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] text-muted-foreground tabular-nums font-mono">{task.itemKey}</span>
             {task.blocked ? (

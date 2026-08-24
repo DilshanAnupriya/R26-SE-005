@@ -241,6 +241,9 @@ public class RiskService {
                 ? committed.divide(BigDecimal.valueOf(sprint.storyCount()), 3, RoundingMode.HALF_UP)
                 : null;
 
+        // Story reopens plus task reopens; see the feature comment below for why both.
+        long reopens = sprint.reopenedCount() + slippage.taskReopens();
+
         long overtimeMinutes = effort.sprintOvertimeMinutes(sprint.sprintId());
         BigDecimal fatigue = positive(capacityHours)
                 ? BigDecimal.valueOf(overtimeMinutes)
@@ -262,8 +265,14 @@ public class RiskService {
                 // previous sprint's. Named for what they are so the mapping is not
                 // mistaken for history the app does not keep.
                 .putNumber("prev_blocked_tasks", sprint.blockedCount())
-                .putNumber("prev_reopened_tasks", sprint.reopenedCount())
-                .putNumber("prev_rework_score", sprint.reopenedCount() + sprint.defectCount())
+                // Story reopens plus task reopens. The sprint metric counts stories only,
+                // and a team that tracks its work as tasks — which the board encourages —
+                // therefore reported no rework at all here however many times a card came
+                // back. That made "Assess" destructive: the ledger overlay was cleared on
+                // the premise that the model had now seen the rework, and it had not, so
+                // re-scoring handed back the same number and threw the evidence away.
+                .putNumber("prev_reopened_tasks", reopens)
+                .putNumber("prev_rework_score", reopens + sprint.defectCount())
                 .put("fatigue", fatigue)
                 .put("scope_added", sprint.addedPoints())
                 // Mid-sprint slippage. Everything above this line is knowable at

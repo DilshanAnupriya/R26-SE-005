@@ -60,6 +60,23 @@ public class SprintRiskAdjustmentService {
      * <p>A task reopened six times is one task with a worse reading. Appending would
      * claim six tasks broke down, which is both wrong and unbounded — the ledger would
      * grow with clicks rather than with evidence.</p>
+     *
+     * <p>A changed reading is replaced rather than updated, so the row carries today's
+     * {@code createdAt}. That date is not decoration: it is the cutoff
+     * {@link Ledger#netSince} measures against, and a row still holding its original
+     * timestamp reads as evidence the last scoring already absorbed. It silently
+     * inverted the ledger after any re-assessment — the next reopen of a task whose row
+     * predated it did not count, while the credit for finishing that task again did, so
+     * <em>more</em> rework moved the score down. Replacing says what is true: as of now
+     * this task has been reopened this many times, and no scoring has seen it.</p>
+     *
+     * <p>Delete-and-insert rather than {@code setCreatedAt}, because {@code created_at}
+     * is mapped {@code updatable = false} — the assignment is real in the entity and
+     * silently dropped from the UPDATE, which is the kind of fix that looks applied and
+     * changes nothing.</p>
+     *
+     * <p>Only when the value actually moves. Re-dating an unchanged reading would let a
+     * no-op call resurrect an adjustment the last scoring had properly absorbed.</p>
      */
     @Transactional
     public void revise(UUID sprintId, RiskType riskType, String sourceKey,
@@ -67,11 +84,21 @@ public class SprintRiskAdjustmentService {
         if (sprintId == null || sourceKey == null) {
             return;
         }
-        SprintRiskAdjustment existing = adjustments.findBySprintIdAndSourceKey(sprintId, sourceKey)
-                .orElseGet(() -> build(sprintId, riskType, BigDecimal.ZERO, reason, sourceKey));
-        existing.setDelta(delta);
-        existing.setReason(reason);
-        adjustments.save(existing);
+        SprintRiskAdjustment existing =
+                adjustments.findBySprintIdAndSourceKey(sprintId, sourceKey).orElse(null);
+        if (existing != null && existing.getDelta() != null
+                && existing.getDelta().compareTo(delta) == 0) {
+            existing.setReason(reason);
+            adjustments.save(existing);
+            return;
+        }
+        if (existing != null) {
+            adjustments.delete(existing);
+            // (sprint_id, source_key) is unique, so the insert below has to land after
+            // the delete reaches the database rather than alongside it at flush time.
+            adjustments.flush();
+        }
+        adjustments.save(build(sprintId, riskType, delta, reason, sourceKey));
     }
 
     /**

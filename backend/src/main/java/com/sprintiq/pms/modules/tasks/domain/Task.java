@@ -169,6 +169,28 @@ public class Task extends TenantAwareEntity implements SoftDeletable {
     }
 
     /**
+     * Counts a reopen that did not move the card.
+     *
+     * <p>Opening a task for another look is rework in the same sense a bounce back from
+     * review is: the work was taken to be settled and somebody is handling it again.
+     * {@link #transitionTo} counts the reopens that move a card between columns; this
+     * counts the ones that do not, and the two never see the same event, so nothing is
+     * counted twice.</p>
+     *
+     * <p>Saturates at {@link Short#MAX_VALUE} rather than wrapping. The counter is a
+     * {@code short} on the row, and a card opened thirty-three thousand times reading as
+     * a negative number would take the sprint's risk with it.</p>
+     *
+     * @return the count after this reopen
+     */
+    public short countReopen() {
+        if (reopenedCount < Short.MAX_VALUE) {
+            reopenedCount += 1;
+        }
+        return reopenedCount;
+    }
+
+    /**
      * Moves the task, keeping the timestamps, reopen counter and blocked flag coherent.
      * Same reasoning as {@code Story.transitionTo}: these fields are only ever correct
      * together, and cycle-time reporting reads all of them.
