@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Task, WorkflowState } from "@/lib/api/delivery-schemas";
 import type { TaskBoard } from "../api";
+import { TaskDetailDialog } from "./task-detail-dialog";
 import { cn } from "@/lib/utils";
 
 function initials(name?: string | null) {
@@ -31,7 +32,7 @@ export interface BoardMember {
 }
 
 /**
- * The project kanban board with Jira-style interactive developer assignments.
+ * The project kanban board with Jira-style interactive developer assignments and detailed task dialog.
  */
 export function KanbanBoard({
   board,
@@ -49,6 +50,7 @@ export function KanbanBoard({
   // The card the keyboard has picked up, and which column it is hovering over.
   const [carrying, setCarrying] = useState<{ taskId: string; columnIndex: number } | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   function moveCarried(direction: -1 | 1) {
     if (!carrying) return;
@@ -67,90 +69,122 @@ export function KanbanBoard({
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
-      {board.columns.map((column, columnIndex) => {
-        const isDropTarget =
-          dragOverColumn === column.state.id ||
-          (carrying !== null && carrying.columnIndex === columnIndex);
+    <>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {board.columns.map((column, columnIndex) => {
+          const isDropTarget =
+            dragOverColumn === column.state.id ||
+            (carrying !== null && carrying.columnIndex === columnIndex);
 
-        return (
-          <section
-            key={column.state.id}
-            aria-labelledby={`column-${column.state.id}`}
-            className={cn(
-              "flex w-72 shrink-0 flex-col rounded-lg border bg-muted/30 transition-colors",
-              isDropTarget && "border-primary bg-primary/5",
-              column.wipLimitExceeded && "border-amber-500/50",
-            )}
-            onDragOver={(event) => {
-              if (disabled) return;
-              event.preventDefault();
-              setDragOverColumn(column.state.id);
-            }}
-            onDragLeave={() => setDragOverColumn(null)}
-            onDrop={(event) => {
-              event.preventDefault();
-              setDragOverColumn(null);
-              const taskId = event.dataTransfer.getData("text/plain");
-              if (taskId) {
-                onMove(taskId, column.state);
-              }
-            }}
-          >
-            <header className="flex items-center justify-between gap-2 border-b px-3 py-2">
-              <h3 id={`column-${column.state.id}`} className="text-sm font-medium">
-                {column.state.name}
-              </h3>
-              {column.state.wipLimit != null ? (
-                <Badge
-                  variant={column.wipLimitExceeded ? "destructive" : "secondary"}
-                  className="tabular-nums"
-                >
-                  {column.wipLimitExceeded ? (
-                    <AlertTriangle className="size-3" aria-hidden />
-                  ) : null}
-                  {column.itemCount}/{column.state.wipLimit}
-                </Badge>
-              ) : (
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {column.itemCount}
-                </span>
+          return (
+            <section
+              key={column.state.id}
+              aria-labelledby={`column-${column.state.id}`}
+              className={cn(
+                "flex w-72 shrink-0 flex-col rounded-lg border bg-muted/30 transition-colors",
+                isDropTarget && "border-primary bg-primary/5",
+                column.wipLimitExceeded && "border-amber-500/50",
               )}
-            </header>
+              onDragOver={(event) => {
+                if (disabled) return;
+                event.preventDefault();
+                setDragOverColumn(column.state.id);
+              }}
+              onDragLeave={() => setDragOverColumn(null)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragOverColumn(null);
+                const taskId = event.dataTransfer.getData("text/plain");
+                if (taskId) {
+                  onMove(taskId, column.state);
+                }
+              }}
+            >
+              <header className="flex items-center justify-between gap-2 border-b px-3 py-2">
+                <h3 id={`column-${column.state.id}`} className="text-sm font-medium">
+                  {column.state.name}
+                </h3>
+                {column.state.wipLimit != null ? (
+                  <Badge
+                    variant={column.wipLimitExceeded ? "destructive" : "secondary"}
+                    className="tabular-nums"
+                  >
+                    {column.wipLimitExceeded ? (
+                      <AlertTriangle className="size-3" aria-hidden />
+                    ) : null}
+                    {column.itemCount}/{column.state.wipLimit}
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {column.itemCount}
+                  </span>
+                )}
+              </header>
 
-            {column.wipLimitExceeded ? (
-              <p className="px-3 pt-2 text-[11px] text-amber-700 dark:text-amber-400">
-                Over the WIP limit — finish something before starting more.
-              </p>
-            ) : null}
-
-            <ul className="flex-1 space-y-2 p-2">
-              {column.tasks.map((task) => (
-                <li key={task.id}>
-                  <TaskCard
-                    task={task}
-                    members={members}
-                    onAssign={onAssign}
-                    carried={carrying?.taskId === task.id}
-                    disabled={disabled}
-                    onPickUp={() => setCarrying({ taskId: task.id, columnIndex })}
-                    onDropCarried={dropCarried}
-                    onMoveCarried={moveCarried}
-                    onCancel={() => setCarrying(null)}
-                  />
-                </li>
-              ))}
-
-              {column.tasks.length === 0 ? (
-                <li className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                  Nothing here
-                </li>
+              {column.wipLimitExceeded ? (
+                <p className="px-3 pt-2 text-[11px] text-amber-700 dark:text-amber-400">
+                  Over the WIP limit — finish something before starting more.
+                </p>
               ) : null}
-            </ul>
-          </section>
-        );
-      })}
-    </div>
+
+              <ul className="flex-1 space-y-2 p-2">
+                {column.tasks.map((task) => (
+                  <li key={task.id}>
+                    <TaskCard
+                      task={task}
+                      members={members}
+                      onAssign={onAssign}
+                      onSelect={() => setSelectedTask(task)}
+                      carried={carrying?.taskId === task.id}
+                      disabled={disabled}
+                      onPickUp={() => setCarrying({ taskId: task.id, columnIndex })}
+                      onDropCarried={dropCarried}
+                      onMoveCarried={moveCarried}
+                      onCancel={() => setCarrying(null)}
+                    />
+                  </li>
+                ))}
+
+                {column.tasks.length === 0 ? (
+                  <li className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                    Nothing here
+                  </li>
+                ) : null}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
+
+      {/* Jira-style Task Detail Modal */}
+      <TaskDetailDialog
+        task={selectedTask}
+        open={Boolean(selectedTask)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTask(null);
+        }}
+        workflowStates={board.columns.map((c) => c.state)}
+        members={members}
+        onMove={(taskId, state) => {
+          onMove(taskId, state);
+          if (selectedTask && selectedTask.id === taskId) {
+            setSelectedTask({ ...selectedTask, workflowStateId: state.id });
+          }
+        }}
+        onAssign={(taskId, assigneeId) => {
+          onAssign?.(taskId, assigneeId);
+          if (selectedTask && selectedTask.id === taskId) {
+            const member = members.find((m) => (m.userId || m.id) === assigneeId);
+            setSelectedTask({
+              ...selectedTask,
+              assigneeId,
+              assigneeName: member ? (member.fullName || member.email) : null,
+              assigneeAvatarUrl: member?.avatarUrl || null,
+            });
+          }
+        }}
+      />
+    </>
   );
 }
 
@@ -158,6 +192,7 @@ function TaskCard({
   task,
   members,
   onAssign,
+  onSelect,
   carried,
   disabled,
   onPickUp,
@@ -168,6 +203,7 @@ function TaskCard({
   task: Task;
   members: BoardMember[];
   onAssign?: (taskId: string, assigneeId: string | null) => void;
+  onSelect?: () => void;
   carried?: boolean;
   disabled?: boolean;
   onPickUp?: () => void;
@@ -185,7 +221,7 @@ function TaskCard({
         event.dataTransfer.effectAllowed = "move";
       }}
       className={cn(
-        "group rounded-md border bg-background p-2.5 shadow-sm transition-shadow",
+        "group rounded-md border bg-background p-2.5 shadow-sm transition-all hover:border-primary/50",
         draggable && "cursor-grab active:cursor-grabbing hover:shadow",
         carried && "ring-2 ring-primary",
         task.blocked && "border-destructive/40",
@@ -202,7 +238,11 @@ function TaskCard({
                 : `Move ${task.itemKey}. Press Enter to pick it up.`
             }
             className="mt-0.5 shrink-0 rounded text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none group-hover:opacity-100"
-            onClick={() => (carried ? onDropCarried?.() : onPickUp?.())}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (carried) onDropCarried?.();
+              else onPickUp?.();
+            }}
             onKeyDown={(event) => {
               if (!carried) return;
               if (event.key === "ArrowLeft") {
@@ -221,10 +261,18 @@ function TaskCard({
           </button>
         ) : null}
 
-        <div className="min-w-0 flex-1">
-          <p className="text-sm leading-snug">{task.title}</p>
+        {/* Clickable Card Body opening Jira Detail Modal */}
+        <div 
+          onClick={onSelect}
+          className="min-w-0 flex-1 cursor-pointer"
+        >
+          <p className="text-sm leading-snug font-medium text-foreground group-hover:text-primary transition-colors">
+            {task.title}
+          </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground tabular-nums font-mono">{task.itemKey}</span>
+            <span className="text-[11px] text-muted-foreground tabular-nums font-mono font-bold">
+              {task.itemKey}
+            </span>
             {task.blocked ? (
               <Badge variant="destructive" className="text-[10px]">
                 blocked
@@ -239,7 +287,10 @@ function TaskCard({
         </div>
 
         {/* Jira-style Assignee Dropdown */}
-        <div className="shrink-0">
+        <div 
+          className="shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               {task.assigneeId ? (
