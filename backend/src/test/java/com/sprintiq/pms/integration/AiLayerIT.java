@@ -13,6 +13,11 @@ import com.sprintiq.pms.modules.organizations.application.OrganizationProvisioni
 import com.sprintiq.pms.modules.organizations.domain.Organization;
 import com.sprintiq.pms.modules.organizations.domain.WorkspaceRepository;
 import com.sprintiq.pms.modules.projects.application.ProjectService;
+import com.sprintiq.pms.modules.projects.application.RequirementChangeService;
+import com.sprintiq.pms.modules.projects.domain.ChangeImpactDirection;
+import com.sprintiq.pms.modules.projects.domain.RequirementChangeType;
+import com.sprintiq.pms.modules.projects.web.dto.RequirementChangeDtos.LogRequirementChangeRequest;
+import com.sprintiq.pms.modules.projects.web.dto.RequirementChangeDtos.RequirementChangeResponse;
 import com.sprintiq.pms.modules.projects.web.dto.ProjectDtos.CreateProjectRequest;
 import com.sprintiq.pms.modules.projects.web.dto.ProjectDtos.ProjectResponse;
 import com.sprintiq.pms.modules.settings.application.FeatureFlagService;
@@ -61,6 +66,8 @@ class AiLayerIT extends AbstractIntegrationTest {
 
     @Autowired EstimationService estimationService;
     @Autowired RiskService riskService;
+    @Autowired RequirementChangeService requirementChangeService;
+    @Autowired SprintRiskAdjustmentService adjustmentService;
     @Autowired CostForecastService costForecastService;
     @Autowired AiFeedbackService feedbackService;
     @Autowired AiInsightsService insightsService;
@@ -304,6 +311,80 @@ class AiLayerIT extends AbstractIntegrationTest {
 
         SprintRiskResponse reread = riskService.latest(sprint.id());
         assertThat(reread.overBudget().id()).isEqualTo(risk.overBudget().id());
+    }
+
+    @Test
+    @DisplayName("a logged requirement change survives pressing Assess")
+    void requirementChangeSurvivesReassessment() {
+        ProjectResponse project = newProject("Mobile Banking");
+        SprintResponse sprint = newSprintWithWork(project.id());
+
+        riskService.assess(sprint.id());
+
+        // Scope added mid-sprint: +8 on the register's own scale.
+        requirementChangeService.log(project.id(), new LogRequirementChangeRequest(
+                RequirementChangeType.SCOPE_ADDED, ChangeImpactDirection.INCREASE,
+                sprint.id(), null, null, "A second payment provider", null, "Product owner"));
+
+        BigDecimal charged = riskService.latest(sprint.id()).requirementChange().adjustmentDelta();
+        assertThat(charged).isEqualByComparingTo(BigDecimal.valueOf(8));
+
+        // The whole regression, in the two lines below. Re-scoring moves the cutoff, and
+        // everything the models re-read for themselves falls behind it — but no feature
+        // vector carries "a change was logged", so this one has to keep counting. It did
+        // not, and the score fell back to its pre-change value the moment anybody pressed
+        // Assess, which read as the risk fixing itself.
+        SprintRiskResponse reassessed = riskService.assess(sprint.id());
+        assertThat(reassessed.requirementChange().adjustmentDelta())
+                .as("the Assess response itself has to carry the standing charge")
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
+
+        // And the same figure on a fresh read, so the two paths cannot disagree about a
+        // sprint nothing has happened to in between.
+        assertThat(riskService.latest(sprint.id()).requirementChange().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
+    }
+
+    @Test
+    @DisplayName("withdrawing that change gives the points back, across an assessment")
+    void withdrawingAChangeReversesItAcrossAssess() {
+        ProjectResponse project = newProject("Mobile Banking");
+        SprintResponse sprint = newSprintWithWork(project.id());
+        riskService.assess(sprint.id());
+
+        RequirementChangeResponse logged = requirementChangeService.log(project.id(),
+                new LogRequirementChangeRequest(RequirementChangeType.SCOPE_ADDED,
+                        ChangeImpactDirection.INCREASE, sprint.id(), null, null,
+                        "A second payment provider", null, "Product owner"));
+
+        riskService.assess(sprint.id());
+        requirementChangeService.delete(logged.id());
+
+        // The reversal is standing too. If it expired at the cutoff while the charge it
+        // reverses stood, withdrawing a change would leave the sprint paying for it for
+        // the rest of the sprint.
+        assertThat(riskService.assess(sprint.id()).requirementChange().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("board evidence is still folded into the model's own figure")
+    void boardReadingsAreStillAbsorbed() {
+        ProjectResponse project = newProject("Mobile Banking");
+        SprintResponse sprint = newSprintWithWork(project.id());
+        riskService.assess(sprint.id());
+
+        // The counterpart risk: if everything survived scoring, a blocked task would be
+        // charged twice — once by the model that read it in blocked_count, and again by
+        // an overlay that refused to clear.
+        adjustmentService.record(sprint.id(), RiskType.OVER_BUDGET,
+                BigDecimal.valueOf(8), "Task blocked: MBA-1");
+        assertThat(riskService.latest(sprint.id()).overBudget().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
+
+        assertThat(riskService.assess(sprint.id()).overBudget().adjustmentDelta())
+                .as("a blocked task is in the features, so re-scoring absorbs the overlay")
+                .isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test

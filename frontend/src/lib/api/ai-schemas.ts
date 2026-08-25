@@ -155,6 +155,15 @@ export const riskAdjustmentSchema = z.object({
    * honestly promise the number will move.
    */
   resolvable: z.boolean().default(false),
+  /**
+   * Whether re-scoring absorbs this entry or it keeps counting.
+   *
+   * <p>Board state — a blocked task, a reopen — is folded into the model's own figure by
+   * the next assessment. A logged requirement change is in no feature vector, so it
+   * stands. Shown, because "this one survives Assess" is the difference between a number
+   * somebody trusts and one they think reverted.</p>
+   */
+  survivesScoring: z.boolean().default(false),
 });
 export type RiskAdjustment = z.infer<typeof riskAdjustmentSchema>;
 

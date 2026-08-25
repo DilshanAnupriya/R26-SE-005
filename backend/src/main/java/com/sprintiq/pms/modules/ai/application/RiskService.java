@@ -79,11 +79,18 @@ public class RiskService {
         ProjectContextSource.ProjectContext project = projects.contextFor(sprint.projectId());
         FeatureVector shared = sharedFeatures(sprint, project);
 
-        Scored overBudget = assessOne(RiskType.OVER_BUDGET, sprint, project, shared);
+        // Re-scoring does not empty the ledger — it moves the cutoff, and the entries a
+        // scoring cannot absorb go on counting past it. So the response has to carry the
+        // overlay exactly as `latest` does. Reporting a bare model score here was why
+        // pressing Assess appeared to undo a logged requirement change: the number the
+        // client cached was right about the model and silent about the register.
+        SprintRiskAdjustmentService.Ledger ledger = adjustmentService.ledgerFor(sprintId);
+
+        Scored overBudget = assessOne(RiskType.OVER_BUDGET, sprint, project, shared, ledger);
         Scored requirementChange =
-                assessOne(RiskType.REQUIREMENT_CHANGE, sprint, project, shared);
+                assessOne(RiskType.REQUIREMENT_CHANGE, sprint, project, shared, ledger);
         Scored communicationCollaboration =
-                assessOne(RiskType.COMMUNICATION_COLLABORATION, sprint, project, shared);
+                assessOne(RiskType.COMMUNICATION_COLLABORATION, sprint, project, shared, ledger);
 
         RiskAssessmentResponse ob = overBudget == null ? null : overBudget.response();
         RiskAssessmentResponse rc = requirementChange == null ? null : requirementChange.response();
@@ -99,7 +106,8 @@ public class RiskService {
     public RiskAssessmentResponse assess(UUID sprintId, RiskType riskType) {
         SprintFeatureSource.SprintFeatures sprint = sprints.featuresFor(sprintId);
         ProjectContextSource.ProjectContext project = projects.contextFor(sprint.projectId());
-        Scored scored = assessOne(riskType, sprint, project, sharedFeatures(sprint, project));
+        Scored scored = assessOne(riskType, sprint, project, sharedFeatures(sprint, project),
+                adjustmentService.ledgerFor(sprintId));
         return scored == null ? null : scored.response();
     }
 
@@ -443,7 +451,8 @@ public class RiskService {
     private Scored assessOne(RiskType riskType,
                              SprintFeatureSource.SprintFeatures sprint,
                              ProjectContextSource.ProjectContext project,
-                             FeatureVector features) {
+                             FeatureVector features,
+                             SprintRiskAdjustmentService.Ledger ledger) {
         // A fresh copy per model. Both risk types are assessed from the same shared
         // vector in one call, so mutating it in place would hand the second model the
         // first one's columns — and since the feature hash is the cache key, the
@@ -504,7 +513,15 @@ public class RiskService {
                 .build();
         assessment.setOrganizationId(TenantContext.requireOrganizationId());
 
-        return new Scored(RiskAssessmentResponse.from(assessments.save(assessment)),
+        RiskAssessment saved = assessments.save(assessment);
+
+        // Measured against the scoring that has just been written, so everything the
+        // model absorbed falls behind the cutoff and nets to nothing — while the entries
+        // no scoring can absorb keep counting. `createdAt` is set by the auditing
+        // listener on persist, so it is already populated here.
+        BigDecimal overlay = ledger.netSince(riskType, saved.getCreatedAt());
+
+        return new Scored(RiskAssessmentResponse.from(saved, overlay),
                 prediction.getStatus() == PredictionStatus.DEGRADED);
     }
 
