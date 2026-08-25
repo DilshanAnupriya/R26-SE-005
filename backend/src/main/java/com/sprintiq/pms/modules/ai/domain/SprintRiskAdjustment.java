@@ -59,4 +59,22 @@ public class SprintRiskAdjustment extends TenantAwareEntity {
      */
     @Column(name = "source_key", length = 120, updatable = false)
     private String sourceKey;
+
+    /**
+     * Whether a re-scoring can absorb this entry, or has to keep paying it.
+     *
+     * <p>Most of the ledger is board state the models re-read on every assessment: a
+     * blocked task is in {@code blocked_count}, a reopen is in the rework columns. For
+     * those, folding the overlay into the model's own figure is exactly right, and
+     * {@code false} is the correct default.</p>
+     *
+     * <p>The requirement-change register is the exception, and not by oversight. A
+     * logged change is a historical fact about a sprint that no feature vector carries —
+     * the models read requirement churn off the requirements table, and a project that
+     * tracks its work as stories has none. Discarding those charges at the next Assess
+     * left the register describing churn the score denied.</p>
+     */
+    @Builder.Default
+    @Column(name = "survives_scoring", nullable = false)
+    private boolean survivesScoring = false;
 }

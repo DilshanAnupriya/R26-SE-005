@@ -55,6 +55,30 @@ public class SprintRiskAdjustmentService {
     }
 
     /**
+     * Records an event that no re-scoring can absorb.
+     *
+     * <p>Same as {@link #record}, except the entry keeps counting past the next
+     * assessment's cutoff. For that to be the right call, the evidence behind it has to
+     * be something the models genuinely cannot re-read — the requirement-change register
+     * is the case this exists for, because a logged change lives only in that register
+     * and no feature vector carries it.</p>
+     *
+     * <p>Not the default, and it should stay rare. Anything the features <em>do</em> see
+     * — a blocked task, a reopen, a silent day — must go through {@code record} instead,
+     * or the sprint is charged twice for it: once by the model that read it, and again
+     * by an overlay entry that refuses to clear.</p>
+     */
+    @Transactional
+    public void recordStanding(UUID sprintId, RiskType riskType, BigDecimal delta, String reason) {
+        if (sprintId == null || delta == null || delta.signum() == 0) {
+            return;
+        }
+        SprintRiskAdjustment adjustment = build(sprintId, riskType, delta, reason, null);
+        adjustment.setSurvivesScoring(true);
+        adjustments.save(adjustment);
+    }
+
+    /**
      * Records a state, revising the existing reading rather than adding to it.
      *
      * <p>A task reopened six times is one task with a worse reading. Appending would
@@ -204,6 +228,14 @@ public class SprintRiskAdjustmentService {
             BigDecimal total = BigDecimal.ZERO;
             for (SprintRiskAdjustment entry : entries) {
                 if (entry.getRiskType() != riskType) {
+                    continue;
+                }
+                // Entries the models cannot re-read ignore the cutoff entirely. Without
+                // this, "Assess" was destructive for the requirement-change register: it
+                // cleared the charge on the premise the model had absorbed the change,
+                // and no feature the model reads represents a logged change at all.
+                if (entry.isSurvivesScoring()) {
+                    total = total.add(entry.getDelta());
                     continue;
                 }
                 if (since != null && !entry.getCreatedAt().isAfter(since)) {

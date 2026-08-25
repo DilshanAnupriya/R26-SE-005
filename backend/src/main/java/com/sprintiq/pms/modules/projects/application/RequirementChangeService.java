@@ -129,7 +129,11 @@ public class RequirementChangeService {
         // Only a sprint in flight is charged. A change logged with no sprint attached is
         // planning, and charging the next sprint for it would make every sprint start
         // in debt for decisions taken before it existed.
-        adjustments.record(request.sprintId(), RiskType.REQUIREMENT_CHANGE, delta, type.reason(direction));
+        // Standing, not absorbable. Scope added on the ninth is a fact about this sprint
+        // for the rest of its life, and no feature vector carries it — the models read
+        // churn off the requirements table, which a story-driven project leaves empty.
+        adjustments.recordStanding(request.sprintId(), RiskType.REQUIREMENT_CHANGE,
+                delta, type.reason(direction));
 
         activityService.recordCreated(
                 ActivityService.Target.of(EntityType.REQUIREMENT, change.getId(),
@@ -150,7 +154,9 @@ public class RequirementChangeService {
         // would make the ledger unauditable: a sprint carrying points for a change
         // nobody can find is exactly the kind of unexplained number that gets the whole
         // risk figure ignored.
-        adjustments.record(change.getSprintId(), RiskType.REQUIREMENT_CHANGE,
+        // Standing too, and necessarily: it has to outlive the charge it reverses, or a
+        // withdrawal made after an assessment would clear while the original kept paying.
+        adjustments.recordStanding(change.getSprintId(), RiskType.REQUIREMENT_CHANGE,
                 change.getRiskDelta().negate(),
                 "Requirement change withdrawn: %s".formatted(change.getChangeType()));
 

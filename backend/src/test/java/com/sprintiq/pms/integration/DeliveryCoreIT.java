@@ -14,6 +14,7 @@ import com.sprintiq.pms.modules.organizations.domain.Organization;
 import com.sprintiq.pms.modules.organizations.domain.WorkspaceRepository;
 import com.sprintiq.pms.modules.projects.application.ProjectService;
 import com.sprintiq.pms.modules.projects.application.WorkflowStateService;
+import com.sprintiq.pms.modules.projects.domain.WorkflowCategory;
 import com.sprintiq.pms.modules.projects.web.dto.ProjectDtos.*;
 import com.sprintiq.pms.modules.sprints.application.SprintService;
 import com.sprintiq.pms.modules.sprints.domain.SprintStatus;
@@ -128,7 +129,16 @@ class DeliveryCoreIT extends AbstractIntegrationTest {
 
         List<WorkflowStateResponse> states = workflowStateService.list(project.id());
         assertThat(states).extracting(WorkflowStateResponse::code)
-                .containsExactly("TODO", "IN_PROGRESS", "IN_REVIEW", "DONE");
+                .containsExactly("TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED");
+
+        // Blocked sits last on the board but is not a DONE category, and the distinction
+        // is load-bearing: the burndown, the completed-points sum and every story rollup
+        // read the category rather than the position. A blocked card is work that has
+        // stopped, not work that is finished.
+        assertThat(states).filteredOn(state -> "BLOCKED".equals(state.code()))
+                .singleElement()
+                .extracting(WorkflowStateResponse::category)
+                .isEqualTo(WorkflowCategory.IN_PROGRESS);
     }
 
     @Test

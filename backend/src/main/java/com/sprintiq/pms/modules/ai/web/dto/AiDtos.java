@@ -287,13 +287,27 @@ public final class AiDtos {
                                           * asked to fix something — it says whether doing
                                           * so will actually move the number.
                                           */
-                                         boolean resolvable) {
+                                         boolean resolvable,
+                                         /**
+                                          * Whether re-scoring folds this away or it keeps
+                                          * counting.
+                                          *
+                                          * <p>Most entries are board state the models
+                                          * re-read, so pressing Assess absorbs them. A
+                                          * logged requirement change is not in any feature
+                                          * vector, so it stands. The panel says which,
+                                          * because "this one will survive Assess" is the
+                                          * difference between a number somebody trusts and
+                                          * one they think is broken.</p>
+                                          */
+                                         boolean survivesScoring) {
 
         public static RiskAdjustmentResponse from(SprintRiskAdjustment adjustment) {
             String sourceKey = adjustment.getSourceKey();
             return new RiskAdjustmentResponse(adjustment.getId(), adjustment.getSprintId(),
                     adjustment.getRiskType(), adjustment.getDelta(), adjustment.getReason(),
-                    adjustment.getCreatedAt(), sourceKey, codeOf(sourceKey), sourceKey != null);
+                    adjustment.getCreatedAt(), sourceKey, codeOf(sourceKey), sourceKey != null,
+                    adjustment.isSurvivesScoring());
         }
 
         private static String codeOf(String sourceKey) {

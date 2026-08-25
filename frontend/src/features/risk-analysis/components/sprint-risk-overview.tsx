@@ -315,7 +315,20 @@ function AdjustmentLedger({ adjustments }: { adjustments: RiskAdjustment[] }) {
                 {adjustment.delta > 0 ? "+" : ""}
                 {adjustment.delta}
               </span>
-              <span className="min-w-0 flex-1 text-sm">{adjustment.reason}</span>
+              <span className="min-w-0 flex-1 text-sm">
+                {adjustment.reason}
+                {adjustment.survivesScoring ? (
+                  /*
+                    Said out loud, because the two kinds of entry behave differently and
+                    the difference is the thing people were confused by. A board reading
+                    is folded into the model's own figure by the next Assess; a logged
+                    requirement change is in no feature vector and keeps counting.
+                  */
+                  <span className="ml-2 rounded bg-surface-3 px-1.5 py-0.5 text-[11px] font-medium text-ink-3">
+                    stands after Assess
+                  </span>
+                ) : null}
+              </span>
               <span className="shrink-0 text-xs text-ink-3">{formatWhen(adjustment.createdAt)}</span>
             </li>
           ))}
@@ -324,7 +337,9 @@ function AdjustmentLedger({ adjustments }: { adjustments: RiskAdjustment[] }) {
       <p className="flex items-start gap-1.5 border-t border-line px-4 py-2 text-xs text-ink-3">
         <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden />
         Points are an agreed ranking of how much each event disturbs a plan, not a measured
-        quantity. Re-assessing folds them into the model&rsquo;s own figure and starts this list again.
+        quantity. Re-assessing folds the board readings into the model&rsquo;s own figure and
+        starts them again; entries marked <em>stands after Assess</em> keep counting, because
+        nothing the models read represents them.
       </p>
     </Card>
   );
