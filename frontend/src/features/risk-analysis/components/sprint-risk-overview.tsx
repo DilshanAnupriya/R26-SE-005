@@ -4,32 +4,9 @@ import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/design/surfaces";
 import type { RiskAdjustment, RiskAssessment, SprintRisk } from "@/lib/api/ai-schemas";
+import { RISK_MODELS, WEIGHT_LABEL } from "../risk-models";
 import { asPercent, RiskGauge, SeverityBadge } from "./risk-gauge";
-
-/** The weight keys as the aggregate names them, in the words the panels already use. */
-const WEIGHT_LABEL: Record<string, string> = {
-  overBudget: "Over-budget",
-  requirementChange: "Requirement change",
-  communicationCollaboration: "Collaboration",
-};
-
-const MODELS = [
-  {
-    key: "overBudget",
-    title: "Over-budget",
-    question: "Will this sprint cost more effort than it was given?",
-  },
-  {
-    key: "requirementChange",
-    title: "Requirement change",
-    question: "Are the requirements behind this sprint still moving?",
-  },
-  {
-    key: "communicationCollaboration",
-    title: "Collaboration",
-    question: "Is the team still coordinating — replies, discussion, blockers, rework?",
-  },
-] as const;
+import { RiskExplanations } from "./risk-explanations";
 
 function formatWhen(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -40,12 +17,15 @@ function formatWhen(iso: string | null | undefined): string {
 }
 
 /**
- * The three gauges, plus the ledger of what has happened since they were last scored.
+ * The three gauges, the reasons behind them, and the ledger of what has happened since
+ * they were last scored.
  *
- * <p>Both halves are shown because either alone misleads. The gauge without the ledger
- * is a number nobody can argue with; the ledger without the gauge is a list of events
- * with no verdict. Together they say "78%, and here are the eleven points of that which
- * arrived this morning" — which is the only form of this screen a team will act on.</p>
+ * <p>All three are shown because any one alone misleads. The gauge without the ledger is
+ * a number nobody can argue with; the ledger without the gauge is a list of events with
+ * no verdict; and either without the readings underneath is a verdict with no grounds.
+ * Together they say "78%, here is what the model weighed to get there, and here are the
+ * eleven points of it that arrived this morning" — which is the only form of this screen
+ * a team will act on.</p>
  */
 export function SprintRiskOverview({
   risk,
@@ -60,7 +40,7 @@ export function SprintRiskOverview({
   onAssess?: () => void;
   assessing?: boolean;
 }) {
-  const anyScored = MODELS.some((model) => risk?.[model.key] != null);
+  const anyScored = RISK_MODELS.some((model) => risk?.[model.key] != null);
 
   return (
     <div className="space-y-4">
@@ -88,7 +68,7 @@ export function SprintRiskOverview({
           <>
             <div className="h-50 animate-pulse border-b border-line bg-surface-3" />
             <div className="grid gap-4 p-4 sm:grid-cols-3">
-              {MODELS.map((model) => (
+              {RISK_MODELS.map((model) => (
                 <div key={model.key} className="h-56 animate-pulse rounded-xl bg-surface-3" />
               ))}
             </div>
@@ -97,7 +77,7 @@ export function SprintRiskOverview({
           <>
             <OverallBand risk={risk} scored={anyScored} />
             <div className="grid gap-4 p-4 sm:grid-cols-3">
-              {MODELS.map((model) => (
+              {RISK_MODELS.map((model) => (
                 <ModelPanel
                   key={model.key}
                   title={model.title}
@@ -109,6 +89,8 @@ export function SprintRiskOverview({
           </>
         )}
       </Card>
+
+      <RiskExplanations risk={risk} loading={loading} />
 
       <AdjustmentLedger adjustments={adjustments ?? []} />
     </div>
@@ -137,7 +119,7 @@ function OverallBand({ risk, scored }: { risk?: SprintRisk; scored: boolean }) {
   const level = overall?.level ?? null;
   const highest = risk?.highestSeverity ?? null;
   const contributing = Object.entries(overall?.weights ?? {}).filter(([, weight]) => weight > 0);
-  const missing = MODELS.length - contributing.length;
+  const missing = RISK_MODELS.length - contributing.length;
 
   return (
     <section
