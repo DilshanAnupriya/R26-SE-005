@@ -1,7 +1,7 @@
 package com.sprintiq.pms.modules.ai.application;
 
 import com.sprintiq.pms.common.error.BusinessRuleException;
-import com.sprintiq.pms.modules.ai.domain.PredictionDriver;
+import com.sprintiq.pms.modules.ai.application.RiskRecourseLevers.Action;
 import com.sprintiq.pms.modules.ai.domain.RiskAssessment;
 import com.sprintiq.pms.modules.ai.domain.RiskAssessmentRepository;
 import com.sprintiq.pms.modules.ai.domain.RiskType;
@@ -24,13 +24,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * What the fix list offers, what it is worth, and what ticking one does.
+ * What the panel does with what the search found.
  *
- * <p>Three properties carry the feature and each is easy to break by tuning something
- * that looks unrelated: the steps belong to the drivers the model actually reported, the
- * points are a share of the model's own figure rather than a number the client chose,
- * and completing a step lands in the ledger as a negative entry — which is the only
- * reason the gauge moves.</p>
+ * <p>The search decides what the steps are and what they are worth
+ * ({@link RiskRecourseSearchTest}); this is the half that remembers which of them a team
+ * has claimed and turns a claim into a number on the gauge. Three properties carry it:
+ * the points reach the ledger as a credit rather than a charge, a claim expires when the
+ * sprint is re-assessed, and a step nobody offered cannot be claimed at all.</p>
  *
  * <p>Hand-written fakes rather than mocks, following {@code TaskReopenRiskTest}: the
  * assertions want the arguments themselves, and it keeps the test off the inline mock
@@ -43,24 +43,17 @@ class RiskRemediationServiceTest {
     private static final Instant SCORED_AT = Instant.parse("2026-08-25T09:00:00Z");
 
     private Ledger ledger;
-    private RiskAssessment assessment;
     private RiskRemediationService service;
 
     @BeforeEach
     void setUp() {
-        // 130% of velocity, four blocked tasks, and a team size nothing can change this
-        // week — deliberately one driver of each kind the panel has to handle.
-        assessment = assessment(BigDecimal.valueOf(0.80), List.of(
-                PredictionDriver.up("commitment_ratio", "Commitment vs velocity",
-                        BigDecimal.valueOf(1.2), "Committed 130% of what the team usually delivers"),
-                PredictionDriver.up("blocked_count", "Blocked work",
-                        BigDecimal.valueOf(0.6), "4 items blocked"),
-                PredictionDriver.up("team_size", "Team size",
-                        BigDecimal.valueOf(0.2), "3 people"),
-                PredictionDriver.down("velocity_trend", "Velocity trend",
-                        BigDecimal.valueOf(0.4), "rising")));
         ledger = new Ledger();
-        service = new RiskRemediationService(repositoryReturning(assessment), ledger);
+        service = new RiskRemediationService(
+                repositoryReturning(assessment()), ledger,
+                searchReturning(
+                        recourse("committed_story_points", "the commitment", "34", "22",
+                                0.80, 0.68),
+                        recourse("blocked_count", "blocked items", "4", "1", 0.80, 0.74)));
     }
 
     private List<RiskRemediationStepResponse> steps() {
@@ -70,103 +63,83 @@ class RiskRemediationServiceTest {
     }
 
     @Test
-    @DisplayName("offers steps only for the drivers a sprint can actually move")
-    void onlyForActionableDrivers() {
-        List<String> features = steps().stream()
-                .map(RiskRemediationStepResponse::driverFeature).distinct().toList();
+    @DisplayName("passes the search's measurement through untouched")
+    void reportsWhatTheModelMeasured() {
+        RiskRemediationStepResponse step = find(steps(), "committed_story_points");
 
-        assertThat(features).containsExactly("commitment_ratio", "blocked_count");
-        // team_size raises the score and has no remedy; velocity_trend lowers it and needs
-        // none. Offering either would be advice the model never asked for.
-        assertThat(features).doesNotContain("team_size", "velocity_trend");
-    }
-
-    @Test
-    @DisplayName("the strongest driver carries the most relief, and never more than its share")
-    void pointsFollowTheExplanation() {
-        List<RiskRemediationStepResponse> steps = steps();
-
-        BigDecimal commitment = totalFor(steps, "commitment_ratio");
-        BigDecimal blocked = totalFor(steps, "blocked_count");
-        assertThat(commitment).isGreaterThan(blocked);
-
-        // Half of an 80% score is 40 points to share out. commitment_ratio is 1.2 of the
-        // 2.0 raising mass, so 24 of them; blocked_count 0.6, so 12. The 0.2 sitting on
-        // team_size stays with team_size rather than being redistributed onto the two
-        // drivers a checklist can reach.
-        assertThat(commitment.intValue()).isEqualTo(24);
-        assertThat(blocked.intValue()).isEqualTo(12);
-
-        BigDecimal everything = steps.stream().map(RiskRemediationStepResponse::points)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        assertThat(everything.doubleValue()).isLessThan(0.80 * 100);
+        assertThat(step.title()).isEqualTo("Reduce the commitment from 34 to 22 points");
+        assertThat(step.currentValue()).isEqualTo("34");
+        assertThat(step.targetValue()).isEqualTo("22");
+        // 0.80 → 0.68 is twelve points of probability, and twelve ledger points. Nothing
+        // in this service apportions or rescales it.
+        assertThat(step.points()).isEqualByComparingTo(BigDecimal.valueOf(12));
+        assertThat(step.baselineScore()).isEqualByComparingTo(BigDecimal.valueOf(0.80));
+        assertThat(step.projectedScore()).isEqualByComparingTo(BigDecimal.valueOf(0.68));
     }
 
     @Test
     @DisplayName("completing a step credits the ledger against that risk")
     void completingCreditsTheLedger() {
-        RiskRemediationStepResponse step = steps().get(0);
-
-        service.toggle(SPRINT, RiskType.OVER_BUDGET, step.stepKey(), true);
+        service.toggle(SPRINT, RiskType.OVER_BUDGET, "committed_story_points", true);
 
         assertThat(ledger.written).hasSize(1);
         Entry entry = ledger.written.get(0);
         assertThat(entry.riskType()).isEqualTo(RiskType.OVER_BUDGET);
         // Negative: the ledger charges a sprint for a blocked task and refunds it here,
         // in the same units, on the same audit trail.
-        assertThat(entry.delta()).isEqualByComparingTo(step.points().negate());
-        assertThat(entry.sourceKey()).isEqualTo("STEP:OVER_BUDGET:" + step.stepKey());
-        assertThat(entry.reason()).contains(step.title());
+        assertThat(entry.delta()).isEqualByComparingTo(BigDecimal.valueOf(-12));
+        assertThat(entry.sourceKey()).isEqualTo("STEP:OVER_BUDGET:committed_story_points");
+        assertThat(entry.reason()).contains("Reduce the commitment from 34 to 22");
     }
 
     @Test
     @DisplayName("a completed step reads as done, and unticking withdraws it")
     void doneStateFollowsTheLedger() {
-        RiskRemediationStepResponse step = steps().get(0);
-        ledger.standing(step.stepKey(), SCORED_AT.plusSeconds(60));
+        ledger.standing("committed_story_points", SCORED_AT.plusSeconds(60));
 
-        assertThat(find(steps(), step.stepKey()).done()).isTrue();
+        assertThat(find(steps(), "committed_story_points").done()).isTrue();
+        assertThat(find(steps(), "blocked_count").done()).isFalse();
 
-        service.toggle(SPRINT, RiskType.OVER_BUDGET, step.stepKey(), false);
-        assertThat(ledger.cleared).containsExactly("STEP:OVER_BUDGET:" + step.stepKey());
+        service.toggle(SPRINT, RiskType.OVER_BUDGET, "committed_story_points", false);
+        assertThat(ledger.cleared).containsExactly("STEP:OVER_BUDGET:committed_story_points");
     }
 
     @Test
     @DisplayName("a step ticked before the last scoring no longer counts as done")
     void creditExpiresAtTheNextAssessment() {
-        RiskRemediationStepResponse step = steps().get(0);
         // Claimed, then the sprint was re-assessed: the model has since read the board
         // and measured whatever the step achieved, so the provisional credit is spent.
-        ledger.standing(step.stepKey(), SCORED_AT.minus(Duration.ofHours(2)));
+        ledger.standing("committed_story_points", SCORED_AT.minus(Duration.ofHours(2)));
 
-        assertThat(find(steps(), step.stepKey()).done()).isFalse();
+        assertThat(find(steps(), "committed_story_points").done()).isFalse();
     }
 
     @Test
-    @DisplayName("refuses a step the sprint is not currently offering")
+    @DisplayName("refuses a step the model is not currently offering")
     void rejectsUnknownSteps() {
-        assertThatThrownBy(() ->
-                service.toggle(SPRINT, RiskType.OVER_BUDGET, "team_size:hire-someone", true))
+        assertThatThrownBy(() -> service.toggle(SPRINT, RiskType.OVER_BUDGET, "team_size", true))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("team_size:hire-someone");
+                .hasMessageContaining("team_size");
         assertThat(ledger.written).isEmpty();
     }
 
     @Test
     @DisplayName("an unassessed sprint offers nothing")
     void nothingWithoutAnAssessment() {
-        RiskRemediationService bare =
-                new RiskRemediationService(repositoryReturning(null), new Ledger());
+        RiskRemediationService bare = new RiskRemediationService(
+                repositoryReturning(null), new Ledger(), searchReturning());
         assertThat(bare.stepsFor(SPRINT)).isEmpty();
     }
 
-    // ------------------------------------------------------------------- fixtures
-
-    private static BigDecimal totalFor(List<RiskRemediationStepResponse> steps, String feature) {
-        return steps.stream().filter(step -> step.driverFeature().equals(feature))
-                .map(RiskRemediationStepResponse::points)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    @Test
+    @DisplayName("a sprint whose model rewards nothing offers nothing")
+    void nothingWhenTheModelDeclines() {
+        RiskRemediationService quiet = new RiskRemediationService(
+                repositoryReturning(assessment()), new Ledger(), searchReturning());
+        assertThat(quiet.stepsFor(SPRINT)).isEmpty();
     }
+
+    // ------------------------------------------------------------------- fixtures
 
     private static RiskRemediationStepResponse find(List<RiskRemediationStepResponse> steps,
                                                     String stepKey) {
@@ -174,12 +147,32 @@ class RiskRemediationServiceTest {
                 .orElseThrow(() -> new AssertionError("No step " + stepKey));
     }
 
-    private static RiskAssessment assessment(BigDecimal score, List<PredictionDriver> drivers) {
+    private static RiskRecourseSearch.Recourse recourse(String feature, String noun,
+                                                        String current, String target,
+                                                        double baseline, double projected) {
+        return new RiskRecourseSearch.Recourse(feature, noun, Action.REDUCE, noun,
+                feature.equals("committed_story_points") ? "points" : "",
+                current, target,
+                BigDecimal.valueOf(baseline), BigDecimal.valueOf(projected),
+                BigDecimal.valueOf((baseline - projected) * 100).setScale(2, java.math.RoundingMode.HALF_UP));
+    }
+
+    /** The search, as a fixed set of findings. */
+    private static RiskRecourseSearch searchReturning(RiskRecourseSearch.Recourse... found) {
+        return new RiskRecourseSearch(null, null) {
+            @Override
+            public List<RiskRecourseSearch.Recourse> search(RiskAssessment assessment) {
+                return List.of(found);
+            }
+        };
+    }
+
+    private static RiskAssessment assessment() {
         RiskAssessment assessment = RiskAssessment.builder()
                 .sprintId(SPRINT)
                 .riskType(RiskType.OVER_BUDGET)
-                .riskScore(score)
-                .drivers(new ArrayList<>(drivers))
+                .riskScore(BigDecimal.valueOf(0.80))
+                .drivers(new ArrayList<>())
                 .build();
         assessment.setCreatedAt(SCORED_AT);
         return assessment;
@@ -227,7 +220,7 @@ class RiskRemediationServiceTest {
             SprintRiskAdjustment entry = SprintRiskAdjustment.builder()
                     .sprintId(SPRINT)
                     .riskType(RiskType.OVER_BUDGET)
-                    .delta(BigDecimal.valueOf(-5))
+                    .delta(BigDecimal.valueOf(-12))
                     .reason("Fix applied")
                     .sourceKey("STEP:OVER_BUDGET:" + stepKey)
                     .build();

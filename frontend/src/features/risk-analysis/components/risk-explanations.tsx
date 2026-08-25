@@ -285,9 +285,11 @@ function RiskExplanation({
               <Info className="mt-px size-3 shrink-0" aria-hidden />
               Each bar is drawn against the strongest reading in this list, and the arrow says
               which way that reading pushed. The sizes explain this score against this model only
-              — they do not compare across the three tabs. Ticking a step takes its points off
-              the score straight away; the next assessment re-reads the board and replaces that
-              estimate with what the step actually achieved.
+              — they do not compare across the three tabs. A step&rsquo;s points are the fall the
+              model itself reports when that reading is moved to the stated value, so a reading
+              with no step is one the model does not reward changing. Ticking takes the points
+              off straight away; the next assessment re-reads the board and replaces the
+              projection with what the change actually achieved.
             </p>
           </>
         )}
@@ -394,8 +396,8 @@ function DriverRow({
           under a reading that is already helping would read as a complaint about it.
         */
         <p className="mt-1.5 ml-6 text-[11px] leading-relaxed text-ink-3">
-          Nothing on a checklist changes this one inside the sprint — it is a fact about the
-          team or the project that the model is reading, not a task.
+          No step here: either the sprint cannot move this reading — effort already spent, a
+          fact about the team — or the model was asked and moving it did not lower the score.
         </p>
       ) : null}
     </li>
@@ -459,13 +461,36 @@ function StepRow({
             >
               {step.done ? `−${points} pts applied` : `−${points} pts`}
             </span>
+            {step.baselineScore != null && step.projectedScore != null ? (
+              /*
+                The measurement itself, on the row. The points beside it are this
+                subtraction — showing where they came from is what separates a figure
+                the model produced from one the interface asserted.
+              */
+              <span className="shrink-0 text-[10px] text-ink-3 tabular-nums">
+                model: {asPercent(step.baselineScore)}% &rarr; {asPercent(step.projectedScore)}%
+              </span>
+            ) : null}
             {busy ? <Loader2 className="size-3 animate-spin text-ink-3" aria-hidden /> : null}
             {step.done && !busy ? (
               <Check className="size-3 shrink-0 text-green" aria-hidden />
             ) : null}
           </span>
-          <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-3">
-            {step.detail}
+          {/*
+            The method, where one is written, and the model's own sentence where it is
+            not. Never both: the measurement is already on the row as "53% → 35%" and the
+            points beside it, so repeating it in prose would push the useful half — how
+            to actually go about this — below the fold of a dense list.
+          */}
+          <span className="mt-1 block text-[11px] leading-relaxed text-ink-2">
+            {step.how ? (
+              <>
+                <span className="font-semibold text-ink-3">How: </span>
+                {step.how}
+              </>
+            ) : (
+              <span className="text-ink-3">{step.detail}</span>
+            )}
           </span>
         </span>
       </label>
@@ -504,7 +529,7 @@ function StepProgress({ steps }: { steps: RiskRemediationStep[] }) {
       <span className="text-ink-3">
         {applied > 0
           ? "Held until the next assessment measures what the steps actually achieved."
-          : "Tick a step below and the score moves straight away."}
+          : "Each step below is priced by re-running the model with that one reading moved."}
       </span>
     </div>
   );
