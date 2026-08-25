@@ -6,6 +6,7 @@ import com.sprintiq.pms.common.web.ApiConstants;
 import com.sprintiq.pms.common.web.PageQuery;
 import com.sprintiq.pms.common.web.PageResponse;
 import com.sprintiq.pms.modules.backlog.application.DependencyService;
+import com.sprintiq.pms.modules.backlog.application.StoryRequirementChangeService;
 import com.sprintiq.pms.modules.backlog.application.StoryService;
 import com.sprintiq.pms.modules.backlog.domain.StoryStatus;
 import com.sprintiq.pms.modules.backlog.domain.StoryType;
@@ -33,6 +34,7 @@ public class StoryController {
 
     private final StoryService storyService;
     private final DependencyService dependencyService;
+    private final StoryRequirementChangeService requirementChanges;
 
     @Operation(summary = "Search stories")
     @PreAuthorize("@perm.has('backlog:read')")
@@ -103,6 +105,21 @@ public class StoryController {
     public StoryResponse estimate(@PathVariable UUID storyId,
                                   @Valid @RequestBody EstimateStoryRequest request) {
         return storyService.estimate(storyId, request);
+    }
+
+    @Operation(summary = "Change a requirement on a story, and log it",
+            description = "Edits the one field the change type describes and records it in the "
+                    + "requirement-change register in the same transaction, so the register "
+                    + "cannot describe an edit nobody made. Which way the sprint's "
+                    + "requirement-change risk moves is derived from the edit — a raised "
+                    + "priority, more acceptance criteria or a longer description read as "
+                    + "harder; the reverse reads as easier — rather than being asked for. An "
+                    + "edit that changes nothing is refused.")
+    @PreAuthorize("@perm.has('backlog:manage')")
+    @PostMapping("/{storyId}/requirement-change")
+    public StoryChangeResponse applyRequirementChange(
+            @PathVariable UUID storyId, @Valid @RequestBody ApplyStoryChangeRequest request) {
+        return requirementChanges.apply(storyId, request);
     }
 
     @Operation(summary = "Flag a story as blocked")

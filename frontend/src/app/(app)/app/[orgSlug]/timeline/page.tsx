@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Info } from "lucide-react";
+import { FilePen, Info } from "lucide-react";
 import { Card } from "@/components/design/surfaces";
 import { Avatar } from "@/components/design/item-chrome";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LogStoryChangeDialog } from "@/features/backlog/components/log-story-change-dialog";
 import { useProjects } from "@/features/projects/hooks";
 import { useTimeline } from "@/features/timeline/hooks";
 import {
@@ -25,7 +26,14 @@ import {
 } from "@/features/timeline/api";
 import { cn } from "@/lib/utils";
 
-const LABEL_WIDTH = 240;
+/**
+ * The label column, widened by exactly what the log-change button takes.
+ *
+ * <p>It was 240 before that button existed. Leaving it there would have paid for the
+ * button out of the story titles, which are the thing the column is for — and on a
+ * timeline the titles are already the first thing to truncate.</p>
+ */
+const LABEL_WIDTH = 268;
 
 export default function TimelinePage() {
   const projects = useProjects();
@@ -93,6 +101,11 @@ function Chart({ timeline }: { timeline: Timeline }) {
   const nowLeft = todayOffset(timeline.today, timeline.from, timeline.to);
   const trackWidth = Math.max(640, timeline.weeks.length * 86);
 
+  // One dialog for the whole chart rather than one per row. A timeline can carry a
+  // hundred stories, and mounting a hundred closed dialogs to open one is a lot of
+  // React for a form nobody has asked for yet.
+  const [changing, setChanging] = useState<string | undefined>();
+
   return (
     <div className="min-h-0 flex-1 overflow-auto px-1 pb-10">
       <div style={{ minWidth: LABEL_WIDTH + trackWidth }}>
@@ -125,9 +138,9 @@ function Chart({ timeline }: { timeline: Timeline }) {
 
           {timeline.groups.map((group, index) => (
             <div key={group.bar.id ?? `orphans-${index}`} className="mb-4">
-              <Row bar={group.bar} timeline={timeline} isGroup />
+              <Row bar={group.bar} timeline={timeline} isGroup onLogChange={setChanging} />
               {group.rows.map((row) => (
-                <Row key={row.id} bar={row} timeline={timeline} />
+                <Row key={row.id} bar={row} timeline={timeline} onLogChange={setChanging} />
               ))}
             </div>
           ))}
@@ -140,6 +153,14 @@ function Chart({ timeline }: { timeline: Timeline }) {
             </div>
           ) : null}
         </div>
+
+        <LogStoryChangeDialog
+          storyId={changing}
+          open={changing !== undefined}
+          onOpenChange={(open) => {
+            if (!open) setChanging(undefined);
+          }}
+        />
 
         {timeline.undatedCount > 0 ? (
           <p className="mt-4 flex items-center gap-1.5 text-sm text-ink-3">
@@ -158,10 +179,12 @@ function Row({
   bar,
   timeline,
   isGroup = false,
+  onLogChange,
 }: {
   bar: Bar;
   timeline: Timeline;
   isGroup?: boolean;
+  onLogChange?: (storyId: string) => void;
 }) {
   const geometry = barGeometry(bar, timeline.from, timeline.to);
   const colour = barColour(bar);
@@ -186,6 +209,27 @@ function Row({
         className="flex min-w-0 flex-none items-center gap-2 pr-3"
         style={{ width: LABEL_WIDTH }}
       >
+        {/*
+          Only stories. An epic or a sprint is not a requirement anybody can revise, and
+          a button that opened a form which then refused the row would be worse than no
+          button. Held at a fixed width so the titles beside it still line up.
+        */}
+        {bar.kind === "STORY" && bar.id && onLogChange ? (
+          <button
+            type="button"
+            onClick={() => onLogChange(bar.id!)}
+            title={`Log a requirement change on ${bar.itemKey ?? bar.title}`}
+            className="flex size-5 shrink-0 items-center justify-center rounded border border-line bg-surface text-ink-3 transition-colors hover:border-line-strong hover:bg-surface-3 hover:text-ink focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <FilePen className="size-3.5" aria-hidden />
+            <span className="sr-only">
+              Log a requirement change on {bar.itemKey ?? bar.title}
+            </span>
+          </button>
+        ) : (
+          <span className="size-5 shrink-0" aria-hidden />
+        )}
+
         {bar.assigneeName ? (
           <Avatar name={bar.assigneeName} id={bar.assigneeId} size={20} />
         ) : null}
