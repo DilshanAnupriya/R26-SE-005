@@ -31,7 +31,7 @@ public class WorkflowStateService {
     /**
      * Seeded on project creation. A project with no columns has no board, and asking a
      * user to define a workflow before they can create their first story is a poor
-     * first five minutes — these four cover the common case and are fully editable.
+     * first five minutes — these five cover the common case and are fully editable.
      */
     private record DefaultState(String name, String code, WorkflowCategory category, String color) {}
 
@@ -39,7 +39,13 @@ public class WorkflowStateService {
             new DefaultState("To Do", "TODO", WorkflowCategory.TODO, "#94a3b8"),
             new DefaultState("In Progress", "IN_PROGRESS", WorkflowCategory.IN_PROGRESS, "#3b82f6"),
             new DefaultState("In Review", "IN_REVIEW", WorkflowCategory.IN_PROGRESS, "#a855f7"),
-            new DefaultState("Done", "DONE", WorkflowCategory.DONE, "#22c55e"));
+            new DefaultState("Done", "DONE", WorkflowCategory.DONE, "#22c55e"),
+            // Last on the board, and deliberately not a DONE category. Blocked work is
+            // work in progress that has stopped, so anything counting completion — the
+            // burndown, the sprint's completed points, a story's rollup — has to keep
+            // reading it as unfinished. Its position is a layout choice; its category is
+            // a correctness one, and the two are independent.
+            new DefaultState("Blocked", "BLOCKED", WorkflowCategory.IN_PROGRESS, "#ef4444"));
 
     private final WorkflowStateRepository repository;
     private final ProjectLookupService projectLookup;

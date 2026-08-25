@@ -293,7 +293,12 @@ public class MockAiModelClient implements AiModelClient {
                     "%.0f%% of the commitment has changed since the freeze".formatted(volatility * 100)));
         }
 
-        double blockedRatio = ratio(features.number("blocked_count"), features.number("story_count"));
+        // Stories and tasks, because that is what blocked_count now counts. A team that
+        // works on the board blocks tasks, and reading only the story figure was why
+        // "Assess" used to hand back the pre-block score and undo the ledger's charge.
+        double blockable = features.number("blockable_count");
+        double blockedRatio = ratio(features.number("blocked_count"),
+                blockable > 0 ? blockable : features.number("story_count"));
         if (blockedRatio > 0) {
             double contribution = Math.min(blockedRatio * 2.2, 1.2);
             logit += contribution;

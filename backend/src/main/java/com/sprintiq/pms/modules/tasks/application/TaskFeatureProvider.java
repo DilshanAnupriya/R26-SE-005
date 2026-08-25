@@ -8,6 +8,7 @@ import com.sprintiq.pms.modules.backlog.application.StoryTaskCounter;
 import com.sprintiq.pms.modules.projects.application.LabelService;
 import com.sprintiq.pms.modules.tasks.domain.Task;
 import com.sprintiq.pms.modules.tasks.domain.TaskRepository;
+import com.sprintiq.pms.modules.tasks.domain.TaskStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -173,12 +174,19 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
         long overEstimate = 0;
         long minutesOver = 0;
         long reopens = 0;
+        long blocked = 0;
 
         for (Task task : tasks) {
             // Counted before the estimate guard below, unlike everything else here: a
             // task with no estimate can still be reworked five times, and dropping those
             // reopens would make the count depend on whether anybody sized the card.
             reopens += Math.max(0, task.getReopenedCount());
+
+            // Same reasoning, and the same guard deliberately skipped: an unsized task
+            // dragged into Blocked is stuck exactly as much as a sized one.
+            if (task.isBlocked() || task.getStatus() == TaskStatus.BLOCKED) {
+                blocked++;
+            }
 
             Integer estimateMinutes = task.getEstimateMinutes();
             if (estimateMinutes == null || estimateMinutes <= 0) {
@@ -199,7 +207,8 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
             }
         }
 
-        return new SprintSlippage(estimated, notStartedPastHalf, overEstimate, minutesOver, reopens);
+        return new SprintSlippage(tasks.size(), estimated, notStartedPastHalf, overEstimate,
+                minutesOver, reopens, blocked);
     }
 
     /**

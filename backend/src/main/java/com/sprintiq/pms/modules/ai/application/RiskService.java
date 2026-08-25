@@ -244,6 +244,14 @@ public class RiskService {
         // Story reopens plus task reopens; see the feature comment below for why both.
         long reopens = sprint.reopenedCount() + slippage.taskReopens();
 
+        // Story blocks plus task blocks, for exactly the same reason and after exactly
+        // the same bug. The shared vector's blocked_count is story-level, off the backlog
+        // snapshot, so dragging a card into the board's Blocked column moved the ledger
+        // overlay and nothing else. Pressing "Assess" then cleared that overlay on the
+        // premise the model had now seen the blocker — it had not — and handed back the
+        // pre-block score, which read on screen as the risk fixing itself.
+        long blocked = sprint.blockedCount() + slippage.blockedTasks();
+
         long overtimeMinutes = effort.sprintOvertimeMinutes(sprint.sprintId());
         BigDecimal fatigue = positive(capacityHours)
                 ? BigDecimal.valueOf(overtimeMinutes)
@@ -264,7 +272,16 @@ public class RiskService {
                 // The app records these for the sprint in flight; the model wants the
                 // previous sprint's. Named for what they are so the mapping is not
                 // mistaken for history the app does not keep.
-                .putNumber("prev_blocked_tasks", sprint.blockedCount())
+                .putNumber("prev_blocked_tasks", blocked)
+                // Overrides the shared vector's story-level figure, for this model only —
+                // assessOne hands each model its own copy, so the other two keep reading
+                // the story count they were built against.
+                .putNumber("blocked_count", blocked)
+                // The population `blocked_count` is now drawn from. Without it the mock's
+                // blocked term divides a stories-and-tasks numerator by a stories-only
+                // denominator, which saturates its cap after two or three blocked cards
+                // and makes the score lurch rather than climb.
+                .putNumber("blockable_count", sprint.storyCount() + slippage.taskCount())
                 // Story reopens plus task reopens. The sprint metric counts stories only,
                 // and a team that tracks its work as tasks — which the board encourages —
                 // therefore reported no rework at all here however many times a card came

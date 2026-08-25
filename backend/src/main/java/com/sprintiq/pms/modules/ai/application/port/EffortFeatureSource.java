@@ -70,15 +70,24 @@ public interface EffortFeatureSource {
      *                                sums story reopens only, so without this a team that
      *                                tracks work as tasks reports no rework at all
      */
-    record SprintSlippage(long estimatedTaskCount,
+    record SprintSlippage(long taskCount,
+                          long estimatedTaskCount,
                           long tasksNotStartedPastHalf,
                           long tasksOverEstimate,
                           long minutesOverEstimate,
-                          long taskReopens) {
+                          long taskReopens,
+                          /**
+                           * Tasks currently stuck, for the same reason {@code taskReopens}
+                           * is here: the sprint metric counts blocked <em>stories</em>, and
+                           * a story is only blocked once somebody blocks the story itself.
+                           * A team working on the board blocks tasks, so the over-budget
+                           * model saw none of it and "Assess" undid the charge.
+                           */
+                          long blockedTasks) {
 
-        /** A sprint with no tasks — nothing that can be behind, and nothing reworked. */
+        /** A sprint with no tasks — nothing that can be behind, reworked or stuck. */
         public static SprintSlippage none() {
-            return new SprintSlippage(0, 0, 0, 0, 0);
+            return new SprintSlippage(0, 0, 0, 0, 0, 0, 0);
         }
 
         /** Slipping tasks as a share of the estimated ones, 0..1. */
