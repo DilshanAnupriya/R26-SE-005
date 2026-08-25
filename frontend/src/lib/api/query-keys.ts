@@ -88,6 +88,7 @@ export const queryKeys = {
     riskTrend: (sprintId: string) => [...queryKeys.ai.all, "risk-trend", sprintId] as const,
     riskAdjustments: (sprintId: string) =>
       [...queryKeys.ai.all, "risk-adjustments", sprintId] as const,
+    riskSteps: (sprintId: string) => [...queryKeys.ai.all, "risk-steps", sprintId] as const,
     // Sorted at the call site, so picking the same two sprints in either order hits one
     // cache entry rather than two.
     riskCompare: (sprintIds: string[]) => [...queryKeys.ai.all, "risk-compare", sprintIds] as const,

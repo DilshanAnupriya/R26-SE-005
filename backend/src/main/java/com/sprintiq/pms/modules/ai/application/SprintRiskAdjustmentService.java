@@ -119,6 +119,35 @@ public class SprintRiskAdjustmentService {
         adjustments.save(build(sprintId, riskType, delta, reason, sourceKey));
     }
 
+    /**
+     * Records a state and always re-dates it, whether or not the value moved.
+     *
+     * <p>{@link #revise} deliberately leaves an unchanged reading alone, so a repeated
+     * no-op call cannot resurrect evidence a scoring has already absorbed. A remediation
+     * step is the one case where the repeat is not a no-op: the same step, claimed again
+     * after a re-assessment, is a new claim about a sprint the model has since re-read,
+     * and it has to carry today's date or it lands behind the cutoff and credits
+     * nothing.</p>
+     *
+     * <p>Delete-and-insert for the same reason {@code revise} uses it —
+     * {@code created_at} is mapped {@code updatable = false}, so assigning it is real in
+     * the entity and silently dropped from the UPDATE.</p>
+     */
+    @Transactional
+    public void restate(UUID sprintId, RiskType riskType, String sourceKey,
+                        BigDecimal delta, String reason) {
+        if (sprintId == null || sourceKey == null || delta == null) {
+            return;
+        }
+        adjustments.findBySprintIdAndSourceKey(sprintId, sourceKey).ifPresent(existing -> {
+            adjustments.delete(existing);
+            // (sprint_id, source_key) is unique, so the insert has to land after the
+            // delete reaches the database rather than alongside it at flush time.
+            adjustments.flush();
+        });
+        adjustments.save(build(sprintId, riskType, delta, reason, sourceKey));
+    }
+
     /** Withdraws a state adjustment — the condition it described no longer holds. */
     @Transactional
     public void clear(UUID sprintId, String sourceKey) {
@@ -192,6 +221,23 @@ public class SprintRiskAdjustmentService {
                 totals.put(type, netSince(type, null));
             }
             return totals;
+        }
+
+        /**
+         * The entry under this source key that a scoring has not yet absorbed, if any.
+         *
+         * <p>Same cutoff as {@link #netSince}, and for the same reason. A remediation
+         * step ticked before the last assessment contributes nothing to the current
+         * figure — the model has since re-read the sprint and measured whatever the step
+         * actually achieved — so reporting it as still in force would show a tick beside
+         * a credit that is no longer being paid.</p>
+         */
+        public java.util.Optional<SprintRiskAdjustment> standing(String sourceKey,
+                                                                 java.time.Instant since) {
+            return entries.stream()
+                    .filter(entry -> sourceKey.equals(entry.getSourceKey()))
+                    .filter(entry -> since == null || entry.getCreatedAt().isAfter(since))
+                    .findFirst();
         }
 
         /** Entries logged after the given instant, for the "what has changed since" panel. */

@@ -3,10 +3,15 @@
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/design/surfaces";
-import type { RiskAdjustment, RiskAssessment, SprintRisk } from "@/lib/api/ai-schemas";
+import type {
+  RiskAdjustment,
+  RiskAssessment,
+  RiskRemediationStep,
+  SprintRisk,
+} from "@/lib/api/ai-schemas";
 import { RISK_MODELS, WEIGHT_LABEL } from "../risk-models";
 import { asPercent, RiskGauge, SeverityBadge } from "./risk-gauge";
-import { RiskExplanations } from "./risk-explanations";
+import { RiskExplanations, type StepToggle } from "./risk-explanations";
 
 function formatWhen(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -30,15 +35,21 @@ function formatWhen(iso: string | null | undefined): string {
 export function SprintRiskOverview({
   risk,
   adjustments,
+  steps,
   loading,
   onAssess,
   assessing,
+  onToggleStep,
+  togglingStepKey,
 }: {
   risk?: SprintRisk;
   adjustments?: RiskAdjustment[];
+  steps?: RiskRemediationStep[];
   loading?: boolean;
   onAssess?: () => void;
   assessing?: boolean;
+  onToggleStep?: StepToggle;
+  togglingStepKey?: string | null;
 }) {
   const anyScored = RISK_MODELS.some((model) => risk?.[model.key] != null);
 
@@ -90,7 +101,13 @@ export function SprintRiskOverview({
         )}
       </Card>
 
-      <RiskExplanations risk={risk} loading={loading} />
+      <RiskExplanations
+        risk={risk}
+        steps={steps}
+        loading={loading}
+        onToggleStep={onToggleStep}
+        togglingStepKey={togglingStepKey}
+      />
 
       <AdjustmentLedger adjustments={adjustments ?? []} />
     </div>

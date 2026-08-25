@@ -4,6 +4,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { toast } from "sonner";
 import { useSession } from "@/components/session-provider";
 import { ApiError } from "@/lib/api/errors";
+import type { RiskType } from "@/lib/api/ai-schemas";
 import { queryKeys } from "@/lib/api/query-keys";
 import { riskApi, type ImpactDirection, type RequirementChangeType } from "./api";
 
@@ -56,6 +57,59 @@ export function useRiskAdjustments(sprintId: string | undefined) {
     queryKey: queryKeys.ai.riskAdjustments(sprintId ?? ""),
     queryFn: () => riskApi.adjustments(api, sprintId!),
     enabled: status === "authenticated" && Boolean(sprintId),
+  });
+}
+
+export function useRiskSteps(sprintId: string | undefined) {
+  const { api, status } = useSession();
+  return useQuery({
+    queryKey: queryKeys.ai.riskSteps(sprintId ?? ""),
+    queryFn: () => riskApi.steps(api, sprintId!),
+    enabled: status === "authenticated" && Boolean(sprintId),
+  });
+}
+
+/**
+ * Ticks a remediation step, or unticks it.
+ *
+ * <p>The gauges, the ledger and the trend are all invalidated because completing a step
+ * writes a negative entry to the same ledger a blocked task writes to — the number moves
+ * straight away, and leaving any of the three stale would have the screen disagreeing
+ * with itself about a change the user just made.</p>
+ *
+ * <p>The response is the whole step list, so it is written into the cache rather than
+ * invalidated: the checkbox has to settle immediately, and a refetch round trip is long
+ * enough to look like the tick did not register.</p>
+ */
+export function useToggleRiskStep(sprintId: string | undefined) {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { riskType: RiskType; stepKey: string; done: boolean }) =>
+      riskApi.toggleStep(api, sprintId!, input),
+
+    onSuccess: (steps, input) => {
+      if (!sprintId) return;
+      queryClient.setQueryData(queryKeys.ai.riskSteps(sprintId), steps);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(sprintId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskAdjustments(sprintId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskTrend(sprintId) });
+
+      const step = steps.find((candidate) => candidate.stepKey === input.stepKey);
+      const points = step ? Math.round(step.points) : null;
+      toast.success(
+        input.done
+          ? points == null
+            ? "Step marked done."
+            : `Step done — risk ${points} pts lower until the next assessment.`
+          : "Step reopened — its credit was withdrawn.",
+      );
+    },
+
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : "Could not update that step.");
+    },
   });
 }
 

@@ -190,6 +190,44 @@ public final class AiDtos {
         }
     }
 
+    @Schema(name = "RiskRemediationStepResponse",
+            description = "One concrete move against one driver of one risk, and what "
+                    + "completing it is currently worth")
+    public record RiskRemediationStepResponse(RiskType riskType,
+                                              /** Machine name of the driver this addresses. */
+                                              String driverFeature,
+                                              /** The driver as the explanation panel names it. */
+                                              String driverLabel,
+                                              /** The driver's own evidence line, where it has one. */
+                                              String driverDetail,
+                                              /**
+                                               * Identifies the step within its risk:
+                                               * {@code <feature>:<step>}. The client sends
+                                               * this back to toggle it and nothing else —
+                                               * the points are the server's to decide.
+                                               */
+                                              String stepKey,
+                                              String title,
+                                              String detail,
+                                              /**
+                                               * Ledger points this step returns while it
+                                               * stands, as a positive magnitude on the
+                                               * 0–100 scale. Recorded as a negative
+                                               * adjustment, so the gauge falls by this
+                                               * much until the next assessment measures
+                                               * what the step actually achieved.
+                                               */
+                                              BigDecimal points,
+                                              boolean done,
+                                              Instant doneAt) {
+    }
+
+    @Schema(name = "ToggleRiskStepRequest")
+    public record ToggleRiskStepRequest(@NotNull RiskType riskType,
+                                        @NotBlank String stepKey,
+                                        boolean done) {
+    }
+
     @Schema(name = "RiskAdjustmentResponse",
             description = "One entry in the ledger of board activity behind an adjusted risk score")
     public record RiskAdjustmentResponse(UUID id,
