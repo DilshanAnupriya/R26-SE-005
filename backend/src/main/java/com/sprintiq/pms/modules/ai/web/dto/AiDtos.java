@@ -198,8 +198,6 @@ public final class AiDtos {
                                               String driverFeature,
                                               /** The driver as the explanation panel names it. */
                                               String driverLabel,
-                                              /** The driver's own evidence line, where it has one. */
-                                              String driverDetail,
                                               /**
                                                * Identifies the step within its risk:
                                                * {@code <feature>:<step>}. The client sends
@@ -212,12 +210,43 @@ public final class AiDtos {
                                               /**
                                                * Ledger points this step returns while it
                                                * stands, as a positive magnitude on the
-                                               * 0–100 scale. Recorded as a negative
-                                               * adjustment, so the gauge falls by this
-                                               * much until the next assessment measures
-                                               * what the step actually achieved.
+                                               * 0–100 scale.
+                                               *
+                                               * <p>Measured, not apportioned: the model
+                                               * is re-run with this one reading moved,
+                                               * and this is the fall in its prediction.
+                                               * Recorded as a negative adjustment, so the
+                                               * gauge drops by it until the next
+                                               * assessment measures what the step
+                                               * actually achieved.</p>
                                                */
                                               BigDecimal points,
+                                              /** The reading as it stands, e.g. {@code 34}. */
+                                              String currentValue,
+                                              /**
+                                               * What the search found: the value of this
+                                               * reading at which the model scores the
+                                               * sprint {@code points} lower. Not a
+                                               * threshold anybody configured — the best
+                                               * rung of a bounded ladder the model was
+                                               * asked about.
+                                               */
+                                              String targetValue,
+                                              /** The model's probability on the sprint as it stands. */
+                                              BigDecimal baselineScore,
+                                              /** Its probability with only this reading moved. */
+                                              BigDecimal projectedScore,
+                                              /**
+                                               * How to go about it, in plain words.
+                                               *
+                                               * <p>The only hand-written text in this
+                                               * response, and it decides nothing: it
+                                               * cannot make a step appear, change what
+                                               * one is worth, or move the target. Null
+                                               * where no method has been written for
+                                               * the reading.</p>
+                                               */
+                                              String how,
                                               boolean done,
                                               Instant doneAt) {
     }

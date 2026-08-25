@@ -1,7 +1,6 @@
 package com.sprintiq.pms.modules.ai.application;
 
 import com.sprintiq.pms.common.error.BusinessRuleException;
-import com.sprintiq.pms.modules.ai.domain.PredictionDriver;
 import com.sprintiq.pms.modules.ai.domain.RiskAssessment;
 import com.sprintiq.pms.modules.ai.domain.RiskAssessmentRepository;
 import com.sprintiq.pms.modules.ai.domain.RiskType;
@@ -14,17 +13,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
  * The fix half of the risk screen: what to do about each driver, and what doing it is worth.
  *
- * <p>Every step here is derived from a driver the model actually reported, so the
- * checklist for a sprint is the checklist for <em>that</em> sprint's reasons rather than
- * a generic list of agile advice. A driver with no entry in the catalogue produces no
- * steps at all — see {@link RiskRemediationCatalogue} for why that silence is the point.</p>
+ * <p>Nothing here decides what the steps are. {@link RiskRecourseSearch} derives them by
+ * re-running the trained model with one reading moved at a time and measuring the fall in
+ * the prediction; this service is the part that remembers which of them a team has
+ * claimed, and turns a claim into a number on the gauge.</p>
  *
  * <p><strong>Ticking a step is a claim, and the credit for it is provisional.</strong>
  * Completion is recorded as a negative entry in the same ledger that charges a sprint for
@@ -34,7 +35,7 @@ import java.util.UUID;
  * the commitment really came down or the blockers really cleared, and the provisional
  * credit is replaced by whatever actually happened. A step ticked but not done therefore
  * pays back for a few hours and is then taken away — which is the correct behaviour, and
- * the reason no step is offered for a driver the model could not re-measure.</p>
+ * the reason every step names a reading the model will re-read.</p>
  *
  * <p>Because the ledger is the record, the state and the credit are the same fact and
  * cannot disagree. There is no separate "step completed" table to fall out of step with
@@ -46,26 +47,10 @@ public class RiskRemediationService {
 
     private final RiskAssessmentRepository assessments;
     private final SprintRiskAdjustmentService adjustmentService;
+    private final RiskRecourseSearch recourse;
 
     /** Prefix on the ledger source key, so these are distinguishable from board events. */
     private static final String SOURCE_PREFIX = "STEP";
-
-    /**
-     * The most of a score a checklist may return.
-     *
-     * <p>Half, because the rest of what the model read is not a to-do item. Team size,
-     * the domain, how much the project has churned historically — those are in the score
-     * and no sprint-length action removes them. A checklist that could drive a risk to
-     * zero would be claiming otherwise, and the first team to complete one and watch the
-     * sprint fail anyway would stop believing the whole screen.</p>
-     *
-     * <p>Like every other number in this ledger it is an agreed convention rather than a
-     * measurement, and the panel says so.</p>
-     */
-    private static final BigDecimal RELIEF_FRACTION = BigDecimal.valueOf(0.5);
-
-    /** The ledger's scale: 100 points to a whole probability. */
-    private static final BigDecimal POINTS_PER_UNIT = BigDecimal.valueOf(100);
 
     // -------------------------------------------------------------------- reads
 
@@ -85,9 +70,9 @@ public class RiskRemediationService {
     /**
      * Marks a step done or not done, and returns the whole list as it now stands.
      *
-     * <p>The step is re-derived from the stored assessment rather than trusted from the
-     * request. A client that could name its own points could set any risk score it liked
-     * by sending a large enough one, and the ledger would record it as evidence.</p>
+     * <p>The step is re-derived from the model rather than trusted from the request. A
+     * client that could name its own points could set any risk score it liked by sending
+     * a large enough one, and the ledger would record it as evidence.</p>
      */
     @Transactional
     public List<RiskRemediationStepResponse> toggle(UUID sprintId, RiskType riskType,
@@ -113,77 +98,93 @@ public class RiskRemediationService {
     // ---------------------------------------------------------------- internals
 
     /**
-     * One risk's steps, in the order the explanation panel ranks its drivers.
-     *
-     * <p>Only the drivers that <em>raise</em> the score. A driver arguing the sprint is
-     * fine needs no remedy, and offering one would suggest the model wanted it changed.</p>
+     * One risk's steps: the search's findings, with the ledger's answer to "has anyone
+     * claimed this" laid over them.
      */
     private List<RiskRemediationStepResponse> stepsFor(UUID sprintId, RiskType riskType,
                                                        SprintRiskAdjustmentService.Ledger ledger) {
         RiskAssessment assessment = assessments
                 .findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprintId, riskType)
                 .orElse(null);
-        if (assessment == null || assessment.getDrivers() == null) {
+        if (assessment == null) {
             return List.of();
         }
 
-        List<PredictionDriver> raisers = assessment.getDrivers().stream()
-                .filter(driver -> PredictionDriver.INCREASE.equals(driver.direction()))
-                .filter(driver -> driver.contribution() != null
-                        && driver.contribution().signum() != 0)
-                .sorted((left, right) -> right.contribution().abs()
-                        .compareTo(left.contribution().abs()))
-                .toList();
-
-        // The denominator is every raising driver, not only the ones with steps. A sprint
-        // whose biggest problem is its team size should not have that share of the score
-        // redistributed onto the two things a checklist can reach — the checklist would
-        // then promise relief for a driver it never touches.
-        BigDecimal mass = raisers.stream()
-                .map(driver -> driver.contribution().abs())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (mass.signum() == 0) {
-            return List.of();
-        }
-
-        BigDecimal score = assessment.getRiskScore() == null
-                ? BigDecimal.ZERO : assessment.getRiskScore();
         List<RiskRemediationStepResponse> steps = new ArrayList<>();
+        for (RiskRecourseSearch.Recourse found : cached(assessment)) {
+            // One step per movable reading, so the key is the reading. Two steps against
+            // the same feature would be two claims on one action.
+            String stepKey = found.feature();
+            Optional<SprintRiskAdjustment> standing = ledger.standing(
+                    sourceKey(riskType, stepKey), assessment.getCreatedAt());
 
-        for (PredictionDriver driver : raisers) {
-            List<RiskRemediationCatalogue.Step> recipe =
-                    RiskRemediationCatalogue.forFeature(driver.feature());
-            if (recipe.isEmpty()) {
-                continue;
-            }
-            // What this driver is worth: its share of the raising explanation, applied to
-            // the half of the model's own figure a checklist is allowed to reach.
-            BigDecimal relief = driver.contribution().abs()
-                    .divide(mass, 6, RoundingMode.HALF_UP)
-                    .multiply(RELIEF_FRACTION)
-                    .multiply(score)
-                    .multiply(POINTS_PER_UNIT);
-
-            for (RiskRemediationCatalogue.Step recipeStep : recipe) {
-                // At least one point. A step worth nothing is one nobody will do, and a
-                // checklist that renders "0 pts" beside real advice reads as broken.
-                BigDecimal points = relief.multiply(BigDecimal.valueOf(recipeStep.weight()))
-                        .setScale(0, RoundingMode.HALF_UP)
-                        .max(BigDecimal.ONE);
-
-                String stepKey = driver.feature() + ":" + recipeStep.key();
-                Optional<SprintRiskAdjustment> standing = ledger.standing(
-                        sourceKey(riskType, stepKey), assessment.getCreatedAt());
-
-                steps.add(new RiskRemediationStepResponse(
-                        riskType, driver.feature(), driver.label(), driver.detail(),
-                        stepKey, recipeStep.title(), recipeStep.detail(), points,
-                        standing.isPresent(),
-                        standing.map(SprintRiskAdjustment::getCreatedAt).orElse(null)));
-            }
+            steps.add(new RiskRemediationStepResponse(
+                    riskType, found.feature(), found.label(),
+                    stepKey, found.title(), found.detail(),
+                    found.points().setScale(0, RoundingMode.HALF_UP).max(BigDecimal.ONE),
+                    found.currentValue(), found.targetValue(),
+                    found.baselineScore(), found.projectedScore(),
+                    RiskStepGuidance.forFeature(found.feature()),
+                    standing.isPresent(),
+                    standing.map(SprintRiskAdjustment::getCreatedAt).orElse(null)));
         }
         return steps;
     }
+
+    /**
+     * The search, run once per assessment.
+     *
+     * <p>A counterfactual is a pure function of the assessment it probes around, and an
+     * assessment row never changes after it is written — so a sprint's steps can only
+     * differ from the last time they were asked for if somebody pressed <em>Assess</em>,
+     * which writes a new row and a new key. The steps endpoint is hit on every view of
+     * the risk tab, and each miss costs one inference call per rung per lever; against
+     * the HTTP model service that is the difference between a page that loads and one
+     * that visibly waits.</p>
+     *
+     * <p>Deliberately in-process rather than the shared Redis cache the rest of the
+     * module uses. Redis is configured with default typing for non-final types, and
+     * these are records — the list would come back as maps. A bounded map holding a pure
+     * function of immutable rows is the smaller thing to get right.</p>
+     */
+    private List<RiskRecourseSearch.Recourse> cached(RiskAssessment assessment) {
+        UUID key = assessment.getId();
+        if (key == null) {
+            return recourse.search(assessment);
+        }
+        synchronized (cache) {
+            List<RiskRecourseSearch.Recourse> hit = cache.get(key);
+            if (hit != null) {
+                return hit;
+            }
+        }
+        // Outside the lock: the search makes network calls against the model service, and
+        // holding a monitor across them would serialise every viewer of every sprint.
+        List<RiskRecourseSearch.Recourse> found = recourse.search(assessment);
+        synchronized (cache) {
+            cache.put(key, found);
+        }
+        return found;
+    }
+
+    /** Enough for every sprint anyone is looking at; the oldest entry falls out. */
+    private static final int CACHE_LIMIT = 512;
+
+    /**
+     * Per-instance rather than static.
+     *
+     * <p>The bean is a singleton, so this behaves identically in a running application —
+     * and it means the cache cannot outlive the object that owns it, which is what makes
+     * the service testable and stops one test's findings reaching the next.</p>
+     */
+    private final Map<UUID, List<RiskRecourseSearch.Recourse>> cache =
+            new LinkedHashMap<>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(
+                        Map.Entry<UUID, List<RiskRecourseSearch.Recourse>> eldest) {
+                    return size() > CACHE_LIMIT;
+                }
+            };
 
     private static String sourceKey(RiskType riskType, String stepKey) {
         return SOURCE_PREFIX + ":" + riskType.name() + ":" + stepKey;

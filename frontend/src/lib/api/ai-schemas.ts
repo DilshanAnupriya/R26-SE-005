@@ -161,21 +161,33 @@ export type RiskAdjustment = z.infer<typeof riskAdjustmentSchema>;
 /**
  * One concrete move against one driver of one risk.
  *
- * <p>Derived server-side from the drivers the model reported, so the checklist belongs
- * to this sprint's reasons rather than being generic advice. `points` is what completing
- * it currently returns on the ledger's 0-100 scale — a positive magnitude, recorded as a
- * negative adjustment, which is why the gauge falls when it is ticked.</p>
+ * <p>Not stored advice. The server re-runs the model with this one reading moved and
+ * reads the new probability back, so `targetValue` is the value the model rewards and
+ * `points` is the measured fall between `baselineScore` and `projectedScore`, on the
+ * ledger's 0-100 scale. Recorded as a negative adjustment, which is why the gauge drops
+ * when it is ticked.</p>
  */
 export const riskRemediationStepSchema = z.object({
   riskType: riskTypeSchema,
   driverFeature: z.string(),
   driverLabel: z.string().nullish(),
-  driverDetail: z.string().nullish(),
-  /** `<feature>:<step>` — sent back to toggle it. The points are the server's to decide. */
+  /** The driver's machine name — sent back to toggle it. The points are the server's to decide. */
   stepKey: z.string(),
   title: z.string(),
   detail: z.string(),
   points: z.coerce.number(),
+  /** The reading as it stands. */
+  currentValue: z.string().nullish(),
+  /** Where the search found the model scores this sprint lower. */
+  targetValue: z.string().nullish(),
+  /** The model's probability now, and with only this reading moved. */
+  baselineScore: z.coerce.number().nullish(),
+  projectedScore: z.coerce.number().nullish(),
+  /**
+   * How to go about it, in plain words — the one hand-written field here, and one that
+   * decides nothing. Null where no method has been written for the reading.
+   */
+  how: z.string().nullish(),
   done: z.boolean(),
   doneAt: z.string().nullish(),
 });
