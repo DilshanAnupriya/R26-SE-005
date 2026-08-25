@@ -306,42 +306,42 @@ export default function SimulatorView() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 w-full">
         <div className="space-y-4">
           <div className="flex items-center space-x-4">
-            <div className="glass px-4 py-2 rounded-xl border border-card-border flex items-center space-x-3">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Sprint:</span>
+            <div className="glass px-4 py-2 rounded-xl border border-border flex items-center space-x-3">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Active Sprint:</span>
               <select 
                 value={selectedSprintId || ""} 
                 onChange={(e) => setSelectedSprintId(Number(e.target.value))}
-                className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer"
+                className="bg-transparent text-sm font-bold text-foreground focus:outline-none cursor-pointer"
               >
                 {sprints.map(s => (
-                  <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                  <option key={s.id} value={s.id} className="bg-card text-foreground">
                     {s.sprintId}
                   </option>
                 ))}
               </select>
             </div>
-            <p className="text-slate-400 text-sm">Drag tasks to developers to see real-time impact.</p>
+            <p className="text-muted-foreground text-sm">Drag tasks to developers to see real-time impact.</p>
           </div>
         </div>
 
         <div className="flex items-center space-x-4">
           <button 
             onClick={handleAutoOptimize}
-            className="bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+            className="bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2 cursor-pointer"
           >
             <Wand2 className="w-4 h-4" />
             <span>AI Smart Fill</span>
           </button>
           <button 
             onClick={() => setAssignments({})}
-            className="glass px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 hover:bg-slate-800 transition-colors"
+            className="glass px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 text-foreground hover:bg-muted transition-colors border border-border cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Reset Simulation</span>
           </button>
           <button 
             onClick={handleApplyConfiguration}
-            className="bg-primary hover:bg-primary-dark px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-primary/20"
+            className="bg-primary hover:bg-primary/90 px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-primary/20 cursor-pointer"
           >
             Apply Configuration
           </button>
@@ -353,14 +353,14 @@ export default function SimulatorView() {
         
         {/* Left Sidebar: Stats & Health */}
         <div className="lg:col-span-3 space-y-6 overflow-y-auto pr-2 scrollbar-hide">
-          <div className="glass p-6 rounded-3xl border border-card-border sticky top-0">
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-6">Sprint Health</h3>
+          <div className="glass p-6 rounded-3xl border border-border sticky top-0">
+            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-6">Sprint Health</h3>
             
             <div className="space-y-6">
               <div className="text-center">
                 <div className="relative inline-flex items-center justify-center">
                   <svg className="w-32 h-32">
-                    <circle className="text-slate-800" strokeWidth="8" stroke="currentColor" fill="transparent" r="58" cx="64" cy="64" />
+                    <circle className="text-muted stroke-muted" strokeWidth="8" stroke="currentColor" fill="transparent" r="58" cx="64" cy="64" />
                     <circle 
                       className="text-primary transition-all duration-500" 
                       strokeWidth="8" 
@@ -373,33 +373,33 @@ export default function SimulatorView() {
                     />
                   </svg>
                   <div className="absolute flex flex-col items-center">
-                    <span className="text-2xl font-bold text-white">{Math.round(overallHealth || 0)}%</span>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Match Score</span>
+                    <span className="text-2xl font-bold text-foreground">{Math.round(overallHealth || 0)}%</span>
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">Match Score</span>
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50">
+                <div className="bg-card p-4 rounded-2xl border border-border">
                   <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-slate-400">Predicted Velocity</span>
-                    <TrendingUp className="w-3 h-3 text-emerald-500" />
+                    <span className="text-xs text-muted-foreground">Predicted Velocity</span>
+                    <TrendingUp className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
                   </div>
-                  <div className="text-xl font-bold text-white">{(predictedVelocity || 0).toFixed(1)} <span className="text-xs text-slate-500">SPs</span></div>
+                  <div className="text-xl font-bold text-foreground">{(predictedVelocity || 0).toFixed(1)} <span className="text-xs text-muted-foreground">SPs</span></div>
                 </div>
-                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50">
+                <div className="bg-card p-4 rounded-2xl border border-border">
                   <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-slate-400">Total Points</span>
-                    <Clock className="w-3 h-3 text-blue-500" />
+                    <span className="text-xs text-muted-foreground">Total Points</span>
+                    <Clock className="w-3 h-3 text-blue-500 dark:text-blue-400" />
                   </div>
-                  <div className="text-xl font-bold text-white">{totalAssignedPoints} <span className="text-xs text-slate-500">SPs</span></div>
+                  <div className="text-xl font-bold text-foreground">{totalAssignedPoints} <span className="text-xs text-muted-foreground">SPs</span></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="glass p-6 rounded-3xl border border-card-border bg-yellow-500/5">
-            <div className="flex items-center space-x-2 text-yellow-500 mb-4">
+          <div className="glass p-6 rounded-3xl border border-border bg-amber-500/5">
+            <div className="flex items-center space-x-2 text-amber-500 dark:text-amber-400 mb-4">
               <AlertTriangle className="w-5 h-5" />
               <h4 className="font-bold text-sm uppercase italic">Simulation Alerts</h4>
             </div>
@@ -408,15 +408,15 @@ export default function SimulatorView() {
                 const dev = developers.find(d => d.id === Number(devId));
                 if (dev && load > dev.capacity) {
                   return (
-                    <div key={devId} className="text-xs text-slate-400 border-l-2 border-red-500 pl-3 py-1">
-                      <span className="font-bold text-red-400">{dev.firstName}</span> is overloaded ({load}/{dev.capacity} SPs).
+                    <div key={devId} className="text-xs text-muted-foreground border-l-2 border-red-500 pl-3 py-1">
+                      <span className="font-bold text-red-500 dark:text-red-400">{dev.firstName}</span> is overloaded ({load}/{dev.capacity} SPs).
                     </div>
                   );
                 }
                 return null;
               })}
               {Object.keys(assignments).length === 0 && (
-                <p className="text-xs text-slate-500 italic">Assign tasks to see impact analysis...</p>
+                <p className="text-xs text-muted-foreground italic">Assign tasks to see impact analysis...</p>
               )}
             </div>
           </div>
@@ -430,23 +430,23 @@ export default function SimulatorView() {
                 key={dev.id} 
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => onDrop(e as any, dev.id)}
-                className={`glass p-5 rounded-3xl border ${devLoad[dev.id] > dev.capacity ? 'border-red-500/30' : 'border-card-border'} min-h-[200px] flex flex-col transition-all hover:bg-slate-900/40`}
+                className={`glass p-5 rounded-3xl border ${devLoad[dev.id] > dev.capacity ? 'border-red-500/40' : 'border-border'} min-h-[200px] flex flex-col transition-all hover:bg-muted/30`}
               >
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800/50">
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-primary font-bold">
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-primary font-bold">
                       {dev.firstName[0]}{dev.lastName[0]}
                     </div>
                     <div>
-                      <div className="text-sm font-bold text-white">{dev.firstName} {dev.lastName}</div>
-                      <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{dev.specialization}</div>
+                      <div className="text-sm font-bold text-foreground">{dev.firstName} {dev.lastName}</div>
+                      <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{dev.specialization}</div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className={`text-xs font-bold ${devLoad[dev.id] > dev.capacity ? 'text-red-500' : 'text-emerald-500'}`}>
+                    <div className={`text-xs font-bold ${devLoad[dev.id] > dev.capacity ? 'text-red-500' : 'text-emerald-500 dark:text-emerald-400'}`}>
                       {devLoad[dev.id] || 0} / {dev.capacity} SPs
                     </div>
-                    <div className="text-[10px] text-slate-600 font-bold uppercase">Load</div>
+                    <div className="text-[10px] text-muted-foreground font-bold uppercase">Load</div>
                   </div>
                 </div>
 
@@ -460,20 +460,20 @@ export default function SimulatorView() {
                         <motion.div 
                           layoutId={`task-${task.id}`}
                           key={task.id} 
-                          className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 flex items-center justify-between group"
+                          className="bg-card p-3 rounded-xl border border-border flex items-center justify-between group shadow-sm"
                         >
                           <div className="flex items-center space-x-3">
-                            <GripVertical className="w-4 h-4 text-slate-700" />
+                            <GripVertical className="w-4 h-4 text-muted-foreground" />
                             <div>
-                              <div className="text-xs font-medium text-white line-clamp-1">{task.title}</div>
+                              <div className="text-xs font-medium text-foreground line-clamp-1">{task.title}</div>
                               <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[10px] text-slate-500 font-bold uppercase">{task.type}</span>
+                                <span className="text-[10px] text-muted-foreground font-bold uppercase">{task.type}</span>
                                 <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase border ${
                                   task.priority === 'High' 
-                                    ? 'bg-red-500/10 text-red-400 border-red-500/20' 
+                                    ? 'bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20' 
                                     : task.priority === 'Medium'
-                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                    ? 'bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20'
+                                    : 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20'
                                 }`}>
                                   {task.priority}
                                 </span>
@@ -482,7 +482,7 @@ export default function SimulatorView() {
                           </div>
                           <button 
                             onClick={() => handleUnassign(task.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-red-400"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-red-500 cursor-pointer"
                           >
                             <Plus className="w-4 h-4 rotate-45" />
                           </button>
@@ -490,7 +490,7 @@ export default function SimulatorView() {
                       );
                     })}
                   
-                  <div className="h-12 border-2 border-dashed border-slate-800/50 rounded-xl flex items-center justify-center text-slate-700 text-xs font-medium italic">
+                  <div className="h-12 border-2 border-dashed border-border rounded-xl flex items-center justify-center text-muted-foreground text-xs font-medium italic">
                     Drop to assign
                   </div>
                 </div>
@@ -501,20 +501,20 @@ export default function SimulatorView() {
 
         {/* Right Column: Backlog List */}
         <div className="lg:col-span-3 h-full overflow-hidden">
-          <div className="glass p-6 rounded-3xl border border-card-border h-full flex flex-col">
+          <div className="glass p-6 rounded-3xl border border-border h-full flex flex-col">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Backlog Pool</h3>
+              <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Backlog Pool</h3>
               <span className="bg-primary/20 text-primary text-[10px] px-2 py-0.5 rounded-full font-bold">
                 {tasks.filter(t => !assignments[t.id]).length} Available
               </span>
             </div>
 
             <div className="relative mb-4">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
               <input 
                 type="text" 
                 placeholder="Filter tasks..."
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+                className="w-full bg-card border border-border rounded-xl pl-10 pr-4 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -537,41 +537,41 @@ export default function SimulatorView() {
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-primary/40 transition-all cursor-grab active:cursor-grabbing group"
+                      className="bg-card p-4 rounded-2xl border border-border hover:border-primary/50 transition-all cursor-grab active:cursor-grabbing group shadow-sm"
                     >
                       <div className="flex justify-between items-start mb-2">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${
                           task.priority === 'High' 
-                            ? 'bg-red-500/10 text-red-400 border-red-500/20' 
+                            ? 'bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20' 
                             : task.priority === 'Medium'
-                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            ? 'bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20'
+                            : 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20'
                         }`}>
                           {task.priority} Priority
                         </span>
-                        <div className="text-xs font-bold text-white bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700/50">
+                        <div className="text-xs font-bold text-foreground bg-muted px-2 py-0.5 rounded-lg border border-border">
                           {task.storyPoints} SPs
                         </div>
                       </div>
-                      <h4 className="text-xs font-bold text-slate-200 mb-3 leading-relaxed">
+                      <h4 className="text-xs font-bold text-foreground mb-3 leading-relaxed">
                         {task.title || (task as any).task_type || "Untitled Task"}
                       </h4>
                       
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-900">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{task.type}</span>
+                      <div className="flex items-center justify-between pt-3 border-t border-border">
+                        <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{task.type}</span>
                         <div className="flex -space-x-1 overflow-hidden">
                           {developers.slice(0, 4).map(dev => (
                             <button
                               key={dev.id}
                               onClick={() => handleAssign(task.id, dev.id)}
-                              className="w-6 h-6 rounded-full bg-slate-800 border border-slate-900 flex items-center justify-center text-[8px] font-bold hover:bg-primary hover:text-white transition-all ring-2 ring-slate-950"
+                              className="w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-[8px] font-bold text-foreground hover:bg-primary hover:text-white transition-all ring-2 ring-card"
                               title={`Assign to ${dev.firstName}`}
                             >
                               {dev.firstName[0]}
                             </button>
                           ))}
                           {developers.length > 4 && (
-                            <div className="w-6 h-6 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-[8px] font-bold text-slate-500 ring-2 ring-slate-950">
+                            <div className="w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-[8px] font-bold text-muted-foreground ring-2 ring-card">
                               +{developers.length - 4}
                             </div>
                           )}
