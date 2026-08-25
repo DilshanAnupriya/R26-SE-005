@@ -1,7 +1,24 @@
 import { z } from "zod";
 import type { ApiClient } from "@/lib/api/client";
 import { pageResponseSchema } from "@/lib/api/schemas";
-import { epicSchema, storySchema } from "@/lib/api/delivery-schemas";
+import { epicSchema, storySchema, type Priority } from "@/lib/api/delivery-schemas";
+import {
+  requirementChangeSchema,
+  type RequirementChangeType,
+  type ImpactDirection,
+} from "@/features/risk-analysis/api";
+
+/**
+ * The story after the edit, and the register entry that recorded it.
+ *
+ * <p>Both halves come back from the one call because the caller needs both: the row has
+ * to redraw with the new priority, and the toast has to say what the change cost.</p>
+ */
+export const storyChangeSchema = z.object({
+  story: storySchema,
+  change: requirementChangeSchema,
+});
+export type StoryChange = z.infer<typeof storyChangeSchema>;
 
 export const backlogApi = {
   /** `sprintId=none` is the backend's filter for items not yet committed anywhere. */
@@ -17,6 +34,33 @@ export const backlogApi = {
 
   story: (api: ApiClient, storyId: string) =>
     api.request(`/stories/${storyId}`, { schema: storySchema }),
+
+  /**
+   * Edits one field of a story and logs it in the requirement-change register.
+   *
+   * <p>The direction the risk moves is decided server-side from the edit — this sends
+   * the new value, not an opinion about whether it made things worse.</p>
+   */
+  applyRequirementChange: (
+    api: ApiClient,
+    storyId: string,
+    body: {
+      changeType: RequirementChangeType;
+      newPriority?: Priority | null;
+      newDescription?: string | null;
+      newAcceptanceCriteria?: string | null;
+      newStoryPoints?: number | null;
+      impactDirection?: ImpactDirection | null;
+      description?: string | null;
+      requestedByName?: string | null;
+      attachToSprint: boolean;
+    },
+  ) =>
+    api.request(`/stories/${storyId}/requirement-change`, {
+      method: "POST",
+      body,
+      schema: storyChangeSchema,
+    }),
 
   epics: (api: ApiClient, projectId: string) =>
     api.request("/epics", {

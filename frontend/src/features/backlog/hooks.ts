@@ -1,7 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useSession } from "@/components/session-provider";
+import { ApiError } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
 import { backlogApi } from "./api";
 
@@ -96,6 +98,58 @@ export function useChangeStoryStatus(projectId: string) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.backlog.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.board(projectId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.overview(projectId) });
+    },
+  });
+}
+
+/**
+ * Edits one field of a story and logs it in the requirement-change register.
+ *
+ * <p>Invalidates the risk views alongside the backlog, because the point of logging a
+ * change here is watching the sprint's requirement-change score respond. Leaving the
+ * gauges stale would make the whole feature require a manual reload to be believed.</p>
+ *
+ * <p>The toast quotes the delta rather than a generic success, and the sign is the
+ * server's answer, not the form's — a change the user thought was a simplification and
+ * the register scored as an expansion has to say so at the moment it happens.</p>
+ */
+export function useApplyRequirementChange(storyId: string | undefined) {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: Parameters<typeof backlogApi.applyRequirementChange>[2]) =>
+      backlogApi.applyRequirementChange(api, storyId!, input),
+
+    onSuccess: (result) => {
+      const { story, change } = result;
+      queryClient.setQueryData(queryKeys.stories.detail(story.id), story);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.backlog.all });
+      void queryClient.invalidateQueries({ queryKey: ["timeline"] });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.requirementChanges.forProject(story.projectId),
+      });
+      if (change.sprintId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.requirementChanges.forSprint(change.sprintId),
+        });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(change.sprintId) });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.ai.riskAdjustments(change.sprintId),
+        });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskTrend(change.sprintId) });
+      }
+
+      const sign = change.riskDelta >= 0 ? "+" : "";
+      toast.success(
+        change.sprintId
+          ? `${story.itemKey} updated — requirement risk ${sign}${change.riskDelta} pts`
+          : `${story.itemKey} updated — logged outside a sprint, so no sprint was charged`,
+      );
+    },
+
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : "Could not log that change.");
     },
   });
 }

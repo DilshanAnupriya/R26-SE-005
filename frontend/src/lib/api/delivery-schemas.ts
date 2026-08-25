@@ -15,7 +15,16 @@ import { z } from "zod";
 
 // ------------------------------------------------------------------ shared pieces
 
-export const prioritySchema = z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "TRIVIAL"]);
+/**
+ * Lowest, not trivial.
+ *
+ * <p>`TRIVIAL` belongs to `Severity` and was never a priority the server could send:
+ * the enum, the column's check constraint and every row all say `LOWEST`. Nothing here
+ * referenced the wrong name, which is why it went unnoticed — but any story sitting at
+ * the bottom priority would have failed this schema on arrival and taken its whole page
+ * down with it.</p>
+ */
+export const prioritySchema = z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "LOWEST"]);
 export type Priority = z.infer<typeof prioritySchema>;
 
 export const entityTypeSchema = z.enum([

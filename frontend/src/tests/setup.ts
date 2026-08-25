@@ -72,4 +72,15 @@ beforeAll(() => {
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = vi.fn();
   }
+
+  // The Pointer Capture API, which jsdom does not implement at all. Radix's Select
+  // calls hasPointerCapture on every pointer-down to decide whether it is tracking a
+  // drag, so without these a test that opens one throws from inside the library —
+  // "target.hasPointerCapture is not a function" — with nothing to point at in the
+  // component under test.
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.setPointerCapture = () => {};
+    Element.prototype.releasePointerCapture = () => {};
+  }
 });

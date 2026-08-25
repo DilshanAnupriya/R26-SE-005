@@ -4,7 +4,10 @@ import com.sprintiq.pms.common.domain.EntityType;
 import com.sprintiq.pms.common.domain.Priority;
 import com.sprintiq.pms.common.domain.Severity;
 import com.sprintiq.pms.modules.backlog.domain.*;
+import com.sprintiq.pms.modules.projects.domain.ChangeImpactDirection;
+import com.sprintiq.pms.modules.projects.domain.RequirementChangeType;
 import com.sprintiq.pms.modules.projects.web.dto.ProjectDtos.LabelResponse;
+import com.sprintiq.pms.modules.projects.web.dto.RequirementChangeDtos.RequirementChangeResponse;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 
@@ -86,6 +89,47 @@ public final class BacklogDtos {
             List<@Size(max = 255) String> readyChecklist,
             List<@Size(max = 255) String> doneChecklist,
             List<UUID> labelIds) {}
+
+    @Schema(name = "ApplyStoryChangeRequest",
+            description = "Edits the one field a change type describes, and logs the edit in the "
+                    + "requirement-change register. Which way the risk moves is read from the "
+                    + "edit itself, not from the request — only OTHER, which touches no field, "
+                    + "falls back to impactDirection.")
+    public record ApplyStoryChangeRequest(
+            @NotNull RequirementChangeType changeType,
+
+            @Schema(description = "The story's new priority. PRIORITY_CHANGED only.")
+            Priority newPriority,
+
+            @Schema(description = "The story's new description. DESCRIPTION_UPDATED only.")
+            String newDescription,
+
+            @Schema(description = "The story's new acceptance criteria. "
+                    + "ACCEPTANCE_CRITERIA_CHANGED only.")
+            String newAcceptanceCriteria,
+
+            @Schema(description = "The story's new estimate. SCOPE_ADDED and SCOPE_REMOVED "
+                    + "only, and it has to move the way the type claims.")
+            @DecimalMin("0.0") BigDecimal newStoryPoints,
+
+            @Schema(description = "Used only for OTHER, which changes no field to read a "
+                    + "direction from. Ignored everywhere else.")
+            ChangeImpactDirection impactDirection,
+
+            @Schema(description = "Why this changed, for the register")
+            @Size(max = 4000) String description,
+
+            @Schema(description = "Who asked for it, when they have no account here")
+            @Size(max = 120) String requestedByName,
+
+            @Schema(description = "Charge the story's sprint, when it is in one. False for a "
+                    + "change agreed outside the sprint that is running.")
+            boolean attachToSprint) {}
+
+    @Schema(name = "StoryChangeResponse",
+            description = "The story as it now stands, and the register entry that recorded "
+                    + "the edit — including the risk points it cost or returned")
+    public record StoryChangeResponse(StoryResponse story, RequirementChangeResponse change) {}
 
     @Schema(name = "UpdateStoryRequest")
     public record UpdateStoryRequest(
