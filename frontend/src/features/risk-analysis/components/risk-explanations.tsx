@@ -1,13 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Info, OctagonAlert, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Info, Loader2, OctagonAlert, TriangleAlert } from "lucide-react";
 import { Card, CardHeader } from "@/components/design/surfaces";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { PredictionDriver, RiskAssessment, SprintRisk } from "@/lib/api/ai-schemas";
+import type {
+  PredictionDriver,
+  RiskAssessment,
+  RiskRemediationStep,
+  RiskType,
+  SprintRisk,
+} from "@/lib/api/ai-schemas";
 import { cn } from "@/lib/utils";
-import { RISK_MODELS, type RiskModelKey } from "../risk-models";
+import { RISK_MODELS, RISK_TYPE_FOR_KEY, type RiskModelKey } from "../risk-models";
 import { asPercent, SEVERITY_COLOUR, SeverityBadge, type RiskSeverityLabel } from "./risk-gauge";
+
+/** What the parent hands down so a tick can be recorded. */
+export type StepToggle = (input: { riskType: RiskType; stepKey: string; done: boolean }) => void;
 
 /**
  * Why each of the three scores reads the way it does.
@@ -76,7 +85,20 @@ function scoreOf(assessment?: RiskAssessment | null): number | null {
   return assessment?.adjustedScore ?? assessment?.riskScore ?? null;
 }
 
-export function RiskExplanations({ risk, loading }: { risk?: SprintRisk; loading?: boolean }) {
+export function RiskExplanations({
+  risk,
+  steps,
+  loading,
+  onToggleStep,
+  togglingStepKey,
+}: {
+  risk?: SprintRisk;
+  steps?: RiskRemediationStep[];
+  loading?: boolean;
+  onToggleStep?: StepToggle;
+  /** The step currently in flight, so only its own row shows a spinner. */
+  togglingStepKey?: string | null;
+}) {
   // Null until somebody picks a tab, so the panel opens on the loudest risk without
   // yanking the reader back to it every time the sprint is re-assessed.
   const [chosen, setChosen] = useState<RiskModelKey | null>(null);
@@ -93,7 +115,7 @@ export function RiskExplanations({ risk, loading }: { risk?: SprintRisk; loading
         subtitle={
           scored === 0
             ? "There is nothing to explain until the models have run."
-            : "The readings behind each score, ranked by how far each one moved it."
+            : "The readings behind each score, and what to do about the ones a team can move."
         }
       />
 
@@ -122,7 +144,13 @@ export function RiskExplanations({ risk, loading }: { risk?: SprintRisk; loading
               <RiskExplanation
                 title={model.title}
                 question={model.question}
+                riskType={RISK_TYPE_FOR_KEY[model.key]}
                 assessment={risk?.[model.key] ?? undefined}
+                steps={(steps ?? []).filter(
+                  (step) => step.riskType === RISK_TYPE_FOR_KEY[model.key],
+                )}
+                onToggleStep={onToggleStep}
+                togglingStepKey={togglingStepKey}
               />
             </TabsContent>
           ))}
@@ -152,11 +180,19 @@ function SeverityDot({ assessment }: { assessment?: RiskAssessment | null }) {
 function RiskExplanation({
   title,
   question,
+  riskType,
   assessment,
+  steps,
+  onToggleStep,
+  togglingStepKey,
 }: {
   title: string;
   question: string;
+  riskType: RiskType;
   assessment?: RiskAssessment | null;
+  steps: RiskRemediationStep[];
+  onToggleStep?: StepToggle;
+  togglingStepKey?: string | null;
 }) {
   const band = bandOf(assessment);
 
@@ -201,6 +237,8 @@ function RiskExplanation({
         </div>
       </div>
 
+      <StepProgress steps={steps} />
+
       {/*
         The gap between the model's own figure and the one on the gauge is itself part of
         the answer to "why is this risk here now" — where a score has been adjusted, some
@@ -220,7 +258,7 @@ function RiskExplanation({
 
       <section>
         <h4 className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">
-          What the model weighed
+          What the model weighed, and what would move it
         </h4>
 
         {drivers.length === 0 ? (
@@ -232,14 +270,24 @@ function RiskExplanation({
           <>
             <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line">
               {drivers.map((driver) => (
-                <DriverRow key={driver.feature} driver={driver} strongest={strongest} />
+                <DriverRow
+                  key={driver.feature}
+                  driver={driver}
+                  strongest={strongest}
+                  riskType={riskType}
+                  steps={steps.filter((step) => step.driverFeature === driver.feature)}
+                  onToggleStep={onToggleStep}
+                  togglingStepKey={togglingStepKey}
+                />
               ))}
             </ul>
             <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-3">
               <Info className="mt-px size-3 shrink-0" aria-hidden />
               Each bar is drawn against the strongest reading in this list, and the arrow says
               which way that reading pushed. The sizes explain this score against this model only
-              — they do not compare across the three tabs.
+              — they do not compare across the three tabs. Ticking a step takes its points off
+              the score straight away; the next assessment re-reads the board and replaces that
+              estimate with what the step actually achieved.
             </p>
           </>
         )}
@@ -249,60 +297,216 @@ function RiskExplanation({
 }
 
 /**
- * One reading, and how far it pushed.
+ * One reading, how far it pushed, and what would push it back.
  *
- * <p>A diverging bar from a centre line rather than a plain one, because the
- * contributions are signed and some of them argue the sprint is fine. A list where
- * "carry-over rate 0.4" and "acceptance criteria per story 3.1" both grow rightwards
- * reads as five reasons to worry, when two of them are the model's reasons not to.</p>
+ * <p>The steps sit under the driver they answer rather than in a checklist of their own.
+ * A list of remedies detached from the readings that produced them is generic advice —
+ * every sprint's version looks the same, and the first team to notice that stops reading
+ * it. Under the driver, "clear the blockers" is visibly the answer to <em>this</em>
+ * sprint's four blocked tasks.</p>
  */
-function DriverRow({ driver, strongest }: { driver: PredictionDriver; strongest: number }) {
+function DriverRow({
+  driver,
+  strongest,
+  riskType,
+  steps,
+  onToggleStep,
+  togglingStepKey,
+}: {
+  driver: PredictionDriver;
+  strongest: number;
+  riskType: RiskType;
+  steps: RiskRemediationStep[];
+  onToggleStep?: StepToggle;
+  togglingStepKey?: string | null;
+}) {
   const up = driver.direction === "INCREASE";
   const magnitude = Math.abs(driver.contribution);
   const share = strongest > 0 ? magnitude / strongest : 0;
-  const { name, reading } = splitReading(driver.label ?? driver.feature);
   const Icon = up ? ArrowUp : ArrowDown;
+  // Two driver shapes reach here. The models now send the label and the reading in
+  // their own fields; assessments stored before they did have the reading baked into
+  // the label as "points committed (34)", and those rows are still on screen until the
+  // sprint is next assessed.
+  const { name, reading } = splitReading(driver.label ?? driver.feature);
+  const detail = driver.detail?.trim() || null;
+  // A bare reading sits in the chip beside the name; a sentence gets its own line.
+  const chip = reading ?? (detail && detail.length <= 12 && !detail.includes(" ") ? detail : null);
+  const sentence = chip === detail ? null : detail;
 
   return (
-    <li className="flex items-center gap-3 bg-surface px-3 py-2.5">
-      <Icon className={cn("size-3.5 shrink-0", up ? "text-red" : "text-green")} aria-hidden />
+    <li className="bg-surface px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <Icon className={cn("size-3.5 shrink-0", up ? "text-red" : "text-green")} aria-hidden />
 
-      <span className="min-w-0 flex-1">
-        <span className="text-sm">{name}</span>
-        {reading ? (
-          <span className="ml-1.5 rounded bg-surface-3 px-1.5 py-0.5 text-[11px] text-ink-3 tabular-nums">
-            {reading}
+        <span className="min-w-0 flex-1">
+          <span className="text-sm">{name}</span>
+          {chip ? (
+            <span className="ml-1.5 rounded bg-surface-3 px-1.5 py-0.5 text-[11px] text-ink-3 tabular-nums">
+              {chip}
+            </span>
+          ) : null}
+          {sentence ? <span className="block text-[11px] text-ink-3">{sentence}</span> : null}
+          <span className="sr-only">
+            {up ? " raises this risk" : " lowers this risk"}, weight {magnitude.toFixed(2)}
           </span>
-        ) : null}
-        {driver.detail ? <span className="block text-xs text-ink-3">{driver.detail}</span> : null}
-        <span className="sr-only">
-          {up ? " raises this risk" : " lowers this risk"}, weight {magnitude.toFixed(2)}
         </span>
-      </span>
 
-      <span
-        className="relative hidden h-2 w-32 shrink-0 rounded-full bg-surface-3 sm:block"
-        aria-hidden
-      >
-        <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line-strong" />
         <span
-          className="absolute inset-y-0 rounded-full transition-[width] duration-500 ease-out"
-          style={
-            up
-              ? { left: "50%", width: `${share * 50}%`, background: "var(--red)" }
-              : { right: "50%", width: `${share * 50}%`, background: "var(--green)" }
+          className="relative hidden h-2 w-32 shrink-0 rounded-full bg-surface-3 sm:block"
+          aria-hidden
+        >
+          <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line-strong" />
+          <span
+            className="absolute inset-y-0 rounded-full transition-[width] duration-500 ease-out"
+            style={
+              up
+                ? { left: "50%", width: `${share * 50}%`, background: "var(--red)" }
+                : { right: "50%", width: `${share * 50}%`, background: "var(--green)" }
+            }
+          />
+        </span>
+
+        <span
+          className="w-12 shrink-0 text-right text-xs text-ink-3 tabular-nums"
+          title={`Contribution ${driver.contribution}`}
+          aria-hidden
+        >
+          {magnitude === 0 ? "0.00" : `${up ? "+" : "−"}${magnitude.toFixed(2)}`}
+        </span>
+      </div>
+
+      {steps.length > 0 ? (
+        <ul className="mt-2 ml-6 space-y-1.5">
+          {steps.map((step) => (
+            <StepRow
+              key={step.stepKey}
+              step={step}
+              riskType={riskType}
+              onToggle={onToggleStep}
+              busy={togglingStepKey === step.stepKey}
+            />
+          ))}
+        </ul>
+      ) : up ? (
+        /*
+          Only for a driver arguing the sprint is in trouble. Saying "nothing to do here"
+          under a reading that is already helping would read as a complaint about it.
+        */
+        <p className="mt-1.5 ml-6 text-[11px] leading-relaxed text-ink-3">
+          Nothing on a checklist changes this one inside the sprint — it is a fact about the
+          team or the project that the model is reading, not a task.
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * One move, with what it is currently worth.
+ *
+ * <p>A native checkbox rather than a button that looks like one: this is a list of
+ * things that are or are not done, and the platform control is what carries that meaning
+ * to a keyboard and a screen reader for free.</p>
+ *
+ * <p>The points are stated on the row before it is ticked. A control that changes a risk
+ * score without saying by how much is one people click once and then stop trusting.</p>
+ */
+function StepRow({
+  step,
+  riskType,
+  onToggle,
+  busy,
+}: {
+  step: RiskRemediationStep;
+  riskType: RiskType;
+  onToggle?: StepToggle;
+  busy?: boolean;
+}) {
+  const points = Math.round(step.points);
+
+  return (
+    <li>
+      <label
+        className={cn(
+          "flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 transition-colors",
+          step.done
+            ? "border-green/30 bg-green-soft/60"
+            : "border-line bg-surface-2 hover:border-line-strong",
+          (busy || !onToggle) && "cursor-default opacity-70",
+        )}
+      >
+        <input
+          type="checkbox"
+          className="mt-0.5 size-3.5 shrink-0 accent-[var(--green)]"
+          checked={step.done}
+          disabled={busy || !onToggle}
+          onChange={(event) =>
+            onToggle?.({ riskType, stepKey: step.stepKey, done: event.target.checked })
           }
         />
-      </span>
 
-      <span
-        className="w-12 shrink-0 text-right text-xs text-ink-3 tabular-nums"
-        title={`Contribution ${driver.contribution}`}
-        aria-hidden
-      >
-        {magnitude === 0 ? "0.00" : `${up ? "+" : "−"}${magnitude.toFixed(2)}`}
-      </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className={cn("text-xs font-medium", step.done && "text-ink-2")}>
+              {step.title}
+            </span>
+            <span
+              className={cn(
+                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+                step.done ? "bg-green-soft text-green" : "bg-surface-3 text-ink-3",
+              )}
+            >
+              {step.done ? `−${points} pts applied` : `−${points} pts`}
+            </span>
+            {busy ? <Loader2 className="size-3 animate-spin text-ink-3" aria-hidden /> : null}
+            {step.done && !busy ? (
+              <Check className="size-3 shrink-0 text-green" aria-hidden />
+            ) : null}
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-3">
+            {step.detail}
+          </span>
+        </span>
+      </label>
     </li>
+  );
+}
+
+/**
+ * How much of this risk's checklist has been claimed, and what it is holding off.
+ *
+ * <p>Sits above the readings because it answers the question a lead asks after ticking
+ * something: did that actually do anything. The wording is careful about which half of
+ * the number is a measurement — the points are real and currently applied, what they
+ * bought is a claim until the sprint is re-assessed.</p>
+ */
+function StepProgress({ steps }: { steps: RiskRemediationStep[] }) {
+  if (steps.length === 0) {
+    return null;
+  }
+  const done = steps.filter((step) => step.done);
+  const applied = done.reduce((total, step) => total + step.points, 0);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs">
+      <span className="font-medium tabular-nums">
+        {done.length} of {steps.length} step{steps.length === 1 ? "" : "s"} done
+      </span>
+      {applied > 0 ? (
+        <span className="font-semibold text-green tabular-nums">
+          {"−"}
+          {Math.round(applied)} pts off this risk
+        </span>
+      ) : (
+        <span className="text-ink-3">Nothing claimed against this risk yet.</span>
+      )}
+      <span className="text-ink-3">
+        {applied > 0
+          ? "Held until the next assessment measures what the steps actually achieved."
+          : "Tick a step below and the score moves straight away."}
+      </span>
+    </div>
   );
 }
 

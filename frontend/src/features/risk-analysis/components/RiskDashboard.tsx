@@ -18,8 +18,10 @@ import {
   useAssessSprintRisk,
   useDailyRiskTrend,
   useRiskAdjustments,
+  useRiskSteps,
   useSprintRequirementChanges,
   useSprintRisk,
+  useToggleRiskStep,
 } from "../hooks";
 import { DailyRiskTrend } from "./daily-risk-trend";
 import { RequirementChangesPanel } from "./requirement-changes-panel";
@@ -67,6 +69,8 @@ export default function RiskDashboard() {
   const trend = useDailyRiskTrend(sprintId || undefined);
   const changes = useSprintRequirementChanges(sprintId || undefined);
   const assess = useAssessSprintRisk(sprintId || undefined);
+  const steps = useRiskSteps(sprintId || undefined);
+  const toggleStep = useToggleRiskStep(sprintId || undefined);
 
   if (projects.isLoading) {
     return (
@@ -144,9 +148,14 @@ export default function RiskDashboard() {
             <SprintRiskOverview
               risk={risk.data}
               adjustments={adjustments.data}
+              steps={steps.data}
               loading={risk.isPending}
               onAssess={() => assess.mutate()}
               assessing={assess.isPending}
+              onToggleStep={toggleStep.mutate}
+              togglingStepKey={
+                toggleStep.isPending ? (toggleStep.variables?.stepKey ?? null) : null
+              }
             />
           </TabsContent>
 

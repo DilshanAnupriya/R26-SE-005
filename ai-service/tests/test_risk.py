@@ -205,5 +205,10 @@ class TestHonesty:
 
     def test_drivers_carry_their_values(self, over_budget):
         for driver in over_budget.predict(healthy_sprint())["drivers"]:
-            assert "(" in driver["feature"]
+            # The machine name alone, with the reading beside it rather than baked
+            # into it — a consumer keying on the driver must not have to parse prose.
+            assert driver["feature"] in over_budget.features
+            assert "(" not in driver["feature"]
+            assert driver["label"]
+            assert driver["detail"] not in (None, "")
             assert driver["direction"] in ("INCREASE", "DECREASE")

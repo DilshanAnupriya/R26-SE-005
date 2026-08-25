@@ -3,8 +3,10 @@ import type { ApiClient } from "@/lib/api/client";
 import {
   dailyRiskPointSchema,
   riskAdjustmentSchema,
+  riskRemediationStepSchema,
   sprintRiskComparisonSchema,
   sprintRiskSchema,
+  type RiskType,
 } from "@/lib/api/ai-schemas";
 
 // --------------------------------------------------------- requirement changes
@@ -91,6 +93,31 @@ export const riskApi = {
   adjustments: (api: ApiClient, sprintId: string) =>
     api.request(`/ai/risk/sprint/${sprintId}/adjustments`, {
       schema: z.array(riskAdjustmentSchema),
+    }),
+
+  /** What to do about each driver, with what completing it currently returns. */
+  steps: (api: ApiClient, sprintId: string) =>
+    api.request(`/ai/risk/sprint/${sprintId}/steps`, {
+      schema: z.array(riskRemediationStepSchema),
+    }),
+
+  /**
+   * Ticks a step, or unticks it.
+   *
+   * <p>Sends the step's identity and nothing else. The points it is worth are decided
+   * server-side from the stored assessment — a client that could name its own delta
+   * could set the sprint's risk to anything and have the ledger record it as
+   * evidence.</p>
+   */
+  toggleStep: (
+    api: ApiClient,
+    sprintId: string,
+    body: { riskType: RiskType; stepKey: string; done: boolean },
+  ) =>
+    api.request(`/ai/risk/sprint/${sprintId}/steps`, {
+      method: "POST",
+      body,
+      schema: z.array(riskRemediationStepSchema),
     }),
 
   compare: (api: ApiClient, sprintIds: string[]) =>

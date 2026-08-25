@@ -159,6 +159,29 @@ export const riskAdjustmentSchema = z.object({
 export type RiskAdjustment = z.infer<typeof riskAdjustmentSchema>;
 
 /**
+ * One concrete move against one driver of one risk.
+ *
+ * <p>Derived server-side from the drivers the model reported, so the checklist belongs
+ * to this sprint's reasons rather than being generic advice. `points` is what completing
+ * it currently returns on the ledger's 0-100 scale — a positive magnitude, recorded as a
+ * negative adjustment, which is why the gauge falls when it is ticked.</p>
+ */
+export const riskRemediationStepSchema = z.object({
+  riskType: riskTypeSchema,
+  driverFeature: z.string(),
+  driverLabel: z.string().nullish(),
+  driverDetail: z.string().nullish(),
+  /** `<feature>:<step>` — sent back to toggle it. The points are the server's to decide. */
+  stepKey: z.string(),
+  title: z.string(),
+  detail: z.string(),
+  points: z.coerce.number(),
+  done: z.boolean(),
+  doneAt: z.string().nullish(),
+});
+export type RiskRemediationStep = z.infer<typeof riskRemediationStepSchema>;
+
+/**
  * One calendar day of a sprint.
  *
  * <p>Every score is nullable and `hasData` says whether the day was ever scored. The

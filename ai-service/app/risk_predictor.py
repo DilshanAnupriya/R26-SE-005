@@ -146,7 +146,15 @@ class RiskPredictor:
             label = self.labels.get(name, name.replace("_", " "))
             shown = f"{value:g}" if isinstance(value, (int, float)) else value
             drivers.append({
-                "feature": f"{label} ({shown})",
+                # The machine name, on its own. The backend's PredictionDriver contract
+                # has always documented this field that way, and the mock client has
+                # always honoured it; this end used to send "label (value)" instead,
+                # which cost the consumer any way of recognising a driver except by
+                # matching prose. Anything keyed on the driver — the remediation
+                # catalogue most of all — needs the name the model was trained on.
+                "feature": name,
+                "label": label,
+                "detail": shown,
                 "contribution": round(contribution, 3),
                 # INCREASE / DECREASE is the vocabulary PredictionDriver uses in the
                 # backend and the UI compares against literally.

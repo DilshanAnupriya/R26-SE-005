@@ -351,7 +351,11 @@ def drivers(row: dict[str, int], limit: int = 5) -> list[dict[str, Any]]:
         value = row[name]
         points = scorer(value)
         ranked.append({
-            "feature": f"{COLLABORATION_LABELS[name]} ({value})",
+            # The machine name, so a consumer can recognise the reading without
+            # matching prose — the label and the value travel in their own fields.
+            "feature": name,
+            "label": COLLABORATION_LABELS[name],
+            "detail": str(value),
             "contribution": round(points / MAX_COMPOSITE, 3),
             "direction": "INCREASE" if points > 0 else "DECREASE",
             "_points": points,

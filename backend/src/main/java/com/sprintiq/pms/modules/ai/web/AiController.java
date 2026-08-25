@@ -44,6 +44,7 @@ public class AiController {
     private final AiFeedbackService feedback;
     private final AiInsightsService insights;
     private final SprintRiskTrendService riskTrend;
+    private final RiskRemediationService remediation;
     private final RiskAdvisorService advisor;
 
     // -------------------------------------------------------- M1 · estimation
@@ -145,6 +146,31 @@ public class AiController {
     @GetMapping("/risk/sprint/{sprintId}/adjustments")
     public List<RiskAdjustmentResponse> riskAdjustments(@PathVariable UUID sprintId) {
         return risk.adjustments(sprintId);
+    }
+
+    @Operation(summary = "What to do about each driver of a sprint's risk",
+            description = "One entry per (risk, driver, move), derived from the drivers the "
+                    + "models actually reported — so a driver nothing in a sprint can change, "
+                    + "such as team size, correctly offers nothing. Each step carries the ledger "
+                    + "points completing it currently returns.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @GetMapping("/risk/sprint/{sprintId}/steps")
+    public List<RiskRemediationStepResponse> riskSteps(@PathVariable UUID sprintId) {
+        return remediation.stepsFor(sprintId);
+    }
+
+    @Operation(summary = "Mark a remediation step done, or undo it",
+            description = "Completing a step records a negative entry in the adjustment ledger, "
+                    + "so the risk score falls immediately and the reason sits on the same audit "
+                    + "trail as everything else that moved it. The credit is provisional: the "
+                    + "next assessment re-reads the board and replaces it with what the step "
+                    + "actually achieved. The points are the server's to decide — the request "
+                    + "names the step and nothing else.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @PostMapping("/risk/sprint/{sprintId}/steps")
+    public List<RiskRemediationStepResponse> toggleRiskStep(
+            @PathVariable UUID sprintId, @Valid @RequestBody ToggleRiskStepRequest request) {
+        return remediation.toggle(sprintId, request.riskType(), request.stepKey(), request.done());
     }
 
     @Operation(summary = "Narrative advice over a sprint's risk",

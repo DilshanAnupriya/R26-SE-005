@@ -28,6 +28,18 @@ export const RISK_MODELS = [
 
 export type RiskModelKey = (typeof RISK_MODELS)[number]["key"];
 
+/**
+ * The same three models under the name the API calls them.
+ *
+ * <p>`SprintRisk` keys them in camelCase and every endpoint that writes to them takes
+ * the enum, so anything that reads a panel and then posts about it needs the pair.</p>
+ */
+export const RISK_TYPE_FOR_KEY = {
+  overBudget: "OVER_BUDGET",
+  requirementChange: "REQUIREMENT_CHANGE",
+  communicationCollaboration: "COMMUNICATION_COLLABORATION",
+} as const satisfies Record<RiskModelKey, string>;
+
 /** The weight keys as the aggregate names them, in the words the panels already use. */
 export const WEIGHT_LABEL: Record<string, string> = {
   overBudget: "Over-budget",
