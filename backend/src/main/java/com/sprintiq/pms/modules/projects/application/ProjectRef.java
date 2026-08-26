@@ -19,7 +19,9 @@ public record ProjectRef(
         String name,
         String status,
         short defaultSprintDays,
-        String currency) {
+        String currency,
+        /** Hours one story point is worth, for sizing a story's task budget. */
+        java.math.BigDecimal hoursPerPoint) {
 
     /** Archived and completed projects reject new work items. */
     public boolean acceptsNewWork() {

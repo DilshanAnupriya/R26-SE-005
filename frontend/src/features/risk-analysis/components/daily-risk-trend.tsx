@@ -35,9 +35,17 @@ function shortDate(iso: string): string {
 export function DailyRiskTrend({
   points,
   loading,
+  compact,
 }: {
   points: DailyRiskPoint[];
   loading?: boolean;
+  /**
+   * Drops the per-day table and shortens the plot, for places where the chart is a
+   * glance rather than the subject — the board, where the cards are the point. The
+   * numbers behind it stay one click away on Risk Analysis rather than being
+   * duplicated into a second table that could fall out of step.
+   */
+  compact?: boolean;
 }) {
   const scoredDays = points.filter((point) => point.hasData).length;
 
@@ -78,7 +86,7 @@ export function DailyRiskTrend({
 
       <div className="p-4">
         {loading ? (
-          <div className="h-[220px] animate-pulse rounded-lg bg-surface-3" />
+          <div className={compact ? "h-[180px] animate-pulse rounded-lg bg-surface-3" : "h-[220px] animate-pulse rounded-lg bg-surface-3"} />
         ) : points.length === 0 ? (
           <p className="py-10 text-center text-sm text-ink-3">
             This sprint has no date range, so there are no days to plot.
@@ -87,7 +95,7 @@ export function DailyRiskTrend({
           <LineChart
             labels={points.map((point) => shortDate(point.date))}
             series={series}
-            height={260}
+            height={compact ? 180 : 260}
             yLabel="Risk %"
             showXAxis
             hover
@@ -96,7 +104,7 @@ export function DailyRiskTrend({
         )}
       </div>
 
-      {scoredDays > 0 ? (
+      {scoredDays > 0 && !compact ? (
         <div className="overflow-x-auto border-t border-line">
           <table className="w-full min-w-[560px] text-sm">
             <thead>

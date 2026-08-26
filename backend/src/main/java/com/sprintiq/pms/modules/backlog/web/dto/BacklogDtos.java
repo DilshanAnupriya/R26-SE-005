@@ -171,6 +171,30 @@ public final class BacklogDtos {
     @Schema(name = "BlockStoryRequest")
     public record BlockStoryRequest(@NotBlank @Size(max = 500) String reason) {}
 
+    @Schema(name = "StoryTaskBudgetResponse",
+            description = "How much of a story's estimated time its tasks have claimed")
+    public record StoryTaskBudgetResponse(
+            UUID storyId,
+            String itemKey,
+            BigDecimal storyPoints,
+            /** Hours one point is worth on this project. */
+            BigDecimal hoursPerPoint,
+            /** Points x rate, in minutes. Null when the story has no estimate. */
+            Long budgetMinutes,
+            long consumedMinutes,
+            /** Negative once the breakdown has outgrown the story. Null when unsized. */
+            Long remainingMinutes,
+            /** Minutes beyond budget, or zero. */
+            long overrunMinutes,
+            boolean overBudget,
+            long taskCount,
+            /**
+             * Tasks carrying no estimate. They consume nothing measurable, so a
+             * comfortable-looking remainder with several of these is not evidence of
+             * slack — it is evidence of unsized work.
+             */
+            long unestimatedTasks) {}
+
     @Schema(name = "StoryResponse")
     public record StoryResponse(
             UUID id,

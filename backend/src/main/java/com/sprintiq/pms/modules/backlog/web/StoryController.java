@@ -122,6 +122,17 @@ public class StoryController {
         return requirementChanges.apply(storyId, request);
     }
 
+    @Operation(summary = "How much of a story's estimated time its tasks have claimed",
+            description = "Story points converted to minutes at the project's rate, less what "
+                    + "the tasks under it are estimated at. Read this before adding a task: the "
+                    + "remainder is what is left to spend, and the same figure drives the "
+                    + "sprint's over-budget risk.")
+    @PreAuthorize("@perm.has('backlog:read')")
+    @GetMapping("/{storyId}/task-budget")
+    public StoryTaskBudgetResponse taskBudget(@PathVariable UUID storyId) {
+        return storyService.taskBudget(storyId);
+    }
+
     @Operation(summary = "Flag a story as blocked")
     @PreAuthorize("@perm.has('backlog:manage')")
     @PostMapping("/{storyId}/block")
