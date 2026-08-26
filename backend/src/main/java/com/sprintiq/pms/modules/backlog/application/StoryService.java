@@ -52,6 +52,7 @@ public class StoryService {
     private final LabelService labelService;
     private final UserService userService;
     private final ActivityService activityService;
+    private final StoryTaskCounter taskCounter;
 
     // ------------------------------------------------------------------ queries
 
@@ -64,6 +65,32 @@ public class StoryService {
                 sprintId, backlogOnly, query.searchTerm(),
                 query.toPageable(SORT_FIELDS, Sort.by(Sort.Direction.ASC, "rank")));
         return PageResponse.from(page, enrichmentFor(page.getContent()));
+    }
+
+    /**
+     * How much of a story's estimated time its tasks have already claimed.
+     *
+     * <p>Read before adding a task, so a planner sees what is left rather than finding
+     * out afterwards. The same figure drives the sprint's over-budget risk, deliberately:
+     * a warning the UI shows and a penalty the score charges must come from one
+     * calculation or teams will learn to believe whichever is kinder.</p>
+     */
+    @Transactional(readOnly = true)
+    public StoryTaskBudgetResponse taskBudget(UUID storyId) {
+        Story story = require(storyId);
+        ProjectRef project = projectLookup.require(story.getProjectId());
+        StoryTaskCounter.StoryTaskEffort effort = taskCounter.effortForStory(storyId);
+
+        StoryTaskBudget budget = StoryTaskBudget.of(
+                story.getStoryPoints(), project.hoursPerPoint(),
+                effort.estimatedMinutes(), effort.taskCount(),
+                effort.taskCount() - effort.estimatedCount());
+
+        return new StoryTaskBudgetResponse(story.getId(), story.getItemKey(),
+                budget.storyPoints(), budget.hoursPerPoint(), budget.budgetMinutes(),
+                budget.consumedMinutes(), budget.remainingMinutes(),
+                budget.overrunMinutes(), budget.isOverBudget(),
+                budget.taskCount(), budget.unestimatedTasks());
     }
 
     @Transactional(readOnly = true)

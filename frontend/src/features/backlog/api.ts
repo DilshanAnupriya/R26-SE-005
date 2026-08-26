@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { ApiClient } from "@/lib/api/client";
 import { pageResponseSchema } from "@/lib/api/schemas";
-import { epicSchema, storySchema, type Priority } from "@/lib/api/delivery-schemas";
+import {
+  epicSchema,
+  storySchema,
+  storyTaskBudgetSchema,
+  type Priority,
+} from "@/lib/api/delivery-schemas";
 import {
   requirementChangeSchema,
   type RequirementChangeType,
@@ -94,6 +99,9 @@ export const backlogApi = {
 
   updateStory: (api: ApiClient, storyId: string, body: Record<string, unknown>) =>
     api.request(`/stories/${storyId}`, { method: "PATCH", body, schema: storySchema }),
+
+  taskBudget: (api: ApiClient, storyId: string) =>
+    api.request(`/stories/${storyId}/task-budget`, { schema: storyTaskBudgetSchema }),
 
   estimate: (
     api: ApiClient,

@@ -143,4 +143,22 @@ public interface StoryFeatureSource {
     }
 
     SprintStoryMetrics storyMetricsForSprint(UUID sprintId);
+
+    /**
+     * A story whose tasks are estimated at more time than its points allow.
+     *
+     * @param overrunMinutes how far past the budget the breakdown runs
+     * @param budgetMinutes  what the story's points were worth, for context in the reason
+     */
+    record StoryBudgetBreach(UUID storyId, String itemKey,
+                             long overrunMinutes, long budgetMinutes) {}
+
+    /**
+     * Stories in this sprint whose task breakdown has outgrown their estimate.
+     *
+     * <p>Only sized stories can breach: a story nobody has pointed has no budget to
+     * exceed, and charging risk for unestimated work would penalise the sprint for
+     * planning that has not happened yet rather than for planning that went wrong.</p>
+     */
+    List<StoryBudgetBreach> budgetBreachesForSprint(UUID sprintId);
 }

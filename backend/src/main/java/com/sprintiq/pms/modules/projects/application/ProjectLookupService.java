@@ -56,6 +56,6 @@ public class ProjectLookupService {
     private ProjectRef toRef(Project project) {
         return new ProjectRef(project.getId(), project.getWorkspaceId(), project.getProjectKey(),
                 project.getName(), project.getStatus().name(), project.getDefaultSprintDays(),
-                project.getCurrency());
+                project.getCurrency(), project.getHoursPerPoint());
     }
 }

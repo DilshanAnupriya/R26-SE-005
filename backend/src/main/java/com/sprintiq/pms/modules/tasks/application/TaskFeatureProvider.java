@@ -5,6 +5,7 @@ import com.sprintiq.pms.common.error.ResourceNotFoundException;
 import com.sprintiq.pms.modules.ai.application.port.EffortFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.WorkItemFeatureSource;
 import com.sprintiq.pms.modules.backlog.application.StoryTaskCounter;
+import com.sprintiq.pms.modules.backlog.application.StoryTaskCounter.StoryTaskEffort;
 import com.sprintiq.pms.modules.projects.application.LabelService;
 import com.sprintiq.pms.modules.tasks.domain.Task;
 import com.sprintiq.pms.modules.tasks.domain.TaskRepository;
@@ -263,5 +264,31 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
     @Transactional(readOnly = true)
     public long countTasksForStory(UUID storyId) {
         return taskRepository.countByStoryIdAndDeletedAtIsNull(storyId);
+    }
+
+    /**
+     * The story's tasks summed into a budget reading.
+     *
+     * <p>Counts estimated tasks separately from all tasks on purpose. A story with six
+     * tasks of which two are sized has consumed only those two hours as far as any sum
+     * can tell, and reporting the remainder as comfortable would be the most misleading
+     * thing this could return.</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public StoryTaskEffort effortForStory(UUID storyId) {
+        List<Task> tasks = taskRepository.findByStoryIdAndDeletedAtIsNullOrderByRankAsc(storyId);
+        if (tasks.isEmpty()) {
+            return StoryTaskEffort.empty();
+        }
+        long estimatedCount = tasks.stream()
+                .filter(task -> task.getEstimateMinutes() != null && task.getEstimateMinutes() > 0)
+                .count();
+        long minutes = tasks.stream()
+                .map(Task::getEstimateMinutes)
+                .filter(java.util.Objects::nonNull)
+                .mapToLong(Integer::longValue)
+                .sum();
+        return new StoryTaskEffort(tasks.size(), estimatedCount, minutes);
     }
 }
