@@ -322,7 +322,8 @@ function AdjustmentLedger({ adjustments }: { adjustments: RiskAdjustment[] }) {
                     Said out loud, because the two kinds of entry behave differently and
                     the difference is the thing people were confused by. A board reading
                     is folded into the model's own figure by the next Assess; a logged
-                    requirement change is in no feature vector and keeps counting.
+                    requirement change and a claimed remediation step are not in any
+                    feature vector yet, so they keep counting until they are.
                   */
                   <span className="ml-2 rounded bg-surface-3 px-1.5 py-0.5 text-[11px] font-medium text-ink-3">
                     stands after Assess
@@ -339,7 +340,9 @@ function AdjustmentLedger({ adjustments }: { adjustments: RiskAdjustment[] }) {
         Points are an agreed ranking of how much each event disturbs a plan, not a measured
         quantity. Re-assessing folds the board readings into the model&rsquo;s own figure and
         starts them again; entries marked <em>stands after Assess</em> keep counting, because
-        nothing the models read represents them.
+        nothing the models read represents them yet. A claimed fix is released from here the
+        moment it does — when the model stops offering that step, the fall is in its own
+        score instead.
       </p>
     </Card>
   );

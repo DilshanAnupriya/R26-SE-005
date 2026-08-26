@@ -215,6 +215,17 @@ function RiskExplanation({
     (left, right) => Math.abs(right.contribution) - Math.abs(left.contribution),
   );
   const strongest = drivers.reduce((max, driver) => Math.max(max, Math.abs(driver.contribution)), 0);
+  /*
+    Steps whose reading this scoring does not list. Normally there are none — a step only
+    exists because a driver raised the score. But a claim outlives the scoring it was made
+    against, so after a re-assessment that dropped the reading, or one the model could not
+    be reached to price, the claim is still on the ledger with nowhere to be drawn. Left
+    out, the gauge goes on paying for a step with no checkbox anywhere on screen: nothing
+    to see the credit by, and no way to give it back.
+  */
+  const unplaced = steps.filter(
+    (step) => !drivers.some((driver) => driver.feature === step.driverFeature),
+  );
 
   return (
     <div className="space-y-3">
@@ -261,26 +272,49 @@ function RiskExplanation({
           What the model weighed, and what would move it
         </h4>
 
-        {drivers.length === 0 ? (
+        {drivers.length === 0 && unplaced.length === 0 ? (
           <p className="mt-2 rounded-xl border border-dashed border-line px-4 py-6 text-center text-xs leading-relaxed text-ink-3">
             The model returned a score without a breakdown. It still stands, but nothing here can
             say which reading produced it — re-assess once the sprint has more history.
           </p>
         ) : (
           <>
-            <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line">
-              {drivers.map((driver) => (
-                <DriverRow
-                  key={driver.feature}
-                  driver={driver}
-                  strongest={strongest}
-                  riskType={riskType}
-                  steps={steps.filter((step) => step.driverFeature === driver.feature)}
-                  onToggleStep={onToggleStep}
-                  togglingStepKey={togglingStepKey}
-                />
-              ))}
-            </ul>
+            {drivers.length > 0 ? (
+              <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line">
+                {drivers.map((driver) => (
+                  <DriverRow
+                    key={driver.feature}
+                    driver={driver}
+                    strongest={strongest}
+                    riskType={riskType}
+                    steps={steps.filter((step) => step.driverFeature === driver.feature)}
+                    onToggleStep={onToggleStep}
+                    togglingStepKey={togglingStepKey}
+                  />
+                ))}
+              </ul>
+            ) : null}
+
+            {unplaced.length > 0 ? (
+              <div className="mt-2 overflow-hidden rounded-xl border border-line">
+                <p className="border-b border-line bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-ink-3">
+                  Claimed earlier, against a reading this scoring does not list. The points are
+                  still coming off the score, so the step stays here — untick it to give them
+                  back.
+                </p>
+                <ul className="space-y-1.5 p-3">
+                  {unplaced.map((step) => (
+                    <StepRow
+                      key={step.stepKey}
+                      step={step}
+                      riskType={riskType}
+                      onToggle={onToggleStep}
+                      busy={togglingStepKey === step.stepKey}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-3">
               <Info className="mt-px size-3 shrink-0" aria-hidden />
               Each bar is drawn against the strongest reading in this list, and the arrow says
@@ -288,8 +322,8 @@ function RiskExplanation({
               — they do not compare across the three tabs. A step&rsquo;s points are the fall the
               model itself reports when that reading is moved to the stated value, so a reading
               with no step is one the model does not reward changing. Ticking takes the points
-              off straight away; the next assessment re-reads the board and replaces the
-              projection with what the change actually achieved.
+              off straight away and they stay off: each assessment re-prices the claim against
+              the fresh reading, and releases it once the model reports the fall on its own.
             </p>
           </>
         )}
@@ -412,7 +446,9 @@ function DriverRow({
  * to a keyboard and a screen reader for free.</p>
  *
  * <p>The points are stated on the row before it is ticked. A control that changes a risk
- * score without saying by how much is one people click once and then stop trusting.</p>
+ * score without saying by how much is one people click once and then stop trusting — as
+ * is one whose effect the next press of <em>Assess</em> quietly takes back, which is why
+ * a claim now survives a re-scoring rather than expiring with it.</p>
  */
 function StepRow({
   step,
@@ -503,8 +539,9 @@ function StepRow({
  *
  * <p>Sits above the readings because it answers the question a lead asks after ticking
  * something: did that actually do anything. The wording is careful about which half of
- * the number is a measurement — the points are real and currently applied, what they
- * bought is a claim until the sprint is re-assessed.</p>
+ * the number is a measurement — the points are real and currently applied, and what they
+ * bought stays a claim, held across assessments, until the model reads the change off
+ * the board itself and the fall moves into its own score.</p>
  */
 function StepProgress({ steps }: { steps: RiskRemediationStep[] }) {
   if (steps.length === 0) {
@@ -528,7 +565,7 @@ function StepProgress({ steps }: { steps: RiskRemediationStep[] }) {
       )}
       <span className="text-ink-3">
         {applied > 0
-          ? "Held until the next assessment measures what the steps actually achieved."
+          ? "Still held after a re-assessment, until the model reads the change for itself."
           : "Each step below is priced by re-running the model with that one reading moved."}
       </span>
     </div>

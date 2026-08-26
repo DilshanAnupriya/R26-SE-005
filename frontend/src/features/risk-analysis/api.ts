@@ -78,7 +78,13 @@ export const riskApi = {
   latest: (api: ApiClient, sprintId: string) =>
     api.request(`/ai/risk/sprint/${sprintId}`, { schema: sprintRiskSchema }),
 
-  /** Runs all three models now. Re-scoring resets the adjustment overlay to zero. */
+  /**
+   * Runs all three models now.
+   *
+   * <p>Re-scoring clears the board readings from the overlay — the models have just
+   * re-read them — and settles the claimed remediation steps against the new figures
+   * rather than discarding them, so a ticked step does not hand its points back.</p>
+   */
   assess: (api: ApiClient, sprintId: string) =>
     api.request(`/ai/risk/sprint/${sprintId}/assess`, {
       method: "POST",

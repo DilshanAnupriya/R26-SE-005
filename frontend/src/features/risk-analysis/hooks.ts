@@ -21,8 +21,14 @@ export function useSprintRisk(sprintId: string | undefined) {
  * Re-scores the sprint.
  *
  * <p>Invalidates the trend and the adjustment ledger as well as the gauges: a fresh
- * scoring folds the overlay into the model's own figure, so a ledger left on screen
- * would still be claiming credit for points now counted twice.</p>
+ * scoring folds the board's own readings into the model's figure, so a ledger left on
+ * screen would still be claiming credit for points now counted twice.</p>
+ *
+ * <p>The steps go with them, and that one was a bug rather than housekeeping. A
+ * re-scoring settles every ticked step against the new assessment — re-pricing what is
+ * still on offer, retiring what the model has since read for itself — so a step list
+ * left on the old cache showed ticks and prices belonging to the previous scoring,
+ * beside a gauge that had already moved past them.</p>
  */
 export function useAssessSprintRisk(sprintId: string | undefined) {
   const { api } = useSession();
@@ -34,6 +40,7 @@ export function useAssessSprintRisk(sprintId: string | undefined) {
       queryClient.setQueryData(queryKeys.ai.risk(result.sprintId), result);
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskTrend(result.sprintId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskAdjustments(result.sprintId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskSteps(result.sprintId) });
       toast.success("Sprint reassessed.");
     },
     onError: (error) => {
@@ -77,6 +84,11 @@ export function useRiskSteps(sprintId: string | undefined) {
  * straight away, and leaving any of the three stale would have the screen disagreeing
  * with itself about a change the user just made.</p>
  *
+ * <p>The credit is not spent by the next assessment. Re-scoring settles it instead: the
+ * points are re-priced while the model still offers the step, and released once it stops
+ * offering it — which is what a reading that has actually moved looks like, and the
+ * point at which the fall is in the model’s own score rather than in this overlay.</p>
+ *
  * <p>The response is the whole step list, so it is written into the cache rather than
  * invalidated: the checkbox has to settle immediately, and a refetch round trip is long
  * enough to look like the tick did not register.</p>
@@ -102,7 +114,7 @@ export function useToggleRiskStep(sprintId: string | undefined) {
         input.done
           ? points == null
             ? "Step marked done."
-            : `Step done — risk ${points} pts lower until the next assessment.`
+            : `Step done — risk ${points} pts lower, and it stays off across assessments.`
           : "Step reopened — its credit was withdrawn.",
       );
     },
