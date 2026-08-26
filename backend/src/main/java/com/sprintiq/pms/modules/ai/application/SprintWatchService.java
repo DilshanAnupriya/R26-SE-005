@@ -3,6 +3,7 @@ package com.sprintiq.pms.modules.ai.application;
 import com.sprintiq.pms.modules.ai.application.port.CollaborationFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.CollaborationFeatureSource.WatchedTask;
 import com.sprintiq.pms.modules.ai.application.port.SprintFeatureSource;
+import com.sprintiq.pms.modules.ai.application.port.StoryFeatureSource;
 import com.sprintiq.pms.modules.ai.domain.RiskType;
 import com.sprintiq.pms.tenancy.TenantContext;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +49,8 @@ public class SprintWatchService {
     static final String KEY_NOT_STARTED_HALF = "TASK_NOT_STARTED_HALF:";
     /** Past its estimate and still not finished. */
     static final String KEY_NOT_DONE_OVERDUE = "TASK_NOT_DONE_OVERDUE:";
+    /** Tasks under a story are estimated at more time than its points allow. */
+    static final String KEY_STORY_OVER_BUDGET = "STORY_OVER_BUDGET:";
 
     // Deliberately small. These are nudges accumulated across many tasks, not verdicts:
     // one quiet task should tint a sprint, and a dozen should colour it.
@@ -57,12 +60,26 @@ public class SprintWatchService {
     private static final BigDecimal DELTA_NOT_STARTED_BUDGET = BigDecimal.valueOf(3);
     private static final BigDecimal DELTA_OVERDUE_BUDGET = BigDecimal.valueOf(5);
 
+    /**
+     * A story's overrun, in risk points: one per half hour past its budget.
+     *
+     * <p>Proportional rather than flat because the size of the miss is the information.
+     * A story ten minutes over is a rounding error in someone's estimate; one a day over
+     * means the story was never a 5-pointer, and the sprint plan is built on a number
+     * that was wrong. Capped so a single mis-sized story cannot swamp everything else the
+     * ledger has recorded.</p>
+     */
+    private static final BigDecimal MINUTES_PER_OVERRUN_POINT = BigDecimal.valueOf(30);
+    private static final BigDecimal MIN_STORY_OVERRUN_DELTA = BigDecimal.valueOf(2);
+    private static final BigDecimal MAX_STORY_OVERRUN_DELTA = BigDecimal.valueOf(12);
+
     /** How long a comment may sit unanswered before it counts as unanswered. */
     private static final Duration UNANSWERED_AFTER = Duration.ofHours(24);
 
     private final SprintFeatureSource sprints;
     private final CollaborationFeatureSource collaboration;
     private final SprintRiskAdjustmentService adjustments;
+    private final StoryFeatureSource stories;
 
     /**
      * Every fifteen minutes: frequent enough that the number tracks the board, rare
@@ -107,6 +124,8 @@ public class SprintWatchService {
         if (tasks.isEmpty()) {
             return;
         }
+        storyBudgets(sprintId);
+
         Instant now = Instant.now();
         for (WatchedTask task : tasks) {
             silentTask(sprintId, task, now);
@@ -114,6 +133,91 @@ public class SprintWatchService {
             notStartedByHalfTime(sprintId, task, now);
             overdue(sprintId, task, now);
         }
+    }
+
+    /**
+     * Stories whose task breakdown is estimated at more time than their points allow.
+     *
+     * <p>The link between the two estimates a team keeps. Points say how big the story
+     * was thought to be; the tasks underneath say how big it turned out to be once
+     * somebody broke it down. When the second exceeds the first, the sprint is carrying
+     * work the plan does not account for — which is over-budget risk in the most literal
+     * sense available.</p>
+     *
+     * <p>Revised rather than recorded once, because the overrun is a state and not an
+     * event: adding another task should deepen the same entry, not add a second one. And
+     * it clears the moment the story is re-pointed or a task re-estimated, so correcting
+     * the plan visibly removes the penalty.</p>
+     */
+    private void storyBudgets(java.util.UUID sprintId) {
+        List<StoryFeatureSource.StoryBudgetBreach> breaches;
+        try {
+            breaches = stories.budgetBreachesForSprint(sprintId);
+        } catch (RuntimeException ex) {
+            log.warn("Could not read story budgets for sprint {}", sprintId, ex);
+            return;
+        }
+
+        java.util.Set<java.util.UUID> breaching = new java.util.HashSet<>();
+        for (StoryFeatureSource.StoryBudgetBreach breach : breaches) {
+            breaching.add(breach.storyId());
+            adjustments.revise(sprintId, RiskType.OVER_BUDGET,
+                    KEY_STORY_OVER_BUDGET + breach.storyId(),
+                    overrunDelta(breach.overrunMinutes()),
+                    breach.itemKey() + " is broken into "
+                            + describeMinutes(breach.overrunMinutes())
+                            + " more work than its "
+                            + describeMinutes(breach.budgetMinutes()) + " estimate allows");
+        }
+
+        // Withdraw entries for stories that have come back inside their budget. Only the
+        // sprint's own stories are considered, so a story moved to another sprint keeps
+        // its entry there rather than being silently forgiven by this one.
+        for (StoryFeatureSource.StoryBudgetBreach previous : previousBreaches(sprintId)) {
+            if (!breaching.contains(previous.storyId())) {
+                adjustments.clear(sprintId, KEY_STORY_OVER_BUDGET + previous.storyId());
+            }
+        }
+    }
+
+    /**
+     * Which stories this sprint was previously charged for.
+     *
+     * <p>Read from the ledger rather than recomputed: the entries are the record of what
+     * was charged, and a story deleted or moved out of the sprint would otherwise leave a
+     * penalty nothing could ever clear.</p>
+     */
+    private List<StoryFeatureSource.StoryBudgetBreach> previousBreaches(java.util.UUID sprintId) {
+        return adjustments.ledgerFor(sprintId).entries().stream()
+                .map(entry -> entry.getSourceKey())
+                .filter(key -> key != null && key.startsWith(KEY_STORY_OVER_BUDGET))
+                .map(key -> key.substring(KEY_STORY_OVER_BUDGET.length()))
+                .map(id -> {
+                    try {
+                        return new StoryFeatureSource.StoryBudgetBreach(
+                                java.util.UUID.fromString(id), null, 0, 0);
+                    } catch (IllegalArgumentException ex) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    private BigDecimal overrunDelta(long overrunMinutes) {
+        BigDecimal points = BigDecimal.valueOf(overrunMinutes)
+                .divide(MINUTES_PER_OVERRUN_POINT, 1, java.math.RoundingMode.HALF_UP);
+        return points.max(MIN_STORY_OVERRUN_DELTA).min(MAX_STORY_OVERRUN_DELTA);
+    }
+
+    /** "90 minutes" reads worse than "1h 30m" in a ledger a person scans. */
+    private String describeMinutes(long minutes) {
+        long hours = minutes / 60;
+        long rest = minutes % 60;
+        if (hours == 0) {
+            return rest + "m";
+        }
+        return rest == 0 ? hours + "h" : hours + "h " + rest + "m";
     }
 
     /**

@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateTask } from "../hooks";
+import { useBacklog, useStoryTaskBudget } from "@/features/backlog/hooks";
+import { StoryBudgetMeter } from "@/features/backlog/components/story-budget-meter";
 import type { BoardMember } from "./kanban-board";
 
 const PRIORITIES = ["LOWEST", "LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
@@ -47,6 +49,7 @@ const ESTIMATES: { label: string; minutes: number | null }[] = [
   { label: "1 week", minutes: 2400 },
 ];
 const NO_ESTIMATE = "none";
+const NO_STORY = "none";
 
 function initials(name?: string | null) {
   if (!name) return "?";
@@ -78,12 +81,22 @@ export function AddTaskDialog({
   onCreated?: () => void;
 }) {
   const create = useCreateTask(projectId);
+  const backlog = useBacklog(projectId, { size: 100 });
+  const stories = (backlog.data?.content ?? []).filter(
+    (story) => !defaultSprintId || story.sprintId === defaultSprintId,
+  );
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<string>("MEDIUM");
   const [assigneeId, setAssigneeId] = useState<string>(UNASSIGNED);
   const [estimate, setEstimate] = useState<string>(NO_ESTIMATE);
+  const [storyId, setStoryId] = useState<string>(NO_STORY);
+
+  // Only fetched once a story is chosen: the budget is a property of that story, and
+  // pre-fetching every story's would be a hundred requests to answer one question.
+  const budget = useStoryTaskBudget(storyId === NO_STORY ? undefined : storyId);
+
 
   // Reopening the dialog after a create should offer an empty form, not the last one.
   useEffect(() => {
@@ -93,6 +106,7 @@ export function AddTaskDialog({
       setPriority("MEDIUM");
       setAssigneeId(UNASSIGNED);
       setEstimate(NO_ESTIMATE);
+      setStoryId(NO_STORY);
     }
   }, [open]);
 
@@ -110,6 +124,7 @@ export function AddTaskDialog({
         sprintId: defaultSprintId || undefined,
         assigneeId: assigneeId === UNASSIGNED ? undefined : assigneeId,
         estimateMinutes: estimate === NO_ESTIMATE ? undefined : Number(estimate),
+        storyId: storyId === NO_STORY ? undefined : storyId,
       },
       {
         onSuccess: () => {
@@ -152,6 +167,35 @@ export function AddTaskDialog({
               placeholder="Optional"
               rows={3}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="task-story">Story</Label>
+            <Select value={storyId} onValueChange={setStoryId}>
+              <SelectTrigger id="task-story" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_STORY}>No story</SelectItem>
+                {stories.map((story) => (
+                  <SelectItem key={story.id} value={story.id}>
+                    {story.itemKey} · {story.title}
+                    {story.storyPoints != null ? ` (${story.storyPoints} pts)` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {budget.data ? (
+              <StoryBudgetMeter
+                budget={budget.data}
+                pendingMinutes={estimate === NO_ESTIMATE ? null : Number(estimate)}
+                className="pt-1"
+              />
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Attach the task to a story to see how much of its estimated time is left.
+              </p>
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
