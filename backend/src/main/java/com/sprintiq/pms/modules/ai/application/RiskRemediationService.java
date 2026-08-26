@@ -1,6 +1,7 @@
 package com.sprintiq.pms.modules.ai.application;
 
 import com.sprintiq.pms.common.error.BusinessRuleException;
+import com.sprintiq.pms.modules.ai.domain.PredictionDriver;
 import com.sprintiq.pms.modules.ai.domain.RiskAssessment;
 import com.sprintiq.pms.modules.ai.domain.RiskAssessmentRepository;
 import com.sprintiq.pms.modules.ai.domain.RiskType;
@@ -14,9 +15,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -27,15 +30,20 @@ import java.util.UUID;
  * the prediction; this service is the part that remembers which of them a team has
  * claimed, and turns a claim into a number on the gauge.</p>
  *
- * <p><strong>Ticking a step is a claim, and the credit for it is provisional.</strong>
- * Completion is recorded as a negative entry in the same ledger that charges a sprint for
- * a blocked task, so the gauge moves immediately and the reason is on the audit trail
- * next to everything else that moved it. What the ledger cannot do is verify the claim.
- * That is what <em>Assess</em> is for: re-scoring reads the board again, measures whether
- * the commitment really came down or the blockers really cleared, and the provisional
- * credit is replaced by whatever actually happened. A step ticked but not done therefore
- * pays back for a few hours and is then taken away — which is the correct behaviour, and
- * the reason every step names a reading the model will re-read.</p>
+ * <p><strong>Ticking a step is a claim, and the claim stands until the model can see
+ * it.</strong> Completion is recorded as a negative entry in the same ledger that charges
+ * a sprint for a blocked task, so the gauge moves immediately and the reason is on the
+ * audit trail next to everything else that moved it. Re-scoring does not cancel that
+ * entry. It settles it — {@link #settleAfterScoring} re-prices the claim against the new
+ * assessment, and withdraws it once the model stops offering the step at all, which is
+ * what a reading that has actually moved looks like from here.</p>
+ *
+ * <p>The distinction matters because the two cases are opposite. Where the work was done,
+ * the improvement is now in the model's own figure and the claim retires into it, so
+ * nothing is counted twice. Where it was not, the board still reads the way it did, the
+ * step is still on offer, and the points stay off — rather than reappearing the moment
+ * somebody presses <em>Assess</em>, which is what the earlier expire-on-scoring rule did
+ * and what taught people the checkbox did not hold.</p>
  *
  * <p>Because the ledger is the record, the state and the credit are the same fact and
  * cannot disagree. There is no separate "step completed" table to fall out of step with
@@ -51,6 +59,9 @@ public class RiskRemediationService {
 
     /** Prefix on the ledger source key, so these are distinguishable from board events. */
     private static final String SOURCE_PREFIX = "STEP";
+
+    /** How a claim reads on the audit trail, and how its title is recovered from it. */
+    private static final String CLAIM_REASON_PREFIX = "Fix applied: ";
 
     // -------------------------------------------------------------------- reads
 
@@ -87,12 +98,120 @@ public class RiskRemediationService {
 
         String sourceKey = sourceKey(riskType, stepKey);
         if (done) {
-            adjustmentService.restate(sprintId, riskType, sourceKey,
-                    step.points().negate(), "Fix applied: " + step.title());
+            adjustmentService.restateStanding(sprintId, riskType, sourceKey,
+                    step.points().negate(), CLAIM_REASON_PREFIX + step.title());
         } else {
             adjustmentService.clear(sprintId, sourceKey);
         }
         return stepsFor(sprintId);
+    }
+
+    /**
+     * Settles the claimed steps against a scoring that has just been written.
+     *
+     * <p>Called by {@link RiskService} immediately after it saves new assessment rows,
+     * and it is what makes a tick mean something durable. A claimed step is re-priced to
+     * what the fresh scoring says it is worth, and withdrawn entirely once the model
+     * stops offering it — which is what happens when the reading has actually moved, so
+     * the credit is retired at precisely the point the score contains it on its own.</p>
+     *
+     * <p>The alternative, which this replaces, was to let re-scoring expire the claim.
+     * That was right in the case where the work had been done and wrong in every other:
+     * a team that ticked a step and then pressed <em>Assess</em> watched the points they
+     * had just taken off come straight back, because nothing the model reads had changed
+     * yet. The score bounced, and a control whose effect the next click undoes is one
+     * people stop using.</p>
+     *
+     * <p><strong>A claim is only ever released on positive evidence.</strong> The
+     * question asked of each one is whether the new assessment still names its reading as
+     * something raising the score, and that is read off the stored driver list — data on
+     * the row this scoring just wrote, not a probe. It deliberately is not "is a step
+     * still on offer": the recourse search drops a lever whose probe times out, so a slow
+     * model service would have cancelled the team's credit and bounced the gauge back up,
+     * which is the very failure this method exists to end.</p>
+     *
+     * <p>Re-pricing is the part that may be skipped. Where the search did answer, the
+     * claim is revalued to what this scoring says the step is now worth; where it could
+     * not, the claim stands at what it was worth before. Neither outcome hands points
+     * back.</p>
+     */
+    @Transactional
+    public void settleAfterScoring(UUID sprintId) {
+        for (RiskType riskType : RiskType.values()) {
+            settleAfterScoring(sprintId, riskType);
+        }
+    }
+
+    /** As {@link #settleAfterScoring(UUID)}, for the one type a single-model re-score wrote. */
+    @Transactional
+    public void settleAfterScoring(UUID sprintId, RiskType riskType) {
+        SprintRiskAdjustmentService.Ledger ledger = adjustmentService.ledgerFor(sprintId);
+        List<SprintRiskAdjustment> claimed = claimsFor(ledger, riskType);
+        if (claimed.isEmpty()) {
+            // Nothing claimed, so nothing to settle - and, more usefully, no reason to
+            // run the recourse search. An ordinary assessment pays nothing for this.
+            return;
+        }
+
+        RiskAssessment assessment = assessments
+                .findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprintId, riskType)
+                .orElse(null);
+        if (assessment == null) {
+            return;
+        }
+
+        Map<String, RiskRemediationStepResponse> measured = new LinkedHashMap<>();
+        for (RiskRemediationStepResponse step : stepsFor(sprintId, riskType, ledger)) {
+            // Only the ones this scoring actually priced. The list also carries claims
+            // rebuilt from the ledger for steps the search could not reach, and those
+            // already hold the value being asked about — re-pricing one to itself would
+            // put a write on the audit trail saying nothing happened.
+            if (step.baselineScore() != null) {
+                measured.put(step.stepKey(), step);
+            }
+        }
+
+        for (SprintRiskAdjustment entry : claimed) {
+            String feature = stepKeyOf(entry.getSourceKey());
+            if (!stillRaising(assessment, feature)) {
+                // The model has stopped naming this reading as something pushing the
+                // score up, which is what a finished step looks like from here: the
+                // improvement is in the new figure, and going on paying for it would
+                // take the same points off twice.
+                adjustmentService.clear(sprintId, entry.getSourceKey());
+                continue;
+            }
+            RiskRemediationStepResponse step = measured.get(feature);
+            if (step != null) {
+                // Still raising, so the board has not shown the change yet and the claim
+                // stands. Revalued to this scoring own figure, which is also the number
+                // the panel is about to show beside the tick.
+                adjustmentService.reprice(sprintId, entry.getSourceKey(),
+                        step.points().negate(), CLAIM_REASON_PREFIX + step.title());
+            }
+            // No step in hand means the probe for it did not answer in time. The claim is
+            // left exactly as it was rather than guessed at: a claim that quietly changed
+            // value because the model service was busy would be worse than a stale one.
+        }
+    }
+
+    /**
+     * Whether this scoring still blames the reading a claim was made against.
+     *
+     * <p>Read off the assessment own stored drivers, and matched to the same test
+     * {@link RiskRecourseSearch} uses to decide what is worth probing at all — so
+     * "no longer raising" and "no longer offered as a step" mean the same thing, minus
+     * the network call that can fail.</p>
+     */
+    private static boolean stillRaising(RiskAssessment assessment, String feature) {
+        if (assessment.getDrivers() == null) {
+            return false;
+        }
+        return assessment.getDrivers().stream()
+                .filter(driver -> feature.equals(driver.feature()))
+                .anyMatch(driver -> PredictionDriver.INCREASE.equals(driver.direction())
+                                    && driver.contribution() != null
+                                    && driver.contribution().signum() != 0);
     }
 
     // ---------------------------------------------------------------- internals
@@ -111,10 +230,12 @@ public class RiskRemediationService {
         }
 
         List<RiskRemediationStepResponse> steps = new ArrayList<>();
+        Set<String> priced = new LinkedHashSet<>();
         for (RiskRecourseSearch.Recourse found : cached(assessment)) {
             // One step per movable reading, so the key is the reading. Two steps against
             // the same feature would be two claims on one action.
             String stepKey = found.feature();
+            priced.add(stepKey);
             Optional<SprintRiskAdjustment> standing = ledger.standing(
                     sourceKey(riskType, stepKey), assessment.getCreatedAt());
 
@@ -128,7 +249,72 @@ public class RiskRemediationService {
                     standing.isPresent(),
                     standing.map(SprintRiskAdjustment::getCreatedAt).orElse(null)));
         }
+
+        // A claim the search did not price this time is still a claim. The tick and the
+        // credit are one ledger row, so dropping the row from this list would leave the
+        // gauge quietly paying for a step with no checkbox on screen - nothing to see it
+        // by and nothing to untick. That is what a model service being down used to do to
+        // this panel: every probe fails, the search returns nothing, and the whole
+        // checklist vanished along with the team's ticks.
+        for (SprintRiskAdjustment claim : claimsFor(ledger, riskType)) {
+            String stepKey = stepKeyOf(claim.getSourceKey());
+            if (!stepKey.isEmpty() && priced.add(stepKey)) {
+                steps.add(claimed(riskType, stepKey, claim));
+            }
+        }
         return steps;
+    }
+
+    /**
+     * A claimed step the model cannot currently re-price, rebuilt from the ledger.
+     *
+     * <p>Everything here comes from the row that <em>is</em> the claim, so it stays
+     * truthful without the model: the title is the sentence the step was claimed under
+     * and the points are what it is actually holding off right now. The measurement
+     * fields are left null rather than guessed — the panel drops the "53% to 35%" note
+     * when they are absent, which is correct, because no scoring has measured this one
+     * since.</p>
+     */
+    private RiskRemediationStepResponse claimed(RiskType riskType, String stepKey,
+                                                SprintRiskAdjustment claim) {
+        String feature = featureOf(stepKey);
+        return new RiskRemediationStepResponse(
+                riskType, feature, feature, stepKey, titleOf(claim),
+                "Claimed against an earlier scoring. The model has not been able to "
+                + "re-price this step since, so it is shown at what it is still worth.",
+                claim.getDelta().abs().setScale(0, RoundingMode.HALF_UP).max(BigDecimal.ONE),
+                null, null, null, null,
+                RiskStepGuidance.forFeature(feature),
+                true, claim.getCreatedAt());
+    }
+
+    /** Every remediation claim standing against one risk on this sprint. */
+    private static List<SprintRiskAdjustment> claimsFor(SprintRiskAdjustmentService.Ledger ledger,
+                                                        RiskType riskType) {
+        return ledger.entries().stream()
+                .filter(entry -> entry.getRiskType() == riskType)
+                .filter(entry -> entry.getSourceKey() != null
+                                 && entry.getSourceKey().startsWith(SOURCE_PREFIX + ":"))
+                .toList();
+    }
+
+    /** The sentence a claim was made under, recovered from its ledger reason. */
+    private static String titleOf(SprintRiskAdjustment claim) {
+        String reason = claim.getReason() == null ? "" : claim.getReason();
+        return reason.startsWith(CLAIM_REASON_PREFIX)
+                ? reason.substring(CLAIM_REASON_PREFIX.length()) : reason;
+    }
+
+    /**
+     * The reading a step key is about.
+     *
+     * <p>Today a step key is the feature and nothing else, but rows written under an
+     * older {@code <feature>:<step>} scheme are still in the ledger, and the guidance
+     * lookup wants the feature half of those too.</p>
+     */
+    private static String featureOf(String stepKey) {
+        int separator = stepKey.indexOf(':');
+        return separator < 0 ? stepKey : stepKey.substring(0, separator);
     }
 
     /**
@@ -188,5 +374,17 @@ public class RiskRemediationService {
 
     private static String sourceKey(RiskType riskType, String stepKey) {
         return SOURCE_PREFIX + ":" + riskType.name() + ":" + stepKey;
+    }
+
+    /**
+     * The step a ledger key names.
+     *
+     * <p>Split on the first two separators only. A feature name has never contained a
+     * colon, but reconstructing the tail rather than taking the third field means a
+     * lever that one day does cannot silently stop matching its own claim.</p>
+     */
+    private static String stepKeyOf(String sourceKey) {
+        String[] parts = sourceKey.split(":", 3);
+        return parts.length == 3 ? parts[2] : "";
     }
 }

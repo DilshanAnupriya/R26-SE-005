@@ -144,22 +144,29 @@ public class SprintRiskAdjustmentService {
     }
 
     /**
-     * Records a state and always re-dates it, whether or not the value moved.
+     * Records a claim that keeps counting until a scoring can account for it.
      *
-     * <p>{@link #revise} deliberately leaves an unchanged reading alone, so a repeated
-     * no-op call cannot resurrect evidence a scoring has already absorbed. A remediation
-     * step is the one case where the repeat is not a no-op: the same step, claimed again
-     * after a re-assessment, is a new claim about a sprint the model has since re-read,
-     * and it has to carry today's date or it lands behind the cutoff and credits
-     * nothing.</p>
+     * <p>Written for the remediation steps, and unlike {@link #revise} in two ways that
+     * both follow from what ticking a step means. The entry survives re-scoring, because
+     * a step claimed but not yet visible on the board is exactly the case no feature
+     * vector carries: folding it away at the next assessment handed the team back the
+     * score they had just moved, which reads on screen as the tick being undone. And the
+     * same key claimed again is not a no-op the way a re-read of an unchanged board is
+     * — it is a fresh claim about a sprint the model has since re-read — so the row
+     * carries today's date.</p>
+     *
+     * <p>Surviving is not the same as being paid for ever, and the difference is what
+     * keeps this from double-counting. {@link RiskRemediationService} settles every
+     * standing claim against each new scoring: re-priced to what the step is worth now,
+     * and withdrawn outright once the model reads the improvement for itself.</p>
      *
      * <p>Delete-and-insert for the same reason {@code revise} uses it —
      * {@code created_at} is mapped {@code updatable = false}, so assigning it is real in
      * the entity and silently dropped from the UPDATE.</p>
      */
     @Transactional
-    public void restate(UUID sprintId, RiskType riskType, String sourceKey,
-                        BigDecimal delta, String reason) {
+    public void restateStanding(UUID sprintId, RiskType riskType, String sourceKey,
+                                BigDecimal delta, String reason) {
         if (sprintId == null || sourceKey == null || delta == null) {
             return;
         }
@@ -169,7 +176,33 @@ public class SprintRiskAdjustmentService {
             // delete reaches the database rather than alongside it at flush time.
             adjustments.flush();
         });
-        adjustments.save(build(sprintId, riskType, delta, reason, sourceKey));
+        SprintRiskAdjustment adjustment = build(sprintId, riskType, delta, reason, sourceKey);
+        adjustment.setSurvivesScoring(true);
+        adjustments.save(adjustment);
+    }
+
+    /**
+     * Revalues an entry in place, leaving the date it was made alone.
+     *
+     * <p>For a claim that is still the same claim, made when it was made, where only
+     * what it is currently worth has moved. Going through {@link #restateStanding}
+     * instead would re-date the row, and "claimed at 09:40" would quietly become the
+     * time of the last assessment — a fact about the system rather than about the
+     * team.</p>
+     *
+     * <p>Does nothing where there is no such entry: a claim already withdrawn has
+     * nothing to revalue, and re-creating one here would resurrect it.</p>
+     */
+    @Transactional
+    public void reprice(UUID sprintId, String sourceKey, BigDecimal delta, String reason) {
+        if (sprintId == null || sourceKey == null || delta == null) {
+            return;
+        }
+        adjustments.findBySprintIdAndSourceKey(sprintId, sourceKey).ifPresent(existing -> {
+            existing.setDelta(delta);
+            existing.setReason(truncate(reason));
+            adjustments.save(existing);
+        });
     }
 
     /** Withdraws a state adjustment — the condition it described no longer holds. */
@@ -256,19 +289,21 @@ public class SprintRiskAdjustmentService {
         }
 
         /**
-         * The entry under this source key that a scoring has not yet absorbed, if any.
+         * The entry under this source key that is still in force, if any.
          *
-         * <p>Same cutoff as {@link #netSince}, and for the same reason. A remediation
-         * step ticked before the last assessment contributes nothing to the current
-         * figure — the model has since re-read the sprint and measured whatever the step
-         * actually achieved — so reporting it as still in force would show a tick beside
-         * a credit that is no longer being paid.</p>
+         * <p>Same rule as {@link #netSince}, and for the same reason: what a tick shows
+         * and what the gauge is actually paying have to be one fact, or the panel ends
+         * up with a ticked box beside a credit nobody is honouring. An entry a scoring
+         * cannot absorb ignores the cutoff, so a claimed step stays claimed across
+         * re-assessments for exactly as long as its credit stands; everything else
+         * expires with the scoring that read the same evidence.</p>
          */
         public java.util.Optional<SprintRiskAdjustment> standing(String sourceKey,
                                                                  java.time.Instant since) {
             return entries.stream()
                     .filter(entry -> sourceKey.equals(entry.getSourceKey()))
-                    .filter(entry -> since == null || entry.getCreatedAt().isAfter(since))
+                    .filter(entry -> entry.isSurvivesScoring()
+                            || since == null || entry.getCreatedAt().isAfter(since))
                     .findFirst();
         }
 

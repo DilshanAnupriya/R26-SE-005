@@ -68,6 +68,7 @@ class AiLayerIT extends AbstractIntegrationTest {
     @Autowired RiskService riskService;
     @Autowired RequirementChangeService requirementChangeService;
     @Autowired SprintRiskAdjustmentService adjustmentService;
+    @Autowired RiskRemediationService remediationService;
     @Autowired CostForecastService costForecastService;
     @Autowired AiFeedbackService feedbackService;
     @Autowired AiInsightsService insightsService;
@@ -388,6 +389,60 @@ class AiLayerIT extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("a ticked remediation step keeps its credit across Assess")
+    void claimedStepSurvivesReassessment() {
+        ProjectResponse project = newProject("Mobile Banking");
+        // No sprint goal, which the model reads as a raising driver on a reading the
+        // sprint can move — so there is a step on offer to claim. A goal is also
+        // something ticking the box does not actually do, which is the case that broke:
+        // the board is unchanged, so the next scoring reads exactly what it read before.
+        SprintResponse sprint = newSprintWithoutAGoal(project.id());
+        riskService.assess(sprint.id());
+
+        List<RiskRemediationStepResponse> offered = remediationService.stepsFor(sprint.id());
+        assertThat(offered)
+                .as("the model has to reward moving at least one reading for this to test anything")
+                .isNotEmpty();
+        RiskRemediationStepResponse step = offered.get(0);
+
+        remediationService.toggle(sprint.id(), step.riskType(), step.stepKey(), true);
+        BigDecimal claimed = deltaFor(riskService.latest(sprint.id()), step.riskType());
+        assertThat(claimed).as("ticking takes the points off straight away").isNegative();
+
+        // The regression this pins. Nothing on the board has moved, so the same step is
+        // still on offer and the claim has to stand at the same figure. It used to fall
+        // behind the new scoring's cutoff instead, and the points a team had just taken
+        // off came straight back the moment anybody pressed Assess.
+        assertThat(deltaFor(riskService.assess(sprint.id()), step.riskType()))
+                .as("the Assess response itself has to carry the claim")
+                .isEqualByComparingTo(claimed);
+
+        // Same figure on a fresh read, so the two paths cannot disagree about a sprint
+        // nothing has happened to in between.
+        assertThat(deltaFor(riskService.latest(sprint.id()), step.riskType()))
+                .isEqualByComparingTo(claimed);
+
+        // And the tick is still shown. The state and the credit are the same ledger row,
+        // so a box that unticked itself here would mean the gauge was paying for a claim
+        // the panel had forgotten.
+        assertThat(remediationService.stepsFor(sprint.id()))
+                .filteredOn(candidate -> candidate.riskType() == step.riskType()
+                                         && candidate.stepKey().equals(step.stepKey()))
+                .singleElement()
+                .extracting(RiskRemediationStepResponse::done)
+                .isEqualTo(true);
+    }
+
+    /** The one model's figure out of the three-model response. */
+    private BigDecimal deltaFor(SprintRiskResponse risk, RiskType riskType) {
+        return switch (riskType) {
+            case OVER_BUDGET -> risk.overBudget().adjustmentDelta();
+            case REQUIREMENT_CHANGE -> risk.requirementChange().adjustmentDelta();
+            case COMMUNICATION_COLLABORATION -> risk.communicationCollaboration().adjustmentDelta();
+        };
+    }
+
+    @Test
     @DisplayName("a cost forecast always carries bounds and a variance against the budget")
     void costForecastReportsUncertaintyAndVariance() {
         ProjectResponse project = newProject("Mobile Banking");
@@ -464,6 +519,23 @@ class AiLayerIT extends AbstractIntegrationTest {
     }
 
     // ------------------------------------------------------------------ internals
+
+    /** As {@link #newSprintWithWork}, minus the goal — a reading the models penalise. */
+    private SprintResponse newSprintWithoutAGoal(UUID projectId) {
+        StoryResponse first = newStory(projectId, "Committed A", "Detail.", "One\nTwo",
+                BigDecimal.valueOf(5));
+        StoryResponse second = newStory(projectId, "Committed B", "Detail.", "One",
+                BigDecimal.valueOf(8));
+
+        SprintResponse sprint = sprintService.create(new CreateSprintRequest(projectId,
+                "Sprint 1", null, LocalDate.now(), LocalDate.now().plusDays(13),
+                (short) 5, BigDecimal.valueOf(20), BigDecimal.valueOf(320),
+                BigDecimal.valueOf(30000)));
+
+        sprintService.addItems(sprint.id(),
+                new AddSprintItemsRequest(List.of(first.id(), second.id())));
+        return sprint;
+    }
 
     private SprintResponse newSprintWithWork(UUID projectId) {
         StoryResponse first = newStory(projectId, "Committed A", "Detail.", "One\nTwo",

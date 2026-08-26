@@ -54,6 +54,8 @@ public class RiskService {
     private final CollaborationFeatureSource collaboration;
     private final RiskAssessmentRepository assessments;
     private final SprintRiskAdjustmentService adjustmentService;
+    /** Settles the claimed remediation steps against each new scoring — see below. */
+    private final RiskRemediationService remediation;
 
     // Over-budget carries the most weight: it is the best calibrated of the three
     // (0.91 grouped CV AUC against 0.76 for requirement change) and it is the outcome
@@ -92,14 +94,15 @@ public class RiskService {
         Scored communicationCollaboration =
                 assessOne(RiskType.COMMUNICATION_COLLABORATION, sprint, project, shared, ledger);
 
-        RiskAssessmentResponse ob = overBudget == null ? null : overBudget.response();
-        RiskAssessmentResponse rc = requirementChange == null ? null : requirementChange.response();
-        RiskAssessmentResponse cc = communicationCollaboration == null
-                ? null : communicationCollaboration.response();
+        RiskAssessmentResponse ob = settled(sprintId, RiskType.OVER_BUDGET, overBudget);
+        RiskAssessmentResponse rc = settled(sprintId, RiskType.REQUIREMENT_CHANGE, requirementChange);
+        RiskAssessmentResponse cc = settled(sprintId, RiskType.COMMUNICATION_COLLABORATION,
+                communicationCollaboration);
 
         RiskSeverity highest = highestOf(ob, rc, cc);
         return new SprintRiskResponse(sprintId, ob, rc, cc, highest,
-                aggregate(overBudget, requirementChange, communicationCollaboration));
+                aggregate(scored(ob, overBudget), scored(rc, requirementChange),
+                        scored(cc, communicationCollaboration)));
     }
 
     @Transactional
@@ -108,7 +111,36 @@ public class RiskService {
         ProjectContextSource.ProjectContext project = projects.contextFor(sprint.projectId());
         Scored scored = assessOne(riskType, sprint, project, sharedFeatures(sprint, project),
                 adjustmentService.ledgerFor(sprintId));
-        return scored == null ? null : scored.response();
+        return settled(sprintId, riskType, scored);
+    }
+
+    /**
+     * One model's fresh figure, after the sprint's claimed steps have been settled
+     * against it.
+     *
+     * <p>{@code assessOne} computes its overlay from the ledger as it stood before the
+     * scoring, which is right for everything the board wrote and wrong for the one thing
+     * the scoring itself changes: a claimed remediation step is re-priced against the new
+     * assessment and retired where the model has taken the improvement into its own
+     * figure. So the settling happens first and the overlay is read again afterwards.</p>
+     *
+     * <p>Without the second read, pressing <em>Assess</em> returned a number the very
+     * next page load disagreed with — {@code latest} would have gone on to apply the
+     * settled ledger, and the gauge would have moved on its own a second after the
+     * button was pressed.</p>
+     */
+    private RiskAssessmentResponse settled(UUID sprintId, RiskType riskType, Scored scored) {
+        if (scored == null) {
+            return null;
+        }
+        remediation.settleAfterScoring(sprintId, riskType);
+        return adjusted(sprintId, riskType, adjustmentService.ledgerFor(sprintId));
+    }
+
+    /** The settled response back in the shape {@link #aggregate} reads. */
+    private Scored scored(RiskAssessmentResponse response, Scored original) {
+        return response == null || original == null
+                ? null : new Scored(response, original.degraded());
     }
 
     /**

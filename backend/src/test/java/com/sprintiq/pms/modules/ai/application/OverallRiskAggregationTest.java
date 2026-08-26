@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Overall risk aggregation")
 class OverallRiskAggregationTest {
 
-    private final RiskService service = new RiskService(null, null, null, null, null, null, null, null);
+    private final RiskService service = new RiskService(null, null, null, null, null, null, null, null, null);
 
     private static BigDecimal score(double value) {
         return BigDecimal.valueOf(value);
