@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, GripVertical, Plus, RotateCcw, UserPlus, UserX } from "lucide-react";
+import { AlertTriangle, Check, GripVertical, RotateCcw, UserPlus, UserX } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -38,7 +38,6 @@ export function KanbanBoard({
   board,
   onMove,
   onAssign,
-  onAddTask,
   onReopen,
   onOpenTask,
   onCommentUnanswered,
@@ -49,8 +48,6 @@ export function KanbanBoard({
   board: TaskBoard;
   onMove: (taskId: string, state: WorkflowState) => void;
   onAssign?: (taskId: string, assigneeId: string | null) => void;
-  /** Adds a card from the column header. Omit to hide the control entirely. */
-  onAddTask?: () => void;
   /** Sends a finished card back for rework. Only offered on finished cards. */
   onReopen?: (task: Task) => void;
   /**
@@ -178,22 +175,6 @@ export function KanbanBoard({
               ) : null}
             </ul>
 
-            {/*
-              One add control per column, but only on the first — every column would be
-              four buttons that all do the same thing, since a new task always starts in
-              the project's first workflow state whatever column you press.
-            */}
-            {onAddTask && columnIndex === 0 ? (
-              <button
-                type="button"
-                onClick={onAddTask}
-                disabled={disabled}
-                className="mx-2 mb-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
-              >
-                <Plus className="size-3.5" aria-hidden />
-                Add task
-              </button>
-            ) : null}
           </section>
         );
       })}

@@ -129,6 +129,23 @@ export default function BoardPage({
             <Plus className="size-3.5" />
             <span>Create Item</span>
           </Button>
+
+          {/*
+            Beside Create Item rather than under the first column, where it used to sit.
+            The two controls make one pair - an item is the unit of work, a task is a
+            piece of one - and splitting them across the page left the second where
+            nobody looked for it. Outline against Create Item's filled button, because
+            two primaries side by side make neither one the obvious first move.
+          */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAddTaskOpen(true)}
+            className="gap-1.5 h-8"
+          >
+            <Plus className="size-3.5" />
+            <span>Add task</span>
+          </Button>
         </div>
       </div>
 
@@ -159,7 +176,6 @@ export default function BoardPage({
           disabled={move.isPending || assign.isPending || reopen.isPending}
           onMove={(taskId, state) => move.mutate({ taskId, state })}
           onAssign={(taskId, assigneeId) => assign.mutate({ taskId, assigneeId })}
-          onAddTask={() => setAddTaskOpen(true)}
           onReopen={(task) => reopen.mutate({ taskId: task.id })}
           onOpenTask={openTask}
           onCommentUnanswered={(task) => reportUnanswered(task.id, task.sprintId)}
