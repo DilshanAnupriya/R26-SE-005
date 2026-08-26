@@ -148,6 +148,29 @@ export const aiEstimateSchema = z.object({
 });
 export type AiEstimate = z.infer<typeof aiEstimateSchema>;
 
+/**
+ * How much of a story's estimated time its tasks have already claimed.
+ *
+ * <p>`budgetMinutes` and `remainingMinutes` are null when the story has no points. That
+ * is not the same as zero: an unsized story has no budget to exceed, and rendering it as
+ * "0 remaining" would tell a planner they were already over on work nobody has
+ * estimated.</p>
+ */
+export const storyTaskBudgetSchema = z.object({
+  storyId: z.uuid(),
+  itemKey: z.string(),
+  storyPoints: z.coerce.number().nullish(),
+  hoursPerPoint: z.coerce.number(),
+  budgetMinutes: z.coerce.number().nullish(),
+  consumedMinutes: z.coerce.number(),
+  remainingMinutes: z.coerce.number().nullish(),
+  overrunMinutes: z.coerce.number(),
+  overBudget: z.boolean(),
+  taskCount: z.coerce.number(),
+  unestimatedTasks: z.coerce.number(),
+});
+export type StoryTaskBudget = z.infer<typeof storyTaskBudgetSchema>;
+
 export const storySchema = z.object({
   id: z.uuid(),
   projectId: z.uuid(),

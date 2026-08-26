@@ -3,6 +3,7 @@ package com.sprintiq.pms.modules.backlog.application;
 import com.sprintiq.pms.common.domain.EntityType;
 import com.sprintiq.pms.common.error.ResourceNotFoundException;
 import com.sprintiq.pms.modules.ai.application.port.StoryFeatureSource;
+import com.sprintiq.pms.modules.ai.application.port.StoryFeatureSource.StoryBudgetBreach;
 import com.sprintiq.pms.modules.ai.application.port.WorkItemFeatureSource;
 import com.sprintiq.pms.modules.backlog.domain.*;
 import com.sprintiq.pms.modules.backlog.web.dto.BacklogDtos.EstimateStoryRequest;
@@ -38,6 +39,7 @@ public class StoryFeatureProvider implements StoryFeatureSource, WorkItemFeature
     private final DependencyService dependencyService;
     private final LabelService labelService;
     private final StoryTaskCounter taskCounter;
+    private final com.sprintiq.pms.modules.projects.application.ProjectLookupService projectLookup;
 
     // ------------------------------------------------------------ story features
 
@@ -252,5 +254,38 @@ public class StoryFeatureProvider implements StoryFeatureSource, WorkItemFeature
         }
         return sorted.get(middle - 1).add(sorted.get(middle))
                 .divide(BigDecimal.valueOf(2), 2, java.math.RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Stories in the sprint whose task breakdown outgrew their points.
+     *
+     * <p>Uses the same {@link StoryTaskBudget} the planner sees when adding a task, so
+     * the warning on the form and the penalty on the score are one calculation. If these
+     * ever diverged, a team would be charged risk for an overrun the UI told them was
+     * fine — and they would be right to stop trusting the number.</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<StoryBudgetBreach> budgetBreachesForSprint(UUID sprintId) {
+        List<Story> stories = storyRepository.findBySprintIdAndDeletedAtIsNull(sprintId);
+        if (stories.isEmpty()) {
+            return List.of();
+        }
+        // One rate for the sprint: every story in it belongs to the same project.
+        BigDecimal hoursPerPoint = projectLookup.require(stories.get(0).getProjectId())
+                .hoursPerPoint();
+
+        List<StoryBudgetBreach> breaches = new ArrayList<>();
+        for (Story story : stories) {
+            StoryTaskCounter.StoryTaskEffort effort = taskCounter.effortForStory(story.getId());
+            StoryTaskBudget budget = StoryTaskBudget.of(story.getStoryPoints(), hoursPerPoint,
+                    effort.estimatedMinutes(), effort.taskCount(),
+                    effort.taskCount() - effort.estimatedCount());
+            if (budget.isOverBudget()) {
+                breaches.add(new StoryBudgetBreach(story.getId(), story.getItemKey(),
+                        budget.overrunMinutes(), budget.budgetMinutes()));
+            }
+        }
+        return breaches;
     }
 }

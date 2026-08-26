@@ -37,6 +37,23 @@ export function useEpics(projectId: string | undefined) {
   });
 }
 
+/**
+ * A story's task-time budget, for the form that is about to spend some of it.
+ *
+ * <p>Kept fresh on every open rather than cached long: another person adding a task
+ * changes the remainder, and a stale figure here would let two planners each fill the
+ * same last hour.</p>
+ */
+export function useStoryTaskBudget(storyId: string | undefined) {
+  const { api, status } = useSession();
+  return useQuery({
+    queryKey: [...queryKeys.stories.detail(storyId ?? ""), "task-budget"],
+    queryFn: () => backlogApi.taskBudget(api, storyId!),
+    enabled: status === "authenticated" && Boolean(storyId),
+    staleTime: 0,
+  });
+}
+
 export function useCreateStory(projectId: string) {
   const { api } = useSession();
   const queryClient = useQueryClient();

@@ -25,6 +25,7 @@ import { useProject } from "@/features/projects/hooks";
 import { useSprints } from "@/features/sprints/hooks";
 import { useMembers } from "@/features/organizations/hooks";
 import { CreateStoryDialog } from "@/features/backlog/components/create-story-dialog";
+import { SprintRiskStrip } from "@/features/board/components/sprint-risk-strip";
 
 export default function BoardPage({
   params,
@@ -138,6 +139,11 @@ export default function BoardPage({
         columns, or click the Assignee button to assign or reassign developers. Each card counts down
         against its estimate while it is open, and freezes when it is finished.
       </p>
+
+      {/* The sprint's risk beside the work causing it. Only for a chosen sprint: risk is
+          a property of one sprint, and "All work" spans several with no meaningful line
+          to draw through them. */}
+      <SprintRiskStrip sprintId={sprintFilter || undefined} />
 
       {board.isPending ? (
         <div className="flex gap-3">

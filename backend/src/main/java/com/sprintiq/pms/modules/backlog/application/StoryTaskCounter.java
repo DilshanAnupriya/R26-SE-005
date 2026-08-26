@@ -14,4 +14,22 @@ import java.util.UUID;
 public interface StoryTaskCounter {
 
     long countTasksForStory(UUID storyId);
+
+    /**
+     * The story's tasks, reduced to what a budget needs.
+     *
+     * @param taskCount      tasks hanging off the story
+     * @param estimatedCount how many of those carry an estimate — the rest are invisible
+     *                       to the budget, and a budget that looks comfortable only
+     *                       because half the work is unsized is worse than no budget
+     * @param estimatedMinutes their estimates, summed
+     */
+    record StoryTaskEffort(long taskCount, long estimatedCount, long estimatedMinutes) {
+
+        public static StoryTaskEffort empty() {
+            return new StoryTaskEffort(0, 0, 0);
+        }
+    }
+
+    StoryTaskEffort effortForStory(UUID storyId);
 }

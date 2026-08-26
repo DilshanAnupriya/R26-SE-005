@@ -5,6 +5,7 @@ import com.sprintiq.pms.modules.ai.application.port.CollaborationFeatureSource.W
 import com.sprintiq.pms.modules.ai.domain.RiskType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -42,12 +43,13 @@ class SprintWatchServiceTest {
     @Mock private com.sprintiq.pms.modules.ai.application.port.SprintFeatureSource sprints;
     @Mock private CollaborationFeatureSource collaboration;
     @Mock private SprintRiskAdjustmentService adjustments;
+    @Mock private com.sprintiq.pms.modules.ai.application.port.StoryFeatureSource stories;
 
     private SprintWatchService service;
 
     @BeforeEach
     void setUp() {
-        service = new SprintWatchService(sprints, collaboration, adjustments);
+        service = new SprintWatchService(sprints, collaboration, adjustments, stories);
     }
 
     /** An 8-hour task, so half-time is 4 hours in and the deadline 8. */
@@ -59,6 +61,10 @@ class SprintWatchServiceTest {
 
     private void givenTask(WatchedTask task) {
         when(collaboration.watchedTasks(SPRINT)).thenReturn(List.of(task));
+        // The story-budget rule runs on every sweep; no breaches unless a test says so.
+        when(stories.budgetBreachesForSprint(SPRINT)).thenReturn(List.of());
+        when(adjustments.ledgerFor(SPRINT)).thenReturn(
+                new SprintRiskAdjustmentService.Ledger(List.of()));
     }
 
     @Test
@@ -171,6 +177,114 @@ class SprintWatchServiceTest {
         verify(adjustments).clear(SPRINT, SprintWatchService.KEY_TASK_SILENT + TASK);
         verify(adjustments).clear(SPRINT, SprintWatchService.KEY_NOT_DONE_OVERDUE + TASK);
         verify(adjustments, never()).recordOnce(any(), any(), any(), any(), any());
+    }
+
+    @Nested
+    @DisplayName("story budgets")
+    class StoryBudgets {
+
+        private static final UUID STORY = UUID.randomUUID();
+
+        private void givenBreach(long overrunMinutes, long budgetMinutes) {
+            when(collaboration.watchedTasks(SPRINT)).thenReturn(List.of(
+                    task("IN_PROGRESS", Instant.now(), 1, Instant.now())));
+            when(stories.budgetBreachesForSprint(SPRINT)).thenReturn(List.of(
+                    new com.sprintiq.pms.modules.ai.application.port.StoryFeatureSource
+                            .StoryBudgetBreach(STORY, "PAY-7", overrunMinutes, budgetMinutes)));
+            when(adjustments.ledgerFor(SPRINT)).thenReturn(
+                    new SprintRiskAdjustmentService.Ledger(List.of()));
+        }
+
+        @Test
+        @DisplayName("charges over-budget when tasks outgrow the story's points")
+        void breachIsCharged() {
+            // The worked example: a 5-point story (300m) broken into 6 hours of tasks.
+            givenBreach(60, 300);
+
+            service.watch(SPRINT);
+
+            verify(adjustments).revise(eq(SPRINT), eq(RiskType.OVER_BUDGET),
+                    eq(SprintWatchService.KEY_STORY_OVER_BUDGET + STORY), any(), any());
+        }
+
+        @Test
+        @DisplayName("charges proportionally — a bigger miss costs more")
+        void deltaScalesWithTheOverrun() {
+            ArgumentCaptor<BigDecimal> delta = ArgumentCaptor.forClass(BigDecimal.class);
+
+            givenBreach(60, 300);              // 1 hour over
+            service.watch(SPRINT);
+            verify(adjustments).revise(any(), any(), any(), delta.capture(), any());
+            BigDecimal small = delta.getValue();
+
+            org.mockito.Mockito.reset(adjustments);
+            givenBreach(480, 300);             // a full day over
+            service.watch(SPRINT);
+            verify(adjustments).revise(any(), any(), any(), delta.capture(), any());
+
+            assertThat(delta.getValue()).isGreaterThan(small);
+        }
+
+        @Test
+        @DisplayName("caps a single mis-sized story so it cannot swamp the ledger")
+        void deltaIsCapped() {
+            givenBreach(60 * 40, 300);   // forty hours over
+
+            service.watch(SPRINT);
+
+            ArgumentCaptor<BigDecimal> delta = ArgumentCaptor.forClass(BigDecimal.class);
+            verify(adjustments).revise(any(), any(), any(), delta.capture(), any());
+            assertThat(delta.getValue()).isLessThanOrEqualTo(BigDecimal.valueOf(12));
+        }
+
+        @Test
+        @DisplayName("revises the same entry rather than stacking a second")
+        void usesReviseNotRecord() {
+            // A story going further over should deepen one reading, not append. Appending
+            // would grow the ledger with edits rather than with evidence.
+            givenBreach(120, 300);
+
+            service.watch(SPRINT);
+
+            verify(adjustments, never()).recordOnce(any(), eq(RiskType.OVER_BUDGET),
+                    eq(SprintWatchService.KEY_STORY_OVER_BUDGET + STORY), any(), any());
+        }
+
+        @Test
+        @DisplayName("withdraws the charge once the story comes back inside its budget")
+        void breachClearsWhenCorrected() {
+            // Previously charged, no longer breaching — re-pointing the story or
+            // re-estimating a task has to visibly remove the penalty.
+            when(collaboration.watchedTasks(SPRINT)).thenReturn(List.of(
+                    task("IN_PROGRESS", Instant.now(), 1, Instant.now())));
+            when(stories.budgetBreachesForSprint(SPRINT)).thenReturn(List.of());
+            when(adjustments.ledgerFor(SPRINT)).thenReturn(
+                    new SprintRiskAdjustmentService.Ledger(List.of(
+                            com.sprintiq.pms.modules.ai.domain.SprintRiskAdjustment.builder()
+                                    .sprintId(SPRINT)
+                                    .riskType(RiskType.OVER_BUDGET)
+                                    .delta(BigDecimal.valueOf(4))
+                                    .sourceKey(SprintWatchService.KEY_STORY_OVER_BUDGET + STORY)
+                                    .reason("PAY-7 over budget")
+                                    .build())));
+
+            service.watch(SPRINT);
+
+            verify(adjustments).clear(SPRINT,
+                    SprintWatchService.KEY_STORY_OVER_BUDGET + STORY);
+        }
+
+        @Test
+        @DisplayName("names the story and the size of the miss, in hours a person reads")
+        void reasonIsReadable() {
+            givenBreach(90, 300);
+
+            service.watch(SPRINT);
+
+            ArgumentCaptor<String> reason = ArgumentCaptor.forClass(String.class);
+            verify(adjustments).revise(any(), any(), any(), any(), reason.capture());
+            assertThat(reason.getValue()).contains("PAY-7").contains("1h 30m").contains("5h");
+        }
     }
 
     @Test

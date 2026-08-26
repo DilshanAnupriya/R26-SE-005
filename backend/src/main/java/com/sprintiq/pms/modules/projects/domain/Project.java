@@ -108,6 +108,17 @@ public class Project extends TenantAwareEntity implements SoftDeletable {
     @Column(name = "team_size")
     private Short teamSize;
 
+    /**
+     * Hours one story point is worth, for sizing a story's task budget.
+     *
+     * <p>Per project because it describes a team's scale, not the product. Never null —
+     * see V27: an unset rate would have to mean either 1.0 or "no budget" at every call
+     * site, and those two would drift apart.</p>
+     */
+    @Builder.Default
+    @Column(name = "hours_per_point", nullable = false)
+    private BigDecimal hoursPerPoint = BigDecimal.ONE;
+
     /** junior, mid or senior — the predominant level, not a per-person record. */
     @Column(name = "dev_experience_level", length = 16)
     private String devExperienceLevel;
