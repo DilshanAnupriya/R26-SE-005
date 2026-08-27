@@ -59,8 +59,18 @@ def test_initial_uses_planned_effort_baseline(initial_predictor):
     result = initial_predictor.predict(cost_payload())
 
     assert result["raw"]["prediction_method"] == "planning_baseline"
+    assert result["raw"]["driver_method"] == "exact_formula"
     assert result["raw"]["predicted_effort_minutes"] == 4_800
     assert result["value"] == 8_000
+    assert result["drivers"] == [
+        {
+            "feature": "planned_effort_minutes",
+            "label": "Planned task effort",
+            "contribution": 8_000,
+            "direction": "INCREASE",
+            "detail": "Exact formula: 80.0h at USD 100.00/h",
+        }
+    ]
 
 
 def test_initial_forecast_changes_with_real_hourly_rate(initial_predictor):
@@ -74,10 +84,58 @@ def test_mid_forecast_adds_actual_cost_to_predicted_remaining_labor(mid_predicto
     result = mid_predictor.predict(cost_payload())
 
     assert result["raw"]["prediction_method"] == "ml_remaining_effort"
+    assert result["raw"]["driver_method"] == "reference_shapley"
     assert result["raw"]["predicted_effort_minutes"] > 0
     assert result["value"] == pytest.approx(
         result["raw"]["actual_cost_so_far"] + result["raw"]["future_labor_cost"],
         abs=0.02,
+    )
+
+
+def test_mid_cost_drivers_are_additive_and_local(mid_predictor):
+    result = mid_predictor.predict(cost_payload())
+    drivers = result["drivers"]
+
+    assert sum(driver["contribution"] for driver in drivers) == pytest.approx(
+        result["value"], abs=0.01
+    )
+    assert result["raw"]["driver_contribution_total"] == result["value"]
+    assert drivers[0]["feature"] == "actual_cost_so_far"
+    assert drivers[1]["feature"] == "model_reference"
+    assert any(driver["feature"] == "skill_match_ratio" for driver in drivers)
+    assert all(
+        driver["direction"] == (
+            "INCREASE" if driver["contribution"] >= 0 else "DECREASE"
+        )
+        for driver in drivers
+    )
+    assert all(
+        " vs " in driver["detail"] and "remaining cost" in driver["detail"]
+        for driver in drivers[2:]
+    )
+
+
+def test_mid_neutral_signals_collapse_to_reference_component(mid_predictor):
+    result = mid_predictor.predict(
+        cost_payload(
+            completed_story_points=16,
+            total_effort_minutes=2_400,
+            historical_velocity_avg=32,
+            developer_availability_rate=1,
+            absence_days_total=0,
+            overtime_hours_total=0,
+            concurrent_assignments=4,
+            skill_match_ratio=1,
+            avg_seniority_level=2,
+        )
+    )
+
+    assert [driver["feature"] for driver in result["drivers"]] == [
+        "actual_cost_so_far",
+        "model_reference",
+    ]
+    assert sum(driver["contribution"] for driver in result["drivers"]) == pytest.approx(
+        result["value"], abs=0.01
     )
 
 

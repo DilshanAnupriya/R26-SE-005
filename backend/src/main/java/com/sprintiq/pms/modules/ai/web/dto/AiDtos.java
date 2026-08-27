@@ -483,9 +483,14 @@ public final class AiDtos {
                                  String sprintName,
                                  CostStage stage,
                                  BigDecimal forecastAmount,
+                                 BigDecimal errorMarginAmount,
                                  BigDecimal lowerBound,
                                  BigDecimal upperBound,
                                  BigDecimal budgetAmount,
+                                 BigDecimal confidence,
+                                 List<PredictionDriverResponse> drivers,
+                                 String explanation,
+                                 UUID predictionId,
                                  Instant snapshotAt) {}
 
     @Schema(name = "CostPredictionAccuracy", description = "Accuracy of one stored cost forecast against actual sprint cost")

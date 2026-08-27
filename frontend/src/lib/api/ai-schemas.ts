@@ -337,9 +337,14 @@ export const costTrendPointSchema = z.object({
   sprintName: z.string().nullish(),
   stage: costStageSchema,
   forecastAmount: z.coerce.number(),
+  errorMarginAmount: z.coerce.number().nullish(),
   lowerBound: z.coerce.number().nullish(),
   upperBound: z.coerce.number().nullish(),
   budgetAmount: z.coerce.number().nullish(),
+  confidence: z.coerce.number().nullish(),
+  drivers: z.array(predictionDriverSchema).default([]),
+  explanation: z.string().nullish(),
+  predictionId: z.uuid().nullish(),
   snapshotAt: z.string(),
 });
 export type CostTrendPoint = z.infer<typeof costTrendPointSchema>;
