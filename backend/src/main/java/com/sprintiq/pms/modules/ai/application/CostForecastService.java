@@ -170,8 +170,11 @@ public class CostForecastService {
     public List<CostTrendPoint> sprintHistory(UUID sprintId) {
         return forecasts.findBySprintIdOrderBySnapshotAtAsc(sprintId).stream()
                 .map(forecast -> new CostTrendPoint(forecast.getSprintId(), null, forecast.getStage(),
-                        forecast.getForecastAmount(), forecast.getLowerBound(), forecast.getUpperBound(),
-                        null, forecast.getSnapshotAt()))
+                        forecast.getForecastAmount(), forecast.getErrorMarginAmount(),
+                        forecast.getLowerBound(), forecast.getUpperBound(), null,
+                        forecast.getConfidence(),
+                        forecast.getDrivers().stream().map(PredictionDriverResponse::from).toList(),
+                        forecast.getExplanation(), forecast.getPredictionId(), forecast.getSnapshotAt()))
                 .toList();
     }
 
@@ -234,8 +237,11 @@ public class CostForecastService {
         return forecasts.findLatestPerSprint(projectId).stream()
                 .map(forecast -> new CostTrendPoint(forecast.getSprintId(),
                         sprintNames == null ? null : sprintNames.get(forecast.getSprintId()),
-                        forecast.getStage(), forecast.getForecastAmount(), forecast.getLowerBound(),
-                        forecast.getUpperBound(), null, forecast.getSnapshotAt()))
+                        forecast.getStage(), forecast.getForecastAmount(),
+                        forecast.getErrorMarginAmount(), forecast.getLowerBound(),
+                        forecast.getUpperBound(), null, forecast.getConfidence(),
+                        forecast.getDrivers().stream().map(PredictionDriverResponse::from).toList(),
+                        forecast.getExplanation(), forecast.getPredictionId(), forecast.getSnapshotAt()))
                 .toList();
     }
 

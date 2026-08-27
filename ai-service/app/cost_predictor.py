@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from math import factorial
 from pathlib import Path
 from typing import Any
 
@@ -93,6 +94,30 @@ DRIVER_LABELS = {
     "absence_rate_per_developer": "absence per developer",
     "effort_per_completed_point": "effort per completed point",
     "effort_burn_rate": "effort burn rate",
+}
+
+MID_SHAPLEY_FEATURES = (
+    "completed_story_points",
+    "total_effort_minutes",
+    "historical_velocity_avg",
+    "developer_availability_rate",
+    "absence_days_total",
+    "overtime_hours_total",
+    "concurrent_assignments",
+    "skill_match_ratio",
+    "avg_seniority_level",
+)
+
+MID_DRIVER_LABELS = {
+    "completed_story_points": "Completion progress",
+    "total_effort_minutes": "Effort burn",
+    "historical_velocity_avg": "Historical velocity",
+    "developer_availability_rate": "Developer availability",
+    "absence_days_total": "Planned absence",
+    "overtime_hours_total": "Overtime",
+    "concurrent_assignments": "Concurrent workload",
+    "skill_match_ratio": "Skill coverage",
+    "avg_seniority_level": "Team seniority",
 }
 
 
@@ -208,7 +233,6 @@ class CostPredictor:
 
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         row, provenance = self._row(payload)
-        frame = pd.DataFrame([row], columns=self.raw_features)
         hourly_rate = _scalar(payload.get("blended_hourly_rate"))
         if hourly_rate <= 0:
             raise ValueError("blended_hourly_rate must be greater than zero")
@@ -218,8 +242,12 @@ class CostPredictor:
         if self.stage == "initial":
             predicted_effort = max(0.0, row["planned_effort_minutes"])
             actual_cost_so_far = 0.0
+            reference_effort = predicted_effort
+            effort_influences: dict[str, float] = {}
         else:
-            predicted_effort = max(0.0, float(self.pipeline.predict(frame)[0]))
+            predicted_effort, reference_effort, effort_influences = (
+                self._mid_sprint_shapley(row)
+            )
 
         remaining_cost = predicted_effort / 60.0 * hourly_rate
         value = actual_cost_so_far + remaining_cost
@@ -227,13 +255,17 @@ class CostPredictor:
         effort_margin = predicted_effort * margin_rate
         lower = actual_cost_so_far + max(0.0, predicted_effort - effort_margin) / 60.0 * hourly_rate
         upper = actual_cost_so_far + (predicted_effort + effort_margin) / 60.0 * hourly_rate
-        drivers = self._cost_drivers(
+        drivers, driver_meta = self._cost_drivers(
+            row=row,
             predicted_effort=predicted_effort,
+            reference_effort=reference_effort,
+            effort_influences=effort_influences,
             actual_cost_so_far=actual_cost_so_far,
             remaining_cost=remaining_cost,
             hourly_rate=hourly_rate,
             currency=currency,
         )
+        provenance["driver_method"] = driver_meta["method"]
 
         return {
             "value": round(value, 2),
@@ -257,6 +289,10 @@ class CostPredictor:
                 "test_r2": self.test_r2,
                 "margin_rate": round(margin_rate, 4),
                 "interval_basis": "deployment holdout MAPE; heuristic range, not calibrated probability",
+                "driver_method": driver_meta["method"],
+                "driver_reference_effort_minutes": driver_meta["reference_effort_minutes"],
+                "driver_contribution_total": driver_meta["contribution_total"],
+                "driver_features": driver_meta["features"],
             },
             "provenance": provenance,
         }
@@ -302,46 +338,192 @@ class CostPredictor:
 
     def _cost_drivers(
         self,
+        row: dict[str, Any],
         predicted_effort: float,
+        reference_effort: float,
+        effort_influences: dict[str, float],
         actual_cost_so_far: float,
         remaining_cost: float,
         hourly_rate: float,
         currency: str,
-    ) -> list[dict[str, Any]]:
-        effort_feature = (
-            "planned_effort_minutes"
-            if self.stage == "initial"
-            else "remaining_effort_minutes"
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if self.stage == "initial":
+            contribution = round(remaining_cost, 2)
+            drivers = [
+                {
+                    "feature": "planned_effort_minutes",
+                    "label": "Planned task effort",
+                    "contribution": contribution,
+                    "direction": "INCREASE",
+                    "detail": (
+                        f"Exact formula: {predicted_effort / 60.0:,.1f}h at "
+                        f"{currency} {hourly_rate:,.2f}/h"
+                    ),
+                }
+            ]
+            return drivers, {
+                "method": "exact_formula",
+                "reference_effort_minutes": round(reference_effort, 2),
+                "contribution_total": contribution,
+                "features": ["planned_effort_minutes", "blended_hourly_rate"],
+            }
+
+        actual_contribution = round(actual_cost_so_far, 2)
+        reference_contribution = round(reference_effort / 60.0 * hourly_rate, 2)
+        influence_drivers = []
+        for feature, effort_contribution in effort_influences.items():
+            cost_contribution = round(effort_contribution / 60.0 * hourly_rate, 2)
+            if abs(cost_contribution) < 0.01:
+                continue
+            influence_drivers.append(
+                {
+                    "feature": feature,
+                    "label": MID_DRIVER_LABELS.get(feature, DRIVER_LABELS.get(feature, feature)),
+                    "contribution": cost_contribution,
+                    "direction": "INCREASE" if cost_contribution >= 0 else "DECREASE",
+                    "detail": self._influence_detail(
+                        feature=feature,
+                        actual=float(row[feature]),
+                        reference=float(self._mid_reference_values(row)[feature]),
+                        currency=currency,
+                        contribution=cost_contribution,
+                    ),
+                }
+            )
+
+        influence_drivers.sort(key=lambda driver: abs(driver["contribution"]), reverse=True)
+        target_total = round(actual_cost_so_far + remaining_cost, 2)
+        explained_total = (
+            actual_contribution
+            + reference_contribution
+            + sum(driver["contribution"] for driver in influence_drivers)
         )
-        effort_label = (
-            "Planned task effort"
-            if self.stage == "initial"
-            else "Predicted remaining effort"
+        # Absorb only currency-rounding residue into the reference component so the
+        # displayed additive drivers always reconcile to the displayed forecast.
+        reference_contribution = round(
+            reference_contribution + target_total - explained_total, 2
         )
         drivers = [
             {
-                "feature": effort_feature,
-                "label": effort_label,
-                "contribution": round(remaining_cost, 2),
+                "feature": "actual_cost_so_far",
+                "label": "Actual cost so far",
+                "contribution": actual_contribution,
                 "direction": "INCREASE",
+                "detail": f"{currency} {actual_cost_so_far:,.2f} already incurred",
+            },
+            {
+                "feature": "model_reference",
+                "label": "Reference remaining effort",
+                "contribution": reference_contribution,
+                "direction": "INCREASE" if reference_contribution >= 0 else "DECREASE",
                 "detail": (
-                    f"{predicted_effort / 60.0:,.1f}h at "
-                    f"{currency} {hourly_rate:,.2f}/h"
+                    f"{reference_effort / 60.0:,.1f}h with live human-aware "
+                    "signals set to neutral references"
                 ),
-            }
+            },
+            *influence_drivers,
         ]
-        if self.stage == "mid":
-            drivers.insert(
-                0,
-                {
-                    "feature": "actual_cost_so_far",
-                    "label": "Actual cost so far",
-                    "contribution": round(actual_cost_so_far, 2),
-                    "direction": "INCREASE",
-                    "detail": f"{currency} {actual_cost_so_far:,.2f} already incurred",
-                },
-            )
-        return drivers
+        contribution_total = round(
+            sum(driver["contribution"] for driver in drivers), 2
+        )
+        return drivers, {
+            "method": "reference_shapley",
+            "reference_effort_minutes": round(reference_effort, 2),
+            "contribution_total": contribution_total,
+            "features": list(MID_SHAPLEY_FEATURES),
+        }
+
+    def _mid_sprint_shapley(
+        self, row: dict[str, Any]
+    ) -> tuple[float, float, dict[str, float]]:
+        """Exact Shapley decomposition around explicit neutral live-signal values.
+
+        Non-explained planning fields remain at their observed values. The model is
+        scored for all 2^9 coalitions in one batch, keeping this local explanation
+        deterministic and additive in original remaining-effort minutes.
+        """
+        references = self._mid_reference_values(row)
+        features = list(MID_SHAPLEY_FEATURES)
+        coalition_rows: list[dict[str, Any]] = []
+
+        for mask in range(1 << len(features)):
+            coalition = row.copy()
+            for index, feature in enumerate(features):
+                coalition[feature] = (
+                    row[feature] if mask & (1 << index) else references[feature]
+                )
+            coalition_rows.append(coalition)
+
+        frame = pd.DataFrame(coalition_rows, columns=self.raw_features)
+        predictions = np.maximum(
+            np.asarray(self.pipeline.predict(frame), dtype=float), 0.0
+        )
+        feature_count = len(features)
+        denominator = factorial(feature_count)
+        contributions: dict[str, float] = {}
+
+        for index, feature in enumerate(features):
+            bit = 1 << index
+            contribution = 0.0
+            for mask in range(1 << feature_count):
+                if mask & bit:
+                    continue
+                coalition_size = mask.bit_count()
+                weight = (
+                    factorial(coalition_size)
+                    * factorial(feature_count - coalition_size - 1)
+                    / denominator
+                )
+                contribution += weight * (
+                    predictions[mask | bit] - predictions[mask]
+                )
+            contributions[feature] = float(contribution)
+
+        return (
+            float(predictions[-1]),
+            float(predictions[0]),
+            contributions,
+        )
+
+    def _mid_reference_values(self, row: dict[str, Any]) -> dict[str, float]:
+        elapsed = min(max(float(row["elapsed_fraction"]), 0.0), 1.0)
+        team_size = max(float(row["team_size"]), 1.0)
+        return {
+            "completed_story_points": float(row["planned_story_points"]) * elapsed,
+            "total_effort_minutes": float(row["planned_effort_minutes"]) * elapsed,
+            "historical_velocity_avg": float(row["planned_story_points"]),
+            "developer_availability_rate": 1.0,
+            "absence_days_total": 0.0,
+            "overtime_hours_total": 0.0,
+            "concurrent_assignments": team_size,
+            "skill_match_ratio": 1.0,
+            "avg_seniority_level": 2.0,
+        }
+
+    def _influence_detail(
+        self,
+        feature: str,
+        actual: float,
+        reference: float,
+        currency: str,
+        contribution: float,
+    ) -> str:
+        comparisons = {
+            "completed_story_points": f"{actual:,.1f} points vs {reference:,.1f} expected by now",
+            "total_effort_minutes": f"{actual / 60.0:,.1f}h logged vs {reference / 60.0:,.1f}h planned burn",
+            "historical_velocity_avg": f"{actual:,.1f} historical points vs {reference:,.1f} planned",
+            "developer_availability_rate": f"{actual * 100:,.0f}% available vs {reference * 100:,.0f}% reference",
+            "absence_days_total": f"{actual:,.1f} absence days vs {reference:,.1f} reference",
+            "overtime_hours_total": f"{actual:,.1f} overtime hours vs {reference:,.1f} reference",
+            "concurrent_assignments": f"{actual:,.0f} assignments vs {reference:,.0f} balanced reference",
+            "skill_match_ratio": f"{actual * 100:,.0f}% skill coverage vs {reference * 100:,.0f}% reference",
+            "avg_seniority_level": f"{actual:,.1f} average level vs {reference:,.1f} reference",
+        }
+        effect = "increases" if contribution >= 0 else "decreases"
+        return (
+            f"{comparisons.get(feature, f'{actual:,.2f} vs {reference:,.2f} reference')}; "
+            f"{effect} remaining cost by {currency} {abs(contribution):,.2f}"
+        )
 
     def _margin_rate(self, row: dict[str, Any], provenance: dict[str, Any]) -> float:
         base = max(self.test_mape / 100.0, 0.10)
@@ -368,12 +550,15 @@ class CostPredictor:
                 f"{predicted_effort / 60.0:,.1f} planned task hours at the project's "
                 f"{currency} {hourly_rate:,.2f}/h blended rate. The planning baseline "
                 "is deployed because it beat the initial ML candidate on the holdout. "
+                "Its cost driver is an exact formula component rather than an ML attribution. "
             )
         else:
             sentence = (
                 f"Mid-sprint final-cost forecast is {currency} {value:,.0f}: actual cost "
                 f"so far plus {predicted_effort / 60.0:,.1f} ML-predicted remaining hours "
-                f"priced at {currency} {hourly_rate:,.2f}/h. "
+                f"priced at {currency} {hourly_rate:,.2f}/h. The driver breakdown uses "
+                "reference-based Shapley values in original cost units, so its signed "
+                "components reconcile to the forecast. "
             )
         sentence += (
             f"The {currency} {lower:,.0f}-{upper:,.0f} range uses holdout percentage "

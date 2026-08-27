@@ -456,6 +456,11 @@ class AiLayerIT extends AbstractIntegrationTest {
         assertThat(forecast.currency()).isEqualTo("USD");
         assertThat(forecast.varianceVsBudgetPct()).isNotNull();
         assertThat(forecast.explanation()).isNotBlank();
+
+        CostTrendPoint stored = costForecastService.sprintHistory(sprint.id()).getFirst();
+        assertThat(stored.drivers()).isEqualTo(forecast.drivers());
+        assertThat(stored.explanation()).isEqualTo(forecast.explanation());
+        assertThat(stored.predictionId()).isEqualTo(forecast.predictionId());
     }
 
     @Test
