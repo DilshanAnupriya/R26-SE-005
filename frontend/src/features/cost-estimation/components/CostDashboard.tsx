@@ -8,6 +8,7 @@ import {
   ArrowDown,
   ArrowUp,
   CalendarDays,
+  ChevronRight,
   CircleHelp,
   CircleDollarSign,
   Gauge,
@@ -29,6 +30,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
@@ -1173,6 +1181,9 @@ function TeamTable({
   error: unknown;
   onRetry: () => void;
 }) {
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const selectedRow = rows.find((row) => row.member.userId === selectedUserId) ?? null;
+
   if (isPending) return <Skeleton className="h-64 w-full" />;
   if (error) return <ErrorState error={error} onRetry={onRetry} />;
   if (rows.length === 0) {
@@ -1205,7 +1216,12 @@ function TeamTable({
             {rows.map((row) => (
               <tr key={row.member.userId} className="border-b align-top last:border-b-0">
                 <td className="py-3 pr-3">
-                  <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="group flex w-full items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setSelectedUserId(row.member.userId)}
+                    title="View developer profile"
+                  >
                     <Avatar className="size-8">
                       <AvatarImage src={row.member.avatarUrl ?? undefined} alt="" />
                       <AvatarFallback className="text-xs">{initials(row.member.fullName)}</AvatarFallback>
@@ -1214,7 +1230,8 @@ function TeamTable({
                       <p className="max-w-44 truncate font-medium">{row.member.fullName ?? "Unnamed member"}</p>
                       <p className="max-w-44 truncate text-[11px] text-muted-foreground">{row.member.email}</p>
                     </div>
-                  </div>
+                    <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden />
+                  </button>
                 </td>
                 <td className="px-3 py-3">
                   <p>{enumLabel(row.member.projectRole)}</p>
@@ -1259,7 +1276,162 @@ function TeamTable({
           </tbody>
         </table>
       </div>
+      <DeveloperProfileSheet
+        row={selectedRow}
+        currency={currency}
+        onOpenChange={(open) => {
+          if (!open) setSelectedUserId(null);
+        }}
+      />
     </section>
+  );
+}
+
+function DeveloperProfileSheet({
+  row,
+  currency,
+  onOpenChange,
+}: {
+  row: TeamRow | null;
+  currency: string;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const member = row?.member;
+  const profile = row?.profile;
+  const loadPct = row?.loadPct ?? null;
+
+  return (
+    <Sheet open={row != null} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full gap-0 overflow-hidden sm:max-w-lg">
+        {row && member ? (
+          <>
+            <SheetHeader className="border-b p-5 pr-14">
+              <div className="flex items-start gap-3">
+                <Avatar className="size-12">
+                  <AvatarImage src={member.avatarUrl ?? undefined} alt="" />
+                  <AvatarFallback>{initials(member.fullName)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <SheetTitle className="truncate text-lg">
+                    {member.fullName ?? "Unnamed member"}
+                  </SheetTitle>
+                  <SheetDescription className="truncate">{member.email ?? "No email available"}</SheetDescription>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <Badge variant="secondary">{enumLabel(member.projectRole)}</Badge>
+                    {profile?.seniority ? <Badge variant="outline">{enumLabel(profile.seniority)}</Badge> : null}
+                  </div>
+                </div>
+              </div>
+            </SheetHeader>
+
+            <div className="flex-1 overflow-y-auto">
+              <section className="p-5" aria-labelledby="developer-profile-overview">
+                <h3 id="developer-profile-overview" className="mb-3 text-sm font-semibold">Profile</h3>
+                {profile ? (
+                  <dl className="grid grid-cols-2 overflow-hidden rounded-md border">
+                    <ProfileMetric
+                      label="Hourly rate"
+                      value={profile.hourlyRate == null ? "Not set" : `${money(profile.hourlyRate, currency)}/h`}
+                    />
+                    <ProfileMetric label="Experience" value={`${number(profile.yearsExperience)} years`} />
+                    <ProfileMetric label="Weekly capacity" value={number(profile.weeklyCapacityHours, "h")} />
+                    <ProfileMetric
+                      label="Average velocity"
+                      value={profile.avgVelocity == null ? "Not measured" : `${number(profile.avgVelocity)} points`}
+                    />
+                  </dl>
+                ) : (
+                  <p className="text-sm text-muted-foreground">This developer has not completed their cost profile.</p>
+                )}
+              </section>
+
+              <section className="border-t p-5" aria-labelledby="developer-current-sprint">
+                <h3 id="developer-current-sprint" className="mb-3 text-sm font-semibold">Current sprint</h3>
+                <dl className="grid grid-cols-2 overflow-hidden rounded-md border">
+                  <ProfileMetric
+                    label="Availability"
+                    value={profile ? `${number(profile.availabilityRate * 100)}%` : "Not set"}
+                  />
+                  <ProfileMetric label="Project allocation" value={`${number(member.allocationPct)}%`} />
+                  <ProfileMetric label="Effective capacity" value={number(row.capacity?.effectiveHours, "h")} />
+                  <ProfileMetric label="Planned absence" value={`${number(row.capacity?.absenceDays)} days`} />
+                </dl>
+                <div className="mt-4">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-medium">Workload</span>
+                    <span className={cn(
+                      "tabular-nums",
+                      loadPct != null && loadPct > 100 ? "text-destructive" : "text-muted-foreground",
+                    )}>
+                      {loadPct == null ? "Not available" : `${number(loadPct)}%`}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn("h-full rounded-full", loadPct != null && loadPct > 100 ? "bg-destructive" : "bg-primary")}
+                      style={{ width: `${Math.min(100, Math.max(0, loadPct ?? 0))}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {row.tasks.length} task{row.tasks.length === 1 ? "" : "s"} assigned in this sprint
+                  </p>
+                </div>
+              </section>
+
+              <section className="border-t p-5" aria-labelledby="developer-skills">
+                <h3 id="developer-skills" className="mb-3 text-sm font-semibold">Skills</h3>
+                {row.skills.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {row.skills.map((skill) => (
+                      <Badge key={skill.skillId} variant="outline" className="font-normal">
+                        {skill.skillName} · Level {skill.proficiency}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No skills have been added to this profile.</p>
+                )}
+              </section>
+
+              <section className="border-t p-5" aria-labelledby="developer-sprint-tasks">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 id="developer-sprint-tasks" className="text-sm font-semibold">Assigned tasks</h3>
+                  <Badge variant="secondary">{row.tasks.length}</Badge>
+                </div>
+                {row.tasks.length > 0 ? (
+                  <div className="divide-y rounded-md border">
+                    {row.tasks.map((task) => (
+                      <div key={task.id} className="flex items-start justify-between gap-3 p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{task.title}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {task.itemKey} · {hours(task.estimateMinutes)} planned
+                          </p>
+                        </div>
+                        <Badge className={cn("shrink-0 font-normal", TASK_STATUS_TONE[task.status])}>
+                          {enumLabel(task.status)}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No tasks are assigned to this developer in the selected sprint.</p>
+                )}
+              </section>
+            </div>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function ProfileMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 border-b p-3 odd:border-r [&:nth-last-child(-n+2)]:border-b-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 truncate font-medium tabular-nums" title={value}>{value}</dd>
+    </div>
   );
 }
 
