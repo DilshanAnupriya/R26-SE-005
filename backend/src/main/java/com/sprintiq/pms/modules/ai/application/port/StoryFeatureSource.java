@@ -60,13 +60,89 @@ public interface StoryFeatureSource {
                          BigDecimal comparableMedianPoints,
                          int comparableCount,
                          /** When the story was raised — the model reads backlog age as a signal. */
-                         java.time.Instant createdAt) {
+                         java.time.Instant createdAt,
+                         /**
+                          * Label names, lower-cased. The count alone cannot say whether a
+                          * story is security work; the names can, and the model has three
+                          * columns that want exactly that.
+                          */
+                         List<String> labels) {
 
         /** Days since the story was raised. Zero when unknown, which is the median-ish case. */
         public int ageInDays() {
             if (createdAt == null) return 0;
             long days = java.time.Duration.between(createdAt, java.time.Instant.now()).toDays();
             return (int) Math.max(0, Math.min(days, 365));
+        }
+
+        // The model service has three columns for the kind of work a story is —
+        // integration, security, UI. SprintIQ never sent them, so the service fell back
+        // to keyword-matching the story text and recorded all three as inferred on every
+        // single story. Deriving them here is strictly better: a label is a deliberate
+        // human statement about the work, and a dependency edge is a fact, where a word
+        // in a sentence is a hint. The keyword pass is kept as the last resort so a
+        // story with no labels is no worse off than it was.
+        private static final java.util.regex.Pattern INTEGRATION_HINTS =
+                java.util.regex.Pattern.compile(
+                        "\\b(integrat\\w*|webhook|sync|import|export|third[- ]party|api|sso|oauth)\\b",
+                        java.util.regex.Pattern.CASE_INSENSITIVE);
+        private static final java.util.regex.Pattern SECURITY_HINTS =
+                java.util.regex.Pattern.compile(
+                        "\\b(auth\\w*|security|encrypt\\w*|permission|rbac|gdpr|pci|compliance|audit|token)\\b",
+                        java.util.regex.Pattern.CASE_INSENSITIVE);
+        private static final java.util.regex.Pattern UI_HINTS =
+                java.util.regex.Pattern.compile(
+                        "\\b(ui|ux|screen|page|form|dashboard|layout|responsive|modal|chart|design)\\b",
+                        java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        /**
+         * Whether this story touches something outside the system.
+         *
+         * <p>A dependency edge counts on its own: work that waits on other work is
+         * integration work whatever its wording says.</p>
+         */
+        public boolean hasIntegrationWork() {
+            return dependencyCount > 0
+                    || labelMatches("integration", "api", "webhook", "sync", "import",
+                            "export", "third-party", "thirdparty", "sso", "oauth")
+                    || INTEGRATION_HINTS.matcher(text()).find();
+        }
+
+        public boolean hasSecurityWork() {
+            return labelMatches("security", "auth", "authentication", "authorization",
+                            "permission", "permissions", "rbac", "compliance", "gdpr",
+                            "pci", "audit", "encryption")
+                    || SECURITY_HINTS.matcher(text()).find();
+        }
+
+        public boolean hasUiComplexity() {
+            return labelMatches("ui", "ux", "frontend", "front-end", "design",
+                            "responsive", "accessibility", "a11y", "layout")
+                    || UI_HINTS.matcher(text()).find();
+        }
+
+        /** True when any label equals or contains one of these, case-insensitively. */
+        private boolean labelMatches(String... candidates) {
+            if (labels == null || labels.isEmpty()) {
+                return false;
+            }
+            for (String label : labels) {
+                if (label == null) continue;
+                String normalised = label.toLowerCase(java.util.Locale.ROOT).trim();
+                for (String candidate : candidates) {
+                    if (normalised.equals(candidate) || normalised.contains(candidate)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /** Title, description and criteria as one string — what the keyword pass reads. */
+        private String text() {
+            return (title == null ? "" : title) + " "
+                    + (description == null ? "" : description) + " "
+                    + (acceptanceCriteria == null ? "" : acceptanceCriteria);
         }
 
         /** Words across title, description and criteria — the crudest complexity proxy. */

@@ -214,14 +214,21 @@ public class StoryFeatureProvider implements StoryFeatureSource, WorkItemFeature
                 .map(StoryRepository.EstimatedPoint::getPoints)
                 .toList();
 
+        // Read once and used twice — the count the model reads as a size signal, and the
+        // names the three work-kind columns are derived from.
+        List<String> labels = labelService.labelsFor(EntityType.STORY, story.getId()).stream()
+                .map(label -> label.name().toLowerCase(Locale.ROOT))
+                .toList();
+
         return new StoryFeatures(story.getId(), story.getProjectId(), story.getItemKey(),
                 story.getTitle(), story.getDescription(), story.getAcceptanceCriteria(), criteria,
                 story.getType().name(), story.getPriority(),
-                labelService.labelsFor(EntityType.STORY, story.getId()).size(),
+                labels.size(),
                 dependencyService.list(EntityType.STORY, story.getId()).size(),
                 (int) taskCounter.countTasksForStory(story.getId()),
                 story.getEpicId() != null, story.getStoryPoints(),
-                median(allPoints), median(comparable), comparable.size(), story.getCreatedAt());
+                median(allPoints), median(comparable), comparable.size(), story.getCreatedAt(),
+                labels);
     }
 
     /**

@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
@@ -30,12 +31,17 @@ public class ProjectContextProvider implements ProjectContextSource {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
     private final RequirementRepository requirementRepository;
+    /** Measures velocity and completion rate rather than trusting the stored figures. */
+    private final ProjectDeliveryHistorySource deliveryHistory;
 
     @Override
     @Transactional(readOnly = true)
     public ProjectContext contextFor(UUID projectId) {
         Project project = projectRepository.findByIdAndDeletedAtIsNull(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", projectId));
+
+        ProjectDeliveryHistorySource.DeliveryHistory history =
+                deliveryHistory.historyFor(projectId);
 
         return new ProjectContext(project.getId(), project.getWorkspaceId(), project.getName(),
                 project.getProjectKey(), project.getStatus().name(), project.getBudgetAmount(),
@@ -49,8 +55,31 @@ public class ProjectContextProvider implements ProjectContextSource {
                 project.primaryTechStack(),
                 project.getTeamSize(),
                 project.getDevExperienceLevel(),
-                project.getTeamVelocityAvg(),
-                project.getRecentCompletionRate(),
+                velocityAvg(project, history),
+                completionRate(project, history),
                 project.getDefaultSprintDays());
+    }
+
+    /**
+     * Measured velocity, or the figure somebody typed at project creation.
+     *
+     * <p>Measurement wins whenever there is one. The stored column is a starting
+     * estimate for a project that has not run a sprint yet — useful exactly once, and
+     * misleading from the first retrospective onward, because nothing in the product
+     * ever updates it. Falling back to it rather than dropping it keeps a brand-new
+     * project from handing the model a null it would answer with a training median.</p>
+     */
+    private BigDecimal velocityAvg(Project project,
+                                   ProjectDeliveryHistorySource.DeliveryHistory history) {
+        return history.hasHistory() && history.velocityAvg() != null
+                ? history.velocityAvg()
+                : project.getTeamVelocityAvg();
+    }
+
+    private BigDecimal completionRate(Project project,
+                                      ProjectDeliveryHistorySource.DeliveryHistory history) {
+        return history.hasHistory() && history.completionRate() != null
+                ? history.completionRate()
+                : project.getRecentCompletionRate();
     }
 }

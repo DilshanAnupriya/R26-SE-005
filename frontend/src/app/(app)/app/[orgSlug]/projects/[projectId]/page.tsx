@@ -8,6 +8,7 @@ import { useProjectMembers } from "@/features/projects/hooks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CreateStoryDialog } from "@/features/backlog/components/create-story-dialog";
+import { EstimationContextDialog } from "@/features/projects/components/estimation-context-dialog";
 import { StoryPointsField } from "@/features/backlog/components/story-points-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
@@ -51,6 +52,17 @@ export default function ProjectPage({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creatingStory, setCreatingStory] = useState(false);
+  const [editingContext, setEditingContext] = useState(false);
+
+  // Counts only the fields a person can supply. Velocity and completion rate are
+  // measured from completed sprints, so a project with no history is not "missing"
+  // them — it just has not run a sprint yet, and no form would fix that.
+  const estimationGaps = [
+    project.data?.domain,
+    project.data?.techStack?.[0],
+    project.data?.teamSize,
+    project.data?.devExperienceLevel,
+  ].filter((value) => value == null || value === "").length;
   const stories = backlog.data?.content ?? [];
   const selected = stories.find((story) => story.id === selectedId) ?? null;
 
@@ -81,6 +93,27 @@ export default function ProjectPage({
             <h1 className="text-2xl font-semibold tracking-tight">{project.data?.name}</h1>
             <Badge variant="outline">{project.data?.projectKey}</Badge>
             <Badge variant="secondary">{project.data?.status.toLowerCase()}</Badge>
+
+            {/* Surfaced on the project header rather than buried in settings, because
+                the gap it fixes is invisible until you read a model's explanation:
+                these estimates are scored against training medians until somebody
+                fills the fields in, and nothing else on screen says so. */}
+            {project.data && (
+              <Button
+                variant={estimationGaps > 0 ? "outline" : "ghost"}
+                size="sm"
+                className={cn("ml-auto", estimationGaps > 0 && "border-amber-500/50")}
+                onClick={() => setEditingContext(true)}
+              >
+                <Sparkles className="size-3.5" aria-hidden />
+                Estimation context
+                {estimationGaps > 0 && (
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-2xs">
+                    {estimationGaps} missing
+                  </Badge>
+                )}
+              </Button>
+            )}
           </div>
         )}
 
@@ -253,6 +286,14 @@ export default function ProjectPage({
           )}
         </aside>
       </div>
+
+      {project.data && (
+        <EstimationContextDialog
+          project={project.data}
+          open={editingContext}
+          onOpenChange={setEditingContext}
+        />
+      )}
 
       <CreateStoryDialog
         projectId={projectId}

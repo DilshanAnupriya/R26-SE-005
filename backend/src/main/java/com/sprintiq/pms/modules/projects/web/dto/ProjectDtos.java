@@ -42,8 +42,21 @@ public final class ProjectDtos {
             @Size(max = 3) String currency,
             UUID leadUserId,
             UUID teamId,
+            // Deliberately unconstrained. The velocity model is a transfer-learning
+            // bundle whose base regressor was trained with the domain column excluded,
+            // so a domain it has never seen routes to that base model and gets a
+            // zero-shot answer. Rejecting "fintech" would force a team to file itself
+            // under a domain it is not, which misleads the model rather than informing
+            // it. The story-point model does lose one signal, and says so in its own
+            // explanation, which is the honest place for that to surface.
             @Size(max = 80) String domain,
-            List<@Size(max = 60) String> techStack,
+            // Constrained, unlike domain: the story-point model one-hot encodes this,
+            // and a value outside the trained ten sets no column at all — stored and
+            // displayed as if it counted, read by the model as blank.
+            List<@Pattern(regexp = "springboot|nodejs|django|flask|fastapi|react|angular|vue|dotnet|rails",
+                    message = "must be one of the stacks the estimation model was trained on: "
+                            + "springboot, nodejs, django, flask, fastapi, react, angular, vue, dotnet, rails")
+            String> techStack,
             @Min(1) @Max(60) Short defaultSprintDays,
             List<@Size(max = 255) String> definitionOfReady,
             List<@Size(max = 255) String> definitionOfDone,
@@ -75,7 +88,10 @@ public final class ProjectDtos {
             UUID leadUserId,
             UUID teamId,
             @Size(max = 80) String domain,
-            List<@Size(max = 60) String> techStack,
+            List<@Pattern(regexp = "springboot|nodejs|django|flask|fastapi|react|angular|vue|dotnet|rails",
+                    message = "must be one of the stacks the estimation model was trained on: "
+                            + "springboot, nodejs, django, flask, fastapi, react, angular, vue, dotnet, rails")
+            String> techStack,
             @Min(1) @Max(60) Short defaultSprintDays,
             List<@Size(max = 255) String> definitionOfReady,
             List<@Size(max = 255) String> definitionOfDone,

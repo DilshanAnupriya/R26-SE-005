@@ -478,6 +478,30 @@ public final class AiDtos {
         }
     }
 
+    @Schema(name = "CostRiskCrossCheck",
+            description = "The behavioural risk model and the cost model read against each other")
+    public record CostRiskCrossCheckResponse(UUID sprintId,
+                                             CostRiskAgreement agreement,
+                                             /** One sentence naming what the two models jointly say. */
+                                             String headline,
+                                             /** What that means for the sprint, and what it does not. */
+                                             String detail,
+                                             /** M2's over-budget probability, 0-1. Null when unscored. */
+                                             BigDecimal riskScore,
+                                             RiskSeverity riskSeverity,
+                                             BigDecimal forecastAmount,
+                                             BigDecimal budgetAmount,
+                                             BigDecimal variancePct,
+                                             String currency,
+                                             /**
+                                              * The cost model's own error rate. A variance inside this
+                                              * is not evidence of an overrun, and the panel says so
+                                              * rather than colouring it red.
+                                              */
+                                             BigDecimal marginPct,
+                                             /** Whether the overrun cleared the margin and moved the score. */
+                                             boolean costCharged) {}
+
     @Schema(name = "CostTrendPoint")
     public record CostTrendPoint(UUID sprintId,
                                  String sprintName,

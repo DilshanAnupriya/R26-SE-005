@@ -83,6 +83,12 @@ export const projectSchema = z.object({
   domain: z.string().nullish(),
   techStack: z.array(z.string()).default([]),
   defaultSprintDays: z.number().int().nullish(),
+  // Estimation context. The model reads all four; the last two are measured from
+  // completed sprints when there are any, and fall back to these stored figures.
+  teamSize: z.number().int().nullish(),
+  devExperienceLevel: z.enum(["junior", "mid", "senior"]).nullish(),
+  teamVelocityAvg: z.coerce.number().nullish(),
+  recentCompletionRate: z.coerce.number().nullish(),
   createdAt: z.string(),
   updatedAt: z.string().nullish(),
 });
