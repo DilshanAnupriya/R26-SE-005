@@ -1,10 +1,6 @@
-"""HTTP surface for the story-point model.
+"""HTTP surface for the story-point, velocity, risk, cost, and resource allocation models.
 
-The request and response shapes are not invented here — they are what
-``HttpAiModelClient`` in the Spring backend already sends and parses. It posts
-``{model, version, mode, features}`` and reads ``value``, ``confidence``,
-``lower_bound``, ``upper_bound``, ``drivers`` and ``explanation`` back. Matching
-that contract is why the backend needs no new client code to talk to this.
+The request and response shapes match what the Spring backend and frontend clients expect.
 """
 
 from __future__ import annotations
@@ -16,11 +12,17 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import joblib
+import pandas as pd
 from pydantic import BaseModel, Field
 
+from .behavior_service import BehaviorService
 from .collaboration_features import FEATURE_RANGES
 from .collaboration_predictor import CollaborationRiskPredictor
 from .cost_predictor import CostPredictor
+from .developer_ranker import allocate_sprint, rank_developers_for_task, rank_sprint_tasks
+from .explainability import ExplainabilityEngine, explain_ranking
 from .predictor import StoryPointPredictor
 from .risk_predictor import RiskPredictor
 from .velocity_predictor import VelocityPredictor
@@ -44,42 +46,69 @@ COST_INITIAL_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_INITIAL_MODEL_DIR",
                                         MODELS / "SprintCost-initial_model"))
 COST_MID_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_MID_MODEL_DIR",
                                     MODELS / "SprintCost-mid_model"))
+ALLOCATION_MODEL_PATH = Path(os.getenv("SPRINTIQ_ALLOCATION_MODEL_PATH",
+                                       MODELS / "best_model.pkl"))
+ALLOCATION_FEATURES_PATH = Path(os.getenv("SPRINTIQ_ALLOCATION_FEATURES_PATH",
+                                          MODELS / "feature_columns.pkl"))
+CONSISTENCY_MODEL_PATH = Path(os.getenv("SPRINTIQ_CONSISTENCY_MODEL_PATH",
+                                        MODELS / "consistency_model.pkl"))
+LEARNING_RATE_MODEL_PATH = Path(os.getenv("SPRINTIQ_LEARNING_RATE_MODEL_PATH",
+                                          MODELS / "learning_rate_model.pkl"))
 
 app = FastAPI(
-    title="SprintIQ estimation service",
+    title="SprintIQ estimation and resource allocation service",
     description="Story-point estimation with calibrated uncertainty (M1), "
                 "next-sprint velocity prediction with domain transfer (M1_VELOCITY), "
-                "the three sprint risk classifiers (M2) and the two cost "
-                "forecasters (M4).",
-    version="1.2.0",
+                "the three sprint risk classifiers (M2), the two cost "
+                "forecasters (M4), and AI Resource Allocation & Developer Ranking (M3).",
+    version="2.0.0",
 )
 
-# Loaded once at import. A 2MB bundle takes about a second to unpickle, and doing
-# it per request would put that on every planning click.
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8080",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "*"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Model instances loaded at startup
 predictor: StoryPointPredictor | None = None
 velocity: VelocityPredictor | None = None
 over_budget: RiskPredictor | None = None
 requirement_change: RiskPredictor | None = None
-# Never None: without its weights this one scores from the equation its corpus was
-# labelled with, and says so in every response.
 collaboration: CollaborationRiskPredictor | None = None
 cost_initial: CostPredictor | None = None
 cost_mid: CostPredictor | None = None
+
+# Resource allocation & behavioral components
+allocation_model: Any | None = None
+allocation_feature_columns: list[str] | None = None
+explainability_engine: ExplainabilityEngine | None = None
+behavior_service: BehaviorService | None = None
 
 
 @app.on_event("startup")
 def load_model() -> None:
     global predictor, velocity, over_budget, requirement_change, collaboration, \
-        cost_initial, cost_mid
+        cost_initial, cost_mid, allocation_model, allocation_feature_columns, \
+        explainability_engine, behavior_service
+
     if not MODEL_PATH.exists():
         raise RuntimeError(
             f"No model bundle at {MODEL_PATH}. Set SPRINTIQ_MODEL_PATH or place the "
             f"pickle in ai-service/models/.")
     predictor = StoryPointPredictor(MODEL_PATH)
 
-    # The velocity model is optional at startup rather than required: a deployment
-    # that only serves story points should not fail to boot over a bundle it never
-    # calls. /predict/velocity answers 503 in that case, which is the honest reply.
     if VELOCITY_MODEL_PATH.exists():
         velocity = VelocityPredictor(VELOCITY_MODEL_PATH)
     else:
@@ -89,20 +118,15 @@ def load_model() -> None:
     if OVERBUDGET_MODEL_PATH.exists():
         over_budget = RiskPredictor(OVERBUDGET_MODEL_PATH, "over_budget")
     else:
-        log.warning("No over-budget bundle at %s — /predict/risk/over-budget will answer 503. "
-                    "Regenerate with: python -m training.train_risk_models --data <csv folder>",
+        log.warning("No over-budget bundle at %s — /predict/risk/over-budget will answer 503.",
                     OVERBUDGET_MODEL_PATH)
 
     if REQCHANGE_MODEL_PATH.exists():
         requirement_change = RiskPredictor(REQCHANGE_MODEL_PATH, "requirement_change")
     else:
-        log.warning("No requirement-change bundle at %s — /predict/risk/requirement-change "
-                    "will answer 503", REQCHANGE_MODEL_PATH)
+        log.warning("No requirement-change bundle at %s — /predict/risk/requirement-change will answer 503",
+                    REQCHANGE_MODEL_PATH)
 
-    # Constructed unconditionally. The others answer 503 without their bundles
-    # because there is nothing else they could say; this one has the equation its
-    # corpus was labelled with, so a deployment without the 270MB of weights still
-    # scores collaboration risk — and reports that it did.
     collaboration = CollaborationRiskPredictor(COLLABORATION_MODEL_PATH)
 
     if (COST_INITIAL_MODEL_DIR / "model.joblib").exists():
@@ -117,16 +141,47 @@ def load_model() -> None:
         log.warning("No mid-sprint cost model in %s — /predict/cost/mid-sprint will answer 503",
                     COST_MID_MODEL_DIR)
 
+    # Load Resource Allocation & Developer Ranking ML Model
+    if ALLOCATION_MODEL_PATH.exists() and ALLOCATION_FEATURES_PATH.exists():
+        try:
+            allocation_model = joblib.load(ALLOCATION_MODEL_PATH)
+            allocation_feature_columns = joblib.load(ALLOCATION_FEATURES_PATH)
+            explainability_engine = ExplainabilityEngine(
+                model=allocation_model,
+                feature_columns=allocation_feature_columns
+            )
+            log.info("✓ Resource Allocation ML model and Explainability engine loaded successfully!")
+        except Exception as e:
+            log.exception("✗ Error loading Resource Allocation model: %s", e)
+            allocation_model = None
+            allocation_feature_columns = None
+            explainability_engine = None
+    else:
+        log.warning("Resource allocation models not found at %s or %s",
+                    ALLOCATION_MODEL_PATH, ALLOCATION_FEATURES_PATH)
+
+    # Load Behavioral Service
+    if CONSISTENCY_MODEL_PATH.exists() and LEARNING_RATE_MODEL_PATH.exists():
+        try:
+            behavior_service = BehaviorService(
+                consistency_model_path=str(CONSISTENCY_MODEL_PATH),
+                learning_model_path=str(LEARNING_RATE_MODEL_PATH)
+            )
+            log.info("✓ Behavioral profiling models loaded successfully!")
+        except Exception as e:
+            log.exception("✗ Error loading Behavioral models: %s", e)
+            behavior_service = None
+    else:
+        log.warning("Behavioral models not found at %s or %s",
+                    CONSISTENCY_MODEL_PATH, LEARNING_RATE_MODEL_PATH)
+
 
 class InferenceRequest(BaseModel):
-    """What the Spring client posts. Only ``features`` carries anything we need."""
-
+    """What the Spring client posts for M1, M2, M4."""
     model: str | None = Field(default=None, description="M1_STORY_POINTS")
     version: str | None = None
     mode: str | None = None
     features: dict[str, Any] = Field(default_factory=dict)
-
-    # 'model_' is Pydantic's own namespace; without this the 'model' field warns.
     model_config = {"protected_namespaces": ()}
 
 
@@ -158,8 +213,6 @@ def health() -> dict[str, Any]:
     }
     body["risk"]["communication_collaboration"] = {
         "loaded": collaboration is not None,
-        # Which of the two is answering, so a deployment missing the weights is
-        # visible on the health check rather than only in the response body.
         "scorer": collaboration.scorer if collaboration else None,
         "features": len(FEATURE_RANGES),
     }
@@ -179,8 +232,268 @@ def health() -> dict[str, Any]:
             "test_r2": cost_mid.test_r2 if cost_mid else None,
         },
     }
+    body["resource_allocation"] = {
+        "loaded": allocation_model is not None,
+        "explainability_ready": explainability_engine is not None,
+        "feature_count": len(allocation_feature_columns) if allocation_feature_columns else 0,
+        "behavioral_service_loaded": behavior_service is not None
+    }
     return body
 
+
+# =====================================================================
+# RESOURCE ALLOCATION & DEVELOPER RANKING ENDPOINTS (M3)
+# =====================================================================
+
+@app.post("/predict")
+def predict_developer_ranking(data: dict) -> dict[str, Any]:
+    """Rank developers for a single task with explainability."""
+    if allocation_model is None or explainability_engine is None:
+        raise HTTPException(status_code=503, detail="Resource allocation model not loaded")
+
+    log.info("📊 RECEIVED DEVELOPER RANKING REQUEST")
+    try:
+        task = data.get("task")
+        developers = data.get("developers")
+
+        if not task or not developers:
+            raise HTTPException(status_code=400, detail="Task and developers are required")
+
+        dev_df = pd.DataFrame(developers)
+        log.info("Processing %d developers for ranking", len(dev_df))
+
+        ranking_df = rank_developers_for_task(
+            task_profile=task,
+            dev_df=dev_df,
+            model=allocation_model,
+            feature_columns=allocation_feature_columns
+        )
+
+        # Generate explanations for top 3
+        explained_rankings = explain_ranking(
+            ranking_df=ranking_df.head(3),
+            dev_features=dev_df,
+            task_profile=task,
+            explainability_engine=explainability_engine
+        )
+
+        log.info("✓ Generated explanations for %d recommendations", len(explained_rankings))
+
+        return {
+            "status": "success",
+            "task_id": task.get("id", "unknown"),
+            "task_type": task.get("taskType", task.get("task_type", "unknown")),
+            "total_developers": len(dev_df),
+            "recommendations": explained_rankings
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("✗ Error during developer ranking: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/allocate-sprint")
+def allocate_sprint_endpoint(data: dict) -> dict[str, Any]:
+    """Allocate an entire sprint using Global Bipartite Matching with explanations."""
+    if allocation_model is None or explainability_engine is None:
+        raise HTTPException(status_code=503, detail="Resource allocation model not loaded")
+
+    tasks = data.get("tasks", [])
+    developers = data.get("developers", [])
+    log.info("🚀 SPRINT ALLOCATION: %d tasks, %d developers", len(tasks), len(developers))
+
+    try:
+        if not tasks or not developers:
+            raise HTTPException(status_code=400, detail="Tasks and developers are required")
+
+        dev_df = pd.DataFrame(developers)
+
+        allocations = allocate_sprint(
+            tasks=tasks,
+            dev_df=dev_df,
+            model=allocation_model,
+            feature_columns=allocation_feature_columns
+        )
+
+        explained_allocations = []
+        for alloc in allocations:
+            task = next((t for t in tasks if str(t.get("id")) == str(alloc["task_id"]) or str(t.get("taskId")) == str(alloc["task_id"])), None)
+            if not task:
+                continue
+
+            ranking_df = rank_developers_for_task(
+                task_profile=task,
+                dev_df=dev_df,
+                model=allocation_model,
+                feature_columns=allocation_feature_columns
+            )
+
+            alloc_dev_row = ranking_df[ranking_df["dev_id"] == alloc["dev_id"]]
+            if alloc_dev_row.empty:
+                continue
+
+            top_dev_row = alloc_dev_row.iloc[0]
+
+            explanation = explainability_engine.explain_recommendation(
+                developer_id=alloc["dev_id"],
+                task_profile=task,
+                dev_features=dev_df,
+                ml_score=top_dev_row["predicted_performance"],
+                skill_match_score=top_dev_row["skill_match_score"],
+                workload_balance=top_dev_row["workload_balance"],
+                consistency=top_dev_row.get("consistency", 0.5),
+                learning_rate=top_dev_row.get("learning_rate", 0.1),
+                final_score=top_dev_row["final_score"],
+                rank=int(top_dev_row["rank"])
+            )
+
+            explained_allocations.append({
+                "task_id": alloc["task_id"],
+                "allocated_to": alloc["dev_id"],
+                "match_score": round(float(alloc["match_score"]), 2),
+                "skill_match": round(float(alloc["skill_match"]), 3),
+                "explanation": explanation
+            })
+
+        log.info("✓ Allocated %d tasks", len(explained_allocations))
+        return {
+            "status": "success",
+            "total_tasks": len(tasks),
+            "allocated": len(explained_allocations),
+            "allocations": explained_allocations
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("✗ Error during sprint allocation: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/rank-sprint")
+def rank_sprint_endpoint(data: dict) -> dict[str, Any]:
+    """Rank developers for all sprint tasks with virtual workload balancing."""
+    if allocation_model is None or explainability_engine is None:
+        raise HTTPException(status_code=503, detail="Resource allocation model not loaded")
+
+    tasks = data.get("tasks", [])
+    developers = data.get("developers", [])
+    top_n = data.get("top_n", 3)
+
+    log.info("📋 SPRINT TASK RANKING: %d tasks, %d developers", len(tasks), len(developers))
+    try:
+        if not tasks or not developers:
+            raise HTTPException(status_code=400, detail="Tasks and developers are required")
+
+        dev_df = pd.DataFrame(developers)
+
+        recommendations = rank_sprint_tasks(
+            tasks=tasks,
+            dev_df=dev_df,
+            model=allocation_model,
+            feature_columns=allocation_feature_columns,
+            top_n=top_n
+        )
+
+        for task_rec in recommendations:
+            task = next((t for t in tasks if str(t.get("id")) == str(task_rec["task_id"]) or str(t.get("taskId")) == str(task_rec["task_id"])), None)
+            if not task:
+                continue
+
+            for dev_rec in task_rec["recommendations"]:
+                explanation = explainability_engine.explain_recommendation(
+                    developer_id=dev_rec["dev_id"],
+                    task_profile=task,
+                    dev_features=dev_df,
+                    ml_score=dev_rec["predicted_performance"],
+                    skill_match_score=dev_rec["skill_match_score"],
+                    workload_balance=dev_rec["workload_balance"],
+                    consistency=dev_rec.get("consistency", 0.5),
+                    learning_rate=dev_rec.get("learning_rate", 0.1),
+                    final_score=dev_rec["final_score"],
+                    rank=int(dev_rec["rank"])
+                )
+                dev_rec["explanation"] = explanation
+
+        log.info("✓ Generated ranking explanations for %d tasks", len(recommendations))
+        return {
+            "status": "success",
+            "total_tasks": len(tasks),
+            "recommendations": recommendations
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("✗ Error during sprint ranking: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/explain")
+def explain_recommendation(data: dict) -> dict[str, Any]:
+    """Get detailed explanation for a single developer recommendation."""
+    if allocation_model is None or explainability_engine is None:
+        raise HTTPException(status_code=503, detail="Resource allocation model not loaded")
+
+    try:
+        dev_id = data.get("dev_id")
+        task = data.get("task")
+        developers = data.get("developers", [])
+        ml_score = data.get("predicted_performance", 0)
+        skill_match = data.get("skill_match_score", 0)
+        workload_balance = data.get("workload_balance", 0)
+        final_score = data.get("final_score", 0)
+
+        if not dev_id or not task or not developers:
+            raise HTTPException(status_code=400, detail="dev_id, task, and developers are required")
+
+        dev_df = pd.DataFrame(developers)
+
+        explanation = explainability_engine.explain_recommendation(
+            developer_id=dev_id,
+            task_profile=task,
+            dev_features=dev_df,
+            ml_score=ml_score,
+            skill_match_score=skill_match,
+            workload_balance=workload_balance,
+            consistency=data.get("consistency", 0.5),
+            learning_rate=data.get("learning_rate", 0.1),
+            final_score=final_score,
+            rank=1
+        )
+
+        return {
+            "status": "success",
+            "dev_id": dev_id,
+            "explanation": explanation
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("✗ Error during explanation: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/behavior/predict-all")
+def predict_behavior_all(data: dict) -> dict[str, Any]:
+    """Generate behavioral profile (consistency + learning rate) from sprint logs."""
+    if behavior_service is None:
+        raise HTTPException(status_code=503, detail="Behavioral service not loaded")
+
+    try:
+        logs = data.get("logs", [])
+        sprint_logs = pd.DataFrame(logs)
+        result_df = behavior_service.generate_behavioral_profile(sprint_logs)
+        return {
+            "developers": result_df.to_dict(orient="records")
+        }
+    except Exception as e:
+        log.exception("✗ Error during behavioral prediction: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =====================================================================
+# ESTIMATION, RISK, AND COST PREDICTION ENDPOINTS (M1, M2, M4)
+# =====================================================================
 
 def _risk(model: RiskPredictor | None, name: str, request: InferenceRequest) -> dict[str, Any]:
     if model is None:
@@ -211,12 +524,6 @@ def predict_requirement_change(request: InferenceRequest) -> dict[str, Any]:
 
 @app.post("/predict/risk/communication-collaboration")
 def predict_communication_collaboration(request: InferenceRequest) -> dict[str, Any]:
-    """Communication and collaboration risk for one sprint.
-
-    Never 503s for a missing bundle, unlike its two siblings — see
-    ``CollaborationRiskPredictor`` for why the fallback is the model's own
-    boundary rather than a substitute for it.
-    """
     if collaboration is None:
         raise HTTPException(status_code=503, detail="Collaboration model not loaded")
 
@@ -289,8 +596,6 @@ def predict_story_points(request: InferenceRequest) -> dict[str, Any]:
     try:
         result = predictor.predict(request.features)
     except Exception as error:  # noqa: BLE001
-        # A 500 here is the honest answer: the backend treats it as a failed
-        # prediction and shows the story unestimated rather than inventing one.
         log.exception("Prediction failed")
         raise HTTPException(status_code=500, detail=str(error)) from error
 
@@ -308,11 +613,10 @@ def contract() -> dict[str, Any]:
 
     from .features import (KNOWN_DOMAINS, KNOWN_EXPERIENCE, KNOWN_TASK_TYPES,
                            KNOWN_TECH_STACKS, TRAINING_MEDIANS)
-
     from .velocity_features import TRAINING_MEDIANS as VELOCITY_MEDIANS
     from .velocity_features import KNOWN_DOMAINS as VELOCITY_DOMAINS
 
-    contract: dict[str, Any] = {
+    contract_data: dict[str, Any] = {
         "story_points": {
             "text_fields": ["title", "description", "acceptance_criteria"],
             "numeric_fields": sorted(TRAINING_MEDIANS.keys()),
@@ -325,21 +629,16 @@ def contract() -> dict[str, Any]:
             "output_scale": predictor.fib,
             "defaults": TRAINING_MEDIANS,
         },
-    }
-    contract["communication_collaboration"] = {
-        "numeric_fields": sorted(FEATURE_RANGES),
-        "training_ranges": {k: list(v) for k, v in FEATURE_RANGES.items()},
-        # No defaults table, unlike the other models: an absent reading here is
-        # taken as zero, which is the healthy end of three of the five scales.
-        # See build_collaboration_row for why a median would be wrong.
-        "missing_value_policy": "zero (healthy), not the training median",
-        "scorer": collaboration.scorer if collaboration else None,
-        "bands": collaboration.metadata.get("bands") if collaboration else None,
+        "communication_collaboration": {
+            "numeric_fields": sorted(FEATURE_RANGES),
+            "training_ranges": {k: list(v) for k, v in FEATURE_RANGES.items()},
+            "missing_value_policy": "zero (healthy), not the training median",
+            "scorer": collaboration.scorer if collaboration else None,
+            "bands": collaboration.metadata.get("bands") if collaboration else None,
+        }
     }
     if velocity is not None:
-        contract["velocity"] = {
-            # Listed in the order the model was fitted with; the service builds the
-            # row itself, but a caller comparing contracts should see the truth.
+        contract_data["velocity"] = {
             "features": velocity.features,
             "supplied_by_caller": sorted(VELOCITY_MEDIANS.keys()) + ["historical_velocities", "domain"],
             "derived_by_service": ["velocity_delta", "effective_capacity", "stress_score",
@@ -350,7 +649,7 @@ def contract() -> dict[str, Any]:
             "metrics": velocity.metrics,
         }
     if cost_initial is not None:
-        contract["cost_initial"] = {
+        contract_data["cost_initial"] = {
             "features": cost_initial.raw_features,
             "engineered_features": cost_initial.contract.get("engineered_features", []),
             "defaults": {
@@ -362,7 +661,7 @@ def contract() -> dict[str, Any]:
             "metrics": cost_initial.metrics,
         }
     if cost_mid is not None:
-        contract["cost_mid_sprint"] = {
+        contract_data["cost_mid_sprint"] = {
             "features": cost_mid.raw_features,
             "engineered_features": cost_mid.contract.get("engineered_features", []),
             "defaults": {
@@ -373,4 +672,15 @@ def contract() -> dict[str, Any]:
             },
             "metrics": cost_mid.metrics,
         }
-    return contract
+    if allocation_feature_columns is not None:
+        contract_data["resource_allocation"] = {
+            "feature_columns": allocation_feature_columns,
+            "weights": {
+                "skill_match": "35%",
+                "workload_balance": "30%",
+                "ml_prediction": "15%",
+                "consistency": "10%",
+                "learning_rate": "10%"
+            }
+        }
+    return contract_data

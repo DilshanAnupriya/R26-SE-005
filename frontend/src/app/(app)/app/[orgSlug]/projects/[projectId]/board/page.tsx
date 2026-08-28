@@ -195,8 +195,11 @@ export default function BoardPage({
         onOpenChange={(next) => {
           if (!next) setDetailTaskId(null);
         }}
-        reopenPending={reopen.isPending}
+        workflowStates={board.data?.columns.map((c) => c.state)}
         members={memberList}
+        onMove={(taskId, state) => move.mutate({ taskId, state })}
+        onAssign={(taskId, assigneeId) => assign.mutate({ taskId, assigneeId })}
+        reopenPending={reopen.isPending}
         onReopen={(task) => {
           reopen.mutate({ taskId: task.id });
           setDetailTaskId(null);

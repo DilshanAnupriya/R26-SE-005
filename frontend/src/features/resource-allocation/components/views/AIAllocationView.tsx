@@ -133,6 +133,9 @@ function buildGroups(data: any[]): TaskGroup[] {
 
   map.forEach((group) => {
     group.recommendations.sort((a, b) => a.rankPosition - b.rankPosition);
+    if (group.recommendations.length > 3) {
+      group.recommendations = group.recommendations.slice(0, 3);
+    }
     if (group.recommendations.some((r) => r.status === "ALLOCATED")) {
       group.overallStatus = "Approved";
     }
