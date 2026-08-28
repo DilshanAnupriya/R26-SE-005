@@ -21,6 +21,7 @@ import {
   useTaskBoard,
 } from "@/features/board/hooks";
 import type { Task } from "@/lib/api/delivery-schemas";
+import { isBoardTask } from "@/features/board/api";
 import { useProject } from "@/features/projects/hooks";
 import { useSprints } from "@/features/sprints/hooks";
 import { useMembers } from "@/features/organizations/hooks";
@@ -78,7 +79,9 @@ export default function BoardPage({
    */
   function openTask(task: Task) {
     setDetailTaskId(task.id);
-    countReopen.mutate({ taskId: task.id });
+    if (isBoardTask(task)) {
+      countReopen.mutate({ taskId: task.id });
+    }
   }
 
   // Someone else's drag or assignment updates this board without a refresh.

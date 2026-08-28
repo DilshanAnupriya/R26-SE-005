@@ -186,9 +186,10 @@ export function TaskDetailDialog({
       return;
     }
 
+    const targetStoryId = task.storyId || task.id;
     Promise.all([
-      task.storyId
-        ? authFetch(`http://localhost:8080/api/v1/stories/${task.storyId}`).then((r) => r.json()).catch(() => null)
+      targetStoryId
+        ? authFetch(`http://localhost:8080/api/v1/stories/${targetStoryId}`).then((r) => r.json()).catch(() => null)
         : Promise.resolve(null),
       authFetch("http://localhost:8080/api/tasks").then((r) => r.json()).catch(() => [])
     ])
