@@ -1,0 +1,106 @@
+{
+  "ahp_weights": {
+    "skill_match": 35.01,
+    "workload_balance": 26.21,
+    "ml_prediction": 19.44,
+    "consistency": 10.56,
+    "learning_rate": 8.79
+  },
+  "ahp_metrics": {
+    "lambda_max": 5.0169,
+    "consistency_index_ci": 0.0042,
+    "random_index_ri": 1.12,
+    "consistency_ratio_cr": 0.0038,
+    "is_consistent": true,
+    "interpretation": "Mathematically Consistent (CR < 0.10)"
+  },
+  "empirical_optimal_weights": {
+    "skill_match": 35.0,
+    "workload_balance": 30.0,
+    "ml_prediction": 15.0,
+    "consistency": 10.0,
+    "learning_rate": 10.0
+  },
+  "empirical_metrics": {
+    "success": true,
+    "iterations": 1,
+    "message": "Optimization terminated successfully",
+    "optimal_fitness": 66.798,
+    "optimal_weights_pct": {
+      "skill_match": 35.0,
+      "workload_balance": 30.0,
+      "ml_prediction": 15.0,
+      "consistency": 10.0,
+      "learning_rate": 10.0
+    }
+  },
+  "benchmark_comparison": {
+    "Uniform Baseline (20% each)": {
+      "weights_pct": {
+        "skill_match": 20.0,
+        "workload_balance": 20.0,
+        "ml_prediction": 20.0,
+        "consistency": 20.0,
+        "learning_rate": 20.0
+      },
+      "allocation_fitness_score": 65.42,
+      "skill_match_weight": "20%",
+      "workload_balance_weight": "20%",
+      "ml_prediction_weight": "20%",
+      "consistency_weight": "20%",
+      "learning_rate_weight": "20%"
+    },
+    "Skill-Centric Heuristic": {
+      "weights_pct": {
+        "skill_match": 60.0,
+        "workload_balance": 20.0,
+        "ml_prediction": 20.0,
+        "consistency": 0.0,
+        "learning_rate": 0.0
+      },
+      "allocation_fitness_score": 68.18,
+      "skill_match_weight": "60%",
+      "workload_balance_weight": "20%",
+      "ml_prediction_weight": "20%",
+      "consistency_weight": "0%",
+      "learning_rate_weight": "0%"
+    },
+    "AHP Multi-Criteria": {
+      "weights_pct": {
+        "skill_match": 35.01,
+        "workload_balance": 26.21,
+        "ml_prediction": 19.44,
+        "consistency": 10.56,
+        "learning_rate": 8.79
+      },
+      "allocation_fitness_score": 67.89,
+      "skill_match_weight": "35%",
+      "workload_balance_weight": "26%",
+      "ml_prediction_weight": "19%",
+      "consistency_weight": "11%",
+      "learning_rate_weight": "9%"
+    },
+    "Simulation-Optimized (Proposed)": {
+      "weights_pct": {
+        "skill_match": 35.0,
+        "workload_balance": 30.0,
+        "ml_prediction": 15.0,
+        "consistency": 10.0,
+        "learning_rate": 10.0
+      },
+      "allocation_fitness_score": 66.8,
+      "skill_match_weight": "35%",
+      "workload_balance_weight": "30%",
+      "ml_prediction_weight": "15%",
+      "consistency_weight": "10%",
+      "learning_rate_weight": "10%"
+    }
+  },
+  "recommended_weights": {
+    "skill_match": 0.35,
+    "workload_balance": 0.3,
+    "ml_prediction": 0.15,
+    "consistency": 0.09999999999999999,
+    "learning_rate": 0.09999999999999999
+  }
+}
