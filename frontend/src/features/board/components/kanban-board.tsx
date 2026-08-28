@@ -216,7 +216,7 @@ function TaskCard({
   // their own, so every control here that calls one is hidden for them — a Reopen button
   // or a detail dialog on a story row would 404.
   const isTask = isBoardTask(task);
-  const openable = Boolean(onOpenTask) && isTask;
+  const openable = Boolean(onOpenTask);
 
   /**
    * Opens the detail dialog from a click anywhere on the card that was not aimed at one
