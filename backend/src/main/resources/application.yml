@@ -119,6 +119,12 @@ app:
     provider: ${AI_PROVIDER:mock}           # mock | http
     timeout-ms: ${AI_TIMEOUT_MS:4000}
     cache-ttl: ${AI_CACHE_TTL:PT6H}
+    cost-risk:
+      # Overrun below this is inside the cost model's own error and is not charged.
+      margin-pct: ${COST_RISK_MARGIN_PCT:23.5}
+      pct-per-risk-point: ${COST_RISK_PCT_PER_POINT:5.0}
+      min-delta: ${COST_RISK_MIN_DELTA:2.0}
+      max-delta: ${COST_RISK_MAX_DELTA:12.0}
     advisor:
       # Empty by default: this is the one model that sends sprint data off the machine,
       # so it stays off until somebody sets a key on purpose.

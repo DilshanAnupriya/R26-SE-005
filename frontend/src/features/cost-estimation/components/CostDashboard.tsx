@@ -42,6 +42,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { CostWidget } from "@/features/ai/components/cost-widget";
 import { aiApi } from "@/features/ai/api";
+import { CostRiskCrossCheckPanel } from "@/features/ai/components/cost-risk-cross-check-panel";
 import { useForecastCost } from "@/features/ai/hooks";
 import { useTaskBoard } from "@/features/board/hooks";
 import { useProjects } from "@/features/projects/hooks";
@@ -770,7 +771,14 @@ export default function CostDashboard() {
                 )}
               </section>
 
-              <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="planning-signals">
+              {/* The sidebar column. The cross-check sits above the planning signals
+                  rather than beside the forecast: those signals are inputs the cost
+                  model already reads, and this is the one reading on the page that
+                  comes from somewhere the cost model cannot see. */}
+              <div className="space-y-5">
+                <CostRiskCrossCheckPanel sprintId={selectedSprint.id} />
+
+                <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="planning-signals">
                 <h3 id="planning-signals" className="font-semibold">
                   <LabelWithHelp label="Planning signals" />
                 </h3>
@@ -807,7 +815,8 @@ export default function CostDashboard() {
                   <InputRow label="Sprint number" value={selectedSprint.sequenceNo} />
                   <InputRow label="Tasks" value={sprintTasks.length} />
                 </dl>
-              </section>
+                </section>
+              </div>
             </div>
 
             <ValidationSummary
