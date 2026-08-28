@@ -81,6 +81,31 @@ public class AppProperties {
         private Duration cacheTtl = Duration.ofHours(6);
         private int maxBatchSize = 50;
         private Advisor advisor = new Advisor();
+        private CostRisk costRisk = new CostRisk();
+    }
+
+    /**
+     * When a cost overrun starts counting as sprint risk.
+     *
+     * <p>{@code marginPct} exists because the cost models are not precise. The deployed
+     * initial model's held-out MAPE is 23.5% and the mid-sprint one's is 28.6% — a
+     * forecast a fifth over budget is inside the model's own typical error and cannot be
+     * told apart from one that is exactly right. Charging risk for that would be
+     * charging for noise, so only the overrun <em>beyond</em> the margin counts.</p>
+     *
+     * <p>Configurable rather than hardcoded so a team that retrains to a tighter model
+     * can lower the floor without editing code — the number is a property of the model
+     * deployed, not of the product.</p>
+     */
+    @Getter @Setter
+    public static class CostRisk {
+        /** Overrun below this percentage is treated as noise. */
+        private double marginPct = 23.5;
+        /** Percentage points of overrun, beyond the margin, per risk point charged. */
+        private double pctPerRiskPoint = 5.0;
+        /** Floor and ceiling on the charge, so one sprint cannot swamp the ledger. */
+        private double minDelta = 2.0;
+        private double maxDelta = 12.0;
     }
 
     /**

@@ -22,6 +22,7 @@ import { LineChart, chartPalette } from "@/components/charts";
 import { CostWidget } from "@/features/ai/components/cost-widget";
 import { RiskCard } from "@/features/ai/components/risk-card";
 import { GuidedFixWizard } from "@/features/ai/components/guided-fix-wizard";
+import { CostRiskCrossCheckPanel } from "@/features/ai/components/cost-risk-cross-check-panel";
 import { OverallRiskPanel } from "@/features/ai/components/overall-risk-panel";
 import { VelocityPanel } from "@/features/ai/components/velocity-panel";
 import { useBacklog } from "@/features/backlog/hooks";
@@ -494,6 +495,11 @@ function SprintDetail({
             onFix={() => setFixing(true)}
           />
         ) : null}
+
+        {/* Directly under the aggregate, because it qualifies it. The overall figure
+            is three behavioural models weighted together; this says whether the money
+            agrees, and the money is the one input none of those three can see. */}
+        <CostRiskCrossCheckPanel sprintId={sprint.id} />
 
         <div className="grid gap-3 lg:grid-cols-2">
           {(assessRisk.data?.overBudget ?? risk.data?.overBudget) ? (

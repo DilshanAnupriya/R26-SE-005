@@ -159,6 +159,62 @@ public class CostForecastService {
     }
 
     /**
+     * The latest forecast with its budget resolved, for callers that compare the two.
+     *
+     * <p>{@link #latest} deliberately leaves the budget null — it is a display read, and
+     * the stored row already carries the variance it was computed against. The risk watch
+     * and the cost/risk cross-check both need the figure itself to put in a sentence, and
+     * resolving it here keeps the sprint-then-project fallback in one place rather than
+     * repeated at each caller.</p>
+     */
+    @Transactional(readOnly = true)
+    public CostForecastResponse latestWithBudget(UUID sprintId) {
+        return forecasts.findFirstBySprintIdOrderBySnapshotAtDesc(sprintId)
+                .map(forecast -> {
+                    SprintFeatureSource.SprintFeatures sprint = sprints.featuresFor(sprintId);
+                    ProjectContextSource.ProjectContext project =
+                            projects.contextFor(sprint.projectId());
+                    BigDecimal budget = sprint.budgetAmount() != null
+                            ? sprint.budgetAmount() : project.budgetAmount();
+                    CostForecastResponse response = CostForecastResponse.from(forecast, budget);
+                    return withVarianceAgainst(response, budget);
+                })
+                .orElse(null);
+    }
+
+    /**
+     * Restates the variance against the budget as it stands now.
+     *
+     * <p>The stored {@code varianceVsBudgetPct} was computed when the forecast ran. A
+     * budget set or corrected afterwards leaves that figure describing a comparison
+     * nobody is making any more — and the callers of this method put the budget and the
+     * percentage next to each other, where a stale pair reads as an arithmetic error.
+     * The forecast itself is never touched: the model's output is what it was, and only
+     * the comparison is recomputed.</p>
+     */
+    private CostForecastResponse withVarianceAgainst(CostForecastResponse response,
+                                                     BigDecimal budget) {
+        if (budget == null || budget.signum() <= 0 || response.forecastAmount() == null) {
+            // Nothing to compare against. Null rather than the stored figure, because a
+            // variance against a budget that no longer exists is not a smaller truth.
+            return new CostForecastResponse(response.id(), response.sprintId(), response.stage(),
+                    response.forecastAmount(), response.errorMarginAmount(), response.lowerBound(),
+                    response.upperBound(), response.currency(), response.confidence(),
+                    response.trend(), null, budget, response.drivers(), response.explanation(),
+                    response.predictionId(), response.snapshotAt());
+        }
+        BigDecimal variance = response.forecastAmount().subtract(budget)
+                .divide(budget, 6, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
+        return new CostForecastResponse(response.id(), response.sprintId(), response.stage(),
+                response.forecastAmount(), response.errorMarginAmount(), response.lowerBound(),
+                response.upperBound(), response.currency(), response.confidence(),
+                response.trend(), variance, budget, response.drivers(), response.explanation(),
+                response.predictionId(), response.snapshotAt());
+    }
+
+    /**
      * Forecast history for one sprint — the narrowing-margin chart.
      *
      * <p>Reading this sequence is the point of storing every forecast rather than
