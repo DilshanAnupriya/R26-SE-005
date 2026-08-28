@@ -92,6 +92,42 @@ public class OptimizerDeveloperService {
         return developerProfileRepository.save(profile);
     }
 
+    public Developer updateDeveloper(Long id, com.sprintiq.pms.modules.ai.web.dto.OptimizerDtos.DeveloperUpdateRequest request) {
+        Developer dev = developerRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Developer not found with id: " + id));
+
+        if (request.getExperienceLevel() != null) {
+            dev.setExperience_level(Math.max(1, Math.min(5, request.getExperienceLevel())));
+        }
+        if (request.getSkillFrontend() != null) {
+            dev.setSkill_frontend(Math.max(1, Math.min(10, request.getSkillFrontend())));
+        }
+        if (request.getSkillBackend() != null) {
+            dev.setSkill_backend(Math.max(1, Math.min(10, request.getSkillBackend())));
+        }
+        if (request.getSkillDb() != null) {
+            dev.setSkill_db(Math.max(1, Math.min(10, request.getSkillDb())));
+        }
+
+        DeveloperProfile profile = dev.getProfile();
+        if (profile == null) {
+            profile = new DeveloperProfile();
+            profile.setDeveloperMetrics(dev);
+            dev.setProfile(profile);
+        }
+
+        if (request.getFirstName() != null) profile.setFirstName(request.getFirstName().trim());
+        if (request.getLastName() != null) profile.setLastName(request.getLastName().trim());
+        if (request.getEmail() != null && !request.getEmail().isBlank()) profile.setEmail(request.getEmail().trim());
+        if (request.getSpecialization() != null) profile.setSpecialization(request.getSpecialization().trim());
+        if (request.getBio() != null) profile.setBio(request.getBio().trim());
+        if (request.getPhoneNumber() != null) profile.setPhoneNumber(request.getPhoneNumber().trim());
+        if (request.getAge() != null) profile.setAge(request.getAge());
+
+        developerProfileRepository.save(profile);
+        syncDeveloperWorkload(dev);
+        return developerRepository.save(dev);
+    }
 
     @Autowired
     private com.sprintiq.pms.modules.ai.domain.OptimizerTaskRepository taskRepository;

@@ -35,6 +35,22 @@ public class OptimizerDtos {
     }
 
     @Data
+    public static class DeveloperUpdateRequest {
+        private String firstName;
+        private String lastName;
+        private Integer age;
+        private String email;
+        private String phoneNumber;
+        private String specialization;
+        private String bio;
+
+        private Integer experienceLevel;
+        private Integer skillFrontend;
+        private Integer skillBackend;
+        private Integer skillDb;
+    }
+
+    @Data
     public static class TaskRequest {
         private UUID organizationId;
 

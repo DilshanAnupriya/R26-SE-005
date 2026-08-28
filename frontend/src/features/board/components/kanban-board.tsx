@@ -32,7 +32,7 @@ export interface BoardMember {
 }
 
 /**
- * The project kanban board with Jira-style interactive developer assignments.
+ * The project kanban board with Jira-style interactive developer assignments and risk/clock telemetry.
  */
 export function KanbanBoard({
   board,
@@ -174,7 +174,6 @@ export function KanbanBoard({
                 </li>
               ) : null}
             </ul>
-
           </section>
         );
       })}
@@ -246,9 +245,9 @@ function TaskCard({
       }}
       onClick={handleCardClick}
       className={cn(
-        "group rounded-md border bg-background p-2.5 shadow-sm transition-shadow",
+        "group rounded-md border bg-background p-2.5 shadow-sm transition-all hover:border-primary/50",
         draggable && "cursor-grab active:cursor-grabbing hover:shadow",
-        openable && "hover:border-primary/40 hover:shadow",
+        openable && "hover:border-primary/40 hover:shadow cursor-pointer",
         carried && "ring-2 ring-primary",
         task.blocked && "border-destructive/40",
       )}
@@ -264,7 +263,11 @@ function TaskCard({
                 : `Move ${task.itemKey}. Press Enter to pick it up.`
             }
             className="mt-0.5 shrink-0 rounded text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none group-hover:opacity-100"
-            onClick={() => (carried ? onDropCarried?.() : onPickUp?.())}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (carried) onDropCarried?.();
+              else onPickUp?.();
+            }}
             onKeyDown={(event) => {
               if (!carried) return;
               if (event.key === "ArrowLeft") {
@@ -293,16 +296,17 @@ function TaskCard({
             <button
               type="button"
               onClick={() => onOpenTask?.(task)}
-              className="w-full rounded text-left text-sm leading-snug hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="w-full rounded text-left text-sm font-medium leading-snug hover:underline hover:text-primary transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               title={`Open ${task.itemKey}. Counts as a reopen.`}
             >
               {task.title}
             </button>
           ) : (
-            <p className="text-sm leading-snug">{task.title}</p>
+            <p className="text-sm font-medium leading-snug">{task.title}</p>
           )}
+
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground tabular-nums font-mono">{task.itemKey}</span>
+            <span className="text-[11px] text-muted-foreground tabular-nums font-mono font-semibold">{task.itemKey}</span>
             {task.blocked ? (
               <Badge variant="destructive" className="text-[10px]">
                 blocked
@@ -339,7 +343,10 @@ function TaskCard({
         </div>
 
         {/* Jira-style Assignee Dropdown */}
-        <div className="shrink-0">
+        <div 
+          className="shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               {task.assigneeId ? (

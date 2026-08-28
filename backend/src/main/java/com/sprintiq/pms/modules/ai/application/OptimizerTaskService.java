@@ -106,9 +106,29 @@ public class OptimizerTaskService {
                 if (existingOpt.isPresent()) {
                     Task existing = existingOpt.get();
                     TaskStatus targetStatus = isDone ? TaskStatus.COMPLETED : (isInProgress ? TaskStatus.IN_PROGRESS : TaskStatus.TODO);
+                    boolean modified = false;
                     if (existing.getStatus() != targetStatus) {
                         existing.setStatus(targetStatus);
                         if (isDone) existing.setCompleted_at(java.time.LocalDateTime.now());
+                        modified = true;
+                    }
+                    if (existing.getStory_points() != storyPoints) {
+                        existing.setStory_points(storyPoints);
+                        existing.setTask_complexity(complexity);
+                        modified = true;
+                    }
+                    if (existing.getReq_frontend() != reqFrontend || existing.getReq_backend() != reqBackend || existing.getReq_db() != reqDb) {
+                        existing.setReq_frontend(reqFrontend);
+                        existing.setReq_backend(reqBackend);
+                        existing.setReq_db(reqDb);
+                        modified = true;
+                    }
+                    if (existing.isBlocked() != blocked) {
+                        existing.setBlocked(blocked);
+                        existing.setDependency_risk(blocked ? 0.8 : 0.1);
+                        modified = true;
+                    }
+                    if (modified) {
                         taskRepository.save(existing);
                     }
                 } else {
