@@ -1,5 +1,11 @@
 -- Version the M4 explanation contract so forecasts cached before additive cost
 -- drivers were introduced cannot be replayed without their local explanation.
+--
+-- Numbered 28 rather than 24: two branches merged into main both claimed V24, and
+-- Flyway refuses to start on the collision. The other V24 had already been applied,
+-- so this is the one that moves. Safe to renumber because every statement below is an
+-- idempotent UPDATE keyed on model code — a database that applied it as V24 gets the
+-- same result running it again as V28.
 
 UPDATE ai_models
 SET version = '3.1.0',

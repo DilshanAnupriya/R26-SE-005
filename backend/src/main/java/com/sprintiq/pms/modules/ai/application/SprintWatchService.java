@@ -5,6 +5,9 @@ import com.sprintiq.pms.modules.ai.application.port.CollaborationFeatureSource.W
 import com.sprintiq.pms.modules.ai.application.port.SprintFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.StoryFeatureSource;
 import com.sprintiq.pms.modules.ai.domain.RiskType;
+import com.sprintiq.pms.security.AppProperties;
+import com.sprintiq.pms.modules.ai.web.dto.AiDtos.CostForecastResponse;
+import com.sprintiq.pms.modules.ai.domain.CostOverrun;
 import com.sprintiq.pms.tenancy.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +54,8 @@ public class SprintWatchService {
     static final String KEY_NOT_DONE_OVERDUE = "TASK_NOT_DONE_OVERDUE:";
     /** Tasks under a story are estimated at more time than its points allow. */
     static final String KEY_STORY_OVER_BUDGET = "STORY_OVER_BUDGET:";
+    /** The sprint's cost forecast is further over budget than the model's own error. */
+    static final String KEY_COST_OVER_BUDGET = "COST_OVER_BUDGET:";
 
     // Deliberately small. These are nudges accumulated across many tasks, not verdicts:
     // one quiet task should tint a sprint, and a dozen should colour it.
@@ -80,6 +85,8 @@ public class SprintWatchService {
     private final CollaborationFeatureSource collaboration;
     private final SprintRiskAdjustmentService adjustments;
     private final StoryFeatureSource stories;
+    private final CostForecastService costs;
+    private final AppProperties properties;
 
     /**
      * Every fifteen minutes: frequent enough that the number tracks the board, rare
@@ -120,11 +127,18 @@ public class SprintWatchService {
 
     @Transactional
     public void watch(java.util.UUID sprintId) {
+        // Both budget rules read the plan, not the board, so they run before the
+        // no-tasks guard below. A sprint whose stories are pointed and whose cost is
+        // forecast can be visibly over budget before a single task has been created —
+        // that is exactly the moment the warning is worth something, and skipping it
+        // because the board is empty would withhold it until it is too late to act.
+        storyBudgets(sprintId);
+        costBudget(sprintId);
+
         List<WatchedTask> tasks = collaboration.watchedTasks(sprintId);
         if (tasks.isEmpty()) {
             return;
         }
-        storyBudgets(sprintId);
 
         Instant now = Instant.now();
         for (WatchedTask task : tasks) {
@@ -133,6 +147,55 @@ public class SprintWatchService {
             notStartedByHalfTime(sprintId, task, now);
             overdue(sprintId, task, now);
         }
+    }
+
+    /**
+     * The sprint's cost forecast against its budget.
+     *
+     * <p>The two models that care about going over budget have never compared notes:
+     * {@code M2_OVER_BUDGET} predicts the outcome from how the team is behaving, and the
+     * cost model measures the money directly. This is the second one reaching the risk
+     * score — an overrun the cost model can actually see should not need a behavioural
+     * classifier to infer it.</p>
+     *
+     * <p>Reads the stored forecast rather than running a new one. A sweep that called a
+     * model every fifteen minutes for every active sprint would bill for inference
+     * nobody asked for; the forecast changes when someone re-forecasts, and this follows
+     * it.</p>
+     */
+    private void costBudget(java.util.UUID sprintId) {
+        String key = KEY_COST_OVER_BUDGET + sprintId;
+
+        CostForecastResponse forecast;
+        try {
+            forecast = costs.latestWithBudget(sprintId);
+        } catch (RuntimeException ex) {
+            log.warn("Could not read the cost forecast for sprint {}", sprintId, ex);
+            return;
+        }
+
+        AppProperties.CostRisk config = properties.getAi().getCostRisk();
+        CostOverrun overrun = CostOverrun.evaluate(
+                forecast == null ? null : forecast.forecastAmount(),
+                forecast == null ? null : forecast.budgetAmount(),
+                forecast == null ? null : forecast.varianceVsBudgetPct(),
+                config.getMarginPct(), config.getPctPerRiskPoint(),
+                config.getMinDelta(), config.getMaxDelta());
+
+        if (!overrun.isCharged()) {
+            // Under budget, inside the margin, or nothing to compare against. All three
+            // withdraw an earlier charge: a forecast that has come back into line should
+            // visibly give the points back.
+            adjustments.clear(sprintId, key);
+            return;
+        }
+
+        adjustments.revise(sprintId, RiskType.OVER_BUDGET, key, overrun.delta(),
+                String.format("Forecast %s %,.0f against a %s %,.0f budget — %.0f%% over, "
+                                + "%.0f points beyond the cost model's usual error",
+                        forecast.currency(), overrun.forecastAmount(),
+                        forecast.currency(), overrun.budgetAmount(),
+                        overrun.variancePct(), overrun.beyondMarginPct()));
     }
 
     /**

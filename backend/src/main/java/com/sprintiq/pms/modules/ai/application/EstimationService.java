@@ -107,6 +107,14 @@ public class EstimationService {
                 .putNumber("external_apis", features.dependencyCount())
                 .putNumber("similar_task_count", features.comparableCount())
                 .putNumber("task_age_days", features.ageInDays())
+                // Supplied rather than left out. Absent, the service keyword-matches the
+                // story text and marks all three inferred on every story we have ever
+                // scored; supplied, they carry the labels a person put on the work and
+                // the dependency edges the board records, with the same keyword pass
+                // underneath as a floor.
+                .put("has_integration", features.hasIntegrationWork())
+                .put("has_security", features.hasSecurityWork())
+                .put("has_ui_complexity", features.hasUiComplexity())
 
                 // ---- Retained for the mock client and the stored feature record ----
                 // The mock scores on these, and every prediction persists its whole

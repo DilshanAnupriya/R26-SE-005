@@ -44,12 +44,23 @@ class SprintWatchServiceTest {
     @Mock private CollaborationFeatureSource collaboration;
     @Mock private SprintRiskAdjustmentService adjustments;
     @Mock private com.sprintiq.pms.modules.ai.application.port.StoryFeatureSource stories;
+    @Mock private CostForecastService costs;
 
     private SprintWatchService service;
 
+    /**
+     * The shipped thresholds, not invented ones. A test that passes against a margin
+     * this project does not use proves nothing about the rule people will run.
+     */
+    private static com.sprintiq.pms.security.AppProperties properties() {
+        com.sprintiq.pms.security.AppProperties props = new com.sprintiq.pms.security.AppProperties();
+        return props;
+    }
+
     @BeforeEach
     void setUp() {
-        service = new SprintWatchService(sprints, collaboration, adjustments, stories);
+        service = new SprintWatchService(sprints, collaboration, adjustments, stories,
+                costs, properties());
     }
 
     /** An 8-hour task, so half-time is 4 hours in and the deadline 8. */
@@ -311,5 +322,116 @@ class SprintWatchServiceTest {
                 .recordOnce(any(), any(), any(), deltas.capture(), any());
         assertThat(deltas.getAllValues())
                 .allSatisfy(d -> assertThat(d).isLessThanOrEqualTo(BigDecimal.valueOf(5)));
+    }
+
+    /**
+     * The cost model feeding the risk score.
+     *
+     * <p>Every case here is about restraint. The cost model's own error rate is 23.5%
+     * (initial) and 28.6% (mid-sprint); an overrun smaller than that is the model's noise
+     * rather than the sprint's overspend, and charging risk for it would teach a team
+     * that the number reacts to nothing.</p>
+     */
+    @Nested
+    @DisplayName("cost budget")
+    class CostBudget {
+
+        private String key() {
+            return SprintWatchService.KEY_COST_OVER_BUDGET + SPRINT;
+        }
+
+        private void givenQuietBoard() {
+            when(collaboration.watchedTasks(SPRINT)).thenReturn(List.of());
+            when(stories.budgetBreachesForSprint(SPRINT)).thenReturn(List.of());
+            when(adjustments.ledgerFor(SPRINT)).thenReturn(
+                    new SprintRiskAdjustmentService.Ledger(List.of()));
+        }
+
+        private com.sprintiq.pms.modules.ai.web.dto.AiDtos.CostForecastResponse forecast(
+                double amount, double budget, double variancePct) {
+            return new com.sprintiq.pms.modules.ai.web.dto.AiDtos.CostForecastResponse(
+                    UUID.randomUUID(), SPRINT,
+                    com.sprintiq.pms.modules.ai.domain.CostStage.INITIAL,
+                    BigDecimal.valueOf(amount), BigDecimal.valueOf(500),
+                    BigDecimal.valueOf(amount - 500), BigDecimal.valueOf(amount + 500),
+                    "USD", BigDecimal.valueOf(0.7), "RISING",
+                    BigDecimal.valueOf(variancePct), BigDecimal.valueOf(budget),
+                    List.of(), "because", UUID.randomUUID(), Instant.now());
+        }
+
+        /** A forecast on a sprint nobody has budgeted — the budget is absent, not zero. */
+        private com.sprintiq.pms.modules.ai.web.dto.AiDtos.CostForecastResponse noBudget(double amount) {
+            return new com.sprintiq.pms.modules.ai.web.dto.AiDtos.CostForecastResponse(
+                    UUID.randomUUID(), SPRINT,
+                    com.sprintiq.pms.modules.ai.domain.CostStage.INITIAL,
+                    BigDecimal.valueOf(amount), BigDecimal.valueOf(500),
+                    BigDecimal.valueOf(amount - 500), BigDecimal.valueOf(amount + 500),
+                    "USD", BigDecimal.valueOf(0.7), "RISING",
+                    null, null, List.of(), "because", UUID.randomUUID(), Instant.now());
+        }
+
+        @Test
+        @DisplayName("charges over-budget risk once the overrun clears the model's own error")
+        void chargesClearOverrun() {
+            givenQuietBoard();
+            when(costs.latestWithBudget(SPRINT)).thenReturn(forecast(4000, 2500, 60));
+
+            service.watch(SPRINT);
+
+            verify(adjustments).revise(eq(SPRINT), eq(RiskType.OVER_BUDGET), eq(key()),
+                    any(), any());
+        }
+
+        @Test
+        @DisplayName("stays silent when the overrun is inside the cost model's error margin")
+        void withinMarginIsNotCharged() {
+            givenQuietBoard();
+            // Sprint 24's real reading: $3,059.33 against $2,500 is 22.37% over, which is
+            // less than the 23.5% the model is wrong by on average. Not evidence.
+            when(costs.latestWithBudget(SPRINT)).thenReturn(forecast(3059.33, 2500, 22.37));
+
+            service.watch(SPRINT);
+
+            verify(adjustments).clear(SPRINT, key());
+            verify(adjustments, never()).revise(any(), eq(RiskType.OVER_BUDGET), eq(key()),
+                    any(), any());
+        }
+
+        @Test
+        @DisplayName("withdraws the charge when the forecast comes back into line")
+        void underBudgetWithdrawsTheCharge() {
+            givenQuietBoard();
+            when(costs.latestWithBudget(SPRINT)).thenReturn(forecast(2000, 2500, -20));
+
+            service.watch(SPRINT);
+
+            verify(adjustments).clear(SPRINT, key());
+        }
+
+        @Test
+        @DisplayName("a sprint with no budget is not a sprint under budget")
+        void missingBudgetChargesNothing() {
+            givenQuietBoard();
+            when(costs.latestWithBudget(SPRINT)).thenReturn(noBudget(4000));
+
+            service.watch(SPRINT);
+
+            verify(adjustments).clear(SPRINT, key());
+            verify(adjustments, never()).revise(any(), eq(RiskType.OVER_BUDGET), eq(key()),
+                    any(), any());
+        }
+
+        @Test
+        @DisplayName("a cost service that fails leaves the score alone rather than guessing")
+        void costFailureIsNotRisk() {
+            givenQuietBoard();
+            when(costs.latestWithBudget(SPRINT)).thenThrow(new IllegalStateException("down"));
+
+            service.watch(SPRINT);
+
+            verify(adjustments, never()).revise(any(), eq(RiskType.OVER_BUDGET), eq(key()),
+                    any(), any());
+            verify(adjustments, never()).clear(SPRINT, key());
+        }
     }
 }

@@ -85,6 +85,22 @@ export function useSubmitFeedback() {
   });
 }
 
+/**
+ * The cost model and the over-budget risk model, read against each other.
+ *
+ * A pure comparison of two readings that are already stored — no model runs, so this is
+ * a plain query and not a mutation like `useForecastCost`. It follows whichever of the
+ * two was refreshed last, which is why it invalidates alongside both.
+ */
+export function useCostRiskCrossCheck(sprintId: string | undefined) {
+  const { api, status } = useSession();
+  return useQuery({
+    queryKey: queryKeys.ai.costRiskCrossCheck(sprintId ?? ""),
+    queryFn: () => aiApi.costRiskCrossCheck(api, sprintId!),
+    enabled: status === "authenticated" && Boolean(sprintId),
+  });
+}
+
 export function useSprintRisk(sprintId: string | undefined) {
   const { api, status } = useSession();
   return useQuery({
@@ -118,6 +134,10 @@ export function useAssessSprintRisk() {
     mutationFn: (sprintId: string) => aiApi.assessSprintRisk(api, sprintId),
     onSuccess: (_risk, sprintId) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(sprintId) });
+      // A re-score is the other half of the cross-check.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.ai.costRiskCrossCheck(sprintId),
+      });
     },
   });
 }
@@ -143,6 +163,10 @@ export function useForecastCost() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.cost(input.sprintId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.costHistory(input.sprintId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.costValidation(input.sprintId) });
+      // The cross-check reads this forecast, so a new one changes what the panel says.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.ai.costRiskCrossCheck(input.sprintId),
+      });
     },
   });
 }

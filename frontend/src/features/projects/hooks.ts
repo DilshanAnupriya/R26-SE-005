@@ -84,3 +84,24 @@ export function useCreateProject() {
     },
   });
 }
+
+/**
+ * Updates a project's estimation context.
+ *
+ * <p>Invalidates the AI keys as well as the project ones. Domain, tech stack, team size
+ * and experience level are all inputs to the story-point model, and a cached estimate
+ * produced before they were filled in was scored against training medians — leaving it
+ * on screen next to the corrected project would show a number the inputs no longer
+ * justify.</p>
+ */
+export function useUpdateProject(projectId: string | undefined) {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) => projectsApi.update(api, projectId!, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.all });
+    },
+  });
+}

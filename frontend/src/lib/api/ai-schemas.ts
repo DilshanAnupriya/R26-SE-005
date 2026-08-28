@@ -332,6 +332,30 @@ export const costForecastSchema = z.object({
 });
 export type CostForecast = z.infer<typeof costForecastSchema>;
 
+/**
+ * The two over-budget verdicts read against each other.
+ *
+ * `agreement` is the whole point: the cost model and the risk model share no inputs, so
+ * agreement is corroboration and disagreement names which half of the sprint went wrong.
+ */
+export const costRiskCrossCheckSchema = z.object({
+  sprintId: z.uuid(),
+  agreement: z.enum(["BOTH_HIGH", "BOTH_LOW", "COST_ONLY", "RISK_ONLY", "UNKNOWN"]),
+  headline: z.string(),
+  detail: z.string(),
+  riskScore: z.coerce.number().nullish(),
+  riskSeverity: riskSeveritySchema.nullish(),
+  forecastAmount: z.coerce.number().nullish(),
+  budgetAmount: z.coerce.number().nullish(),
+  variancePct: z.coerce.number().nullish(),
+  currency: z.string().nullish(),
+  /** The cost model's own error rate. A variance inside this is noise, not an overrun. */
+  marginPct: z.coerce.number(),
+  costCharged: z.boolean(),
+});
+export type CostRiskCrossCheck = z.infer<typeof costRiskCrossCheckSchema>;
+export type CostRiskAgreement = CostRiskCrossCheck["agreement"];
+
 export const costTrendPointSchema = z.object({
   sprintId: z.uuid(),
   sprintName: z.string().nullish(),

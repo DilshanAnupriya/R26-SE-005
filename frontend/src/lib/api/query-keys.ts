@@ -95,6 +95,8 @@ export const queryKeys = {
     cost: (sprintId: string) => [...queryKeys.ai.all, "cost", sprintId] as const,
     costHistory: (sprintId: string) => [...queryKeys.ai.all, "cost-history", sprintId] as const,
     costValidation: (sprintId: string) => [...queryKeys.ai.all, "cost-validation", sprintId] as const,
+    costRiskCrossCheck: (sprintId: string) =>
+      [...queryKeys.ai.all, "cost-risk-cross-check", sprintId] as const,
     allocation: (entityType: string, entityId: string) =>
       [...queryKeys.ai.all, "allocation", entityType, entityId] as const,
     insights: (scope: "project" | "sprint", id: string) =>

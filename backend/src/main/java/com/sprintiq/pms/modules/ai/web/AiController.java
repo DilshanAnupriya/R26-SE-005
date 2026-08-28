@@ -46,6 +46,7 @@ public class AiController {
     private final SprintRiskTrendService riskTrend;
     private final RiskRemediationService remediation;
     private final RiskAdvisorService advisor;
+    private final CostRiskCrossCheckService crossCheck;
 
     // -------------------------------------------------------- M1 · estimation
 
@@ -265,6 +266,17 @@ public class AiController {
     @GetMapping("/cost/sprint/{sprintId}/validation")
     public CostValidationResponse costValidation(@PathVariable UUID sprintId) {
         return cost.validateSprint(sprintId);
+    }
+
+    @Operation(summary = "Read the cost model and the over-budget risk model against each other",
+            description = "Both models predict a sprint going over budget, from inputs that do not "
+                    + "overlap — one reads spend, the other reads how the team is working. Agreement "
+                    + "is corroboration; disagreement says whether the problem is the plan or the "
+                    + "execution. Compares stored readings only; runs no model.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @GetMapping("/cost/sprint/{sprintId}/risk-cross-check")
+    public CostRiskCrossCheckResponse costRiskCrossCheck(@PathVariable UUID sprintId) {
+        return crossCheck.crossCheck(sprintId);
     }
 
     // -------------------------------------------------- predictions & feedback

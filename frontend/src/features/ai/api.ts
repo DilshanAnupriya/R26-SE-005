@@ -7,6 +7,7 @@ import {
   batchEstimateSchema,
   costForecastSchema,
   costTrendPointSchema,
+  costRiskCrossCheckSchema,
   costValidationSchema,
   feedbackSchema,
   riskAdjustmentSchema,
@@ -87,6 +88,11 @@ export const aiApi = {
   costValidation: (api: ApiClient, sprintId: string) =>
     api.request(`/ai/cost/sprint/${sprintId}/validation`, {
       schema: costValidationSchema,
+    }),
+
+  costRiskCrossCheck: (api: ApiClient, sprintId: string) =>
+    api.request(`/ai/cost/sprint/${sprintId}/risk-cross-check`, {
+      schema: costRiskCrossCheckSchema,
     }),
 
   /**
