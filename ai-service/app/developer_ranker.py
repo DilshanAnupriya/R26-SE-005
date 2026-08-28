@@ -2,7 +2,13 @@ import pandas as pd
 import numpy as np
 import math
 import logging
+from typing import Optional, Union, Dict, Any
 from scipy.optimize import linear_sum_assignment
+
+try:
+    from .weight_optimizer import CompositeWeights, get_default_optimal_weights
+except ImportError:
+    from app.weight_optimizer import CompositeWeights, get_default_optimal_weights
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +17,8 @@ def rank_developers_for_task(
         task_profile: dict,
         dev_df: pd.DataFrame,
         model,
-        feature_columns: list
+        feature_columns: list,
+        weights: Optional[Union[CompositeWeights, Dict[str, float]]] = None
 ) -> pd.DataFrame:
     """
     Rank developers using ML prediction + explicit skill matching + workload balance + growth incentive
@@ -20,6 +27,14 @@ def rank_developers_for_task(
     (not retrieved from a database or CSV)
     They must match exactly how they were calculated during training
     """
+    if weights is None:
+        active_weights = get_default_optimal_weights()
+    elif isinstance(weights, CompositeWeights):
+        active_weights = weights
+    elif isinstance(weights, dict):
+        active_weights = CompositeWeights.from_dict(weights)
+    else:
+        active_weights = get_default_optimal_weights()
 
     # Normalize column names (Spring Boot may use camelCase)
     column_mapping = {
@@ -123,17 +138,17 @@ def rank_developers_for_task(
     dev_ids = candidates_df["_dev_id"].values
     candidates_df = candidates_df.drop(columns=["_dev_id"])
 
-    # ✅ Align to model's expected features (CRITICAL)
-    candidates_df = candidates_df.reindex(columns=feature_columns, fill_value=0)
+    # ✅ Align to model's expected features for prediction
+    model_input_df = candidates_df.reindex(columns=feature_columns, fill_value=0)
 
     logger.info(f"✓ Prepared {len(candidates_df)} candidates for prediction")
-    logger.debug(f"  Columns: {list(candidates_df.columns)}")
+    logger.debug(f"  Columns: {list(model_input_df.columns)}")
 
     # =========================================
     # ML PREDICTION
     # =========================================
     try:
-        predicted = model.predict(candidates_df)
+        predicted = model.predict(model_input_df)
         logger.info(f"✓ ML predictions: min={predicted.min():.2f}, max={predicted.max():.2f}, mean={predicted.mean():.2f}")
     except Exception as e:
         logger.error(f"Error in model.predict(): {e}")
@@ -142,8 +157,8 @@ def rank_developers_for_task(
     # =========================================
     # EXTRACT FEATURES FOR FINAL SCORING
     # =========================================
-    skill_match_array = candidates_df["skill_match_score"].values
-    raw_workloads = candidates_df["current_workload"].values.astype(float)
+    skill_match_array = candidates_df["skill_match_score"].values if "skill_match_score" in candidates_df.columns else np.zeros(len(candidates_df))
+    raw_workloads = candidates_df["current_workload"].values.astype(float) if "current_workload" in candidates_df.columns else np.zeros(len(candidates_df))
 
     # ✅ WORKLOAD BALANCE & FAIRNESS:
     # 1. Exponential decay relative to team mean workload
@@ -208,12 +223,12 @@ def rank_developers_for_task(
     # FINAL COMPOSITE SCORE
     # =========================================
     final_score = (
-        pred_norm * 0.15 +                        # ML prediction (15%)
-        skill_match_array * 35 +                 # Skill match (35%)
-        combined_workload_balance * 30 +         # Workload & fairness (30%)
-        consistency_array * 10 +                 # Consistency (10%)
-        learning_rate_array * 10 +               # Learning rate (10%)
-        growth_bonus_array                       # Growth incentive bonus
+        pred_norm * active_weights.ml_prediction +
+        skill_match_array * (active_weights.skill_match * 100.0) +
+        combined_workload_balance * (active_weights.workload_balance * 100.0) +
+        consistency_array * (active_weights.consistency * 100.0) +
+        learning_rate_array * (active_weights.learning_rate * 100.0) +
+        growth_bonus_array
     )
     final_score = np.clip(final_score, 0, 100)
 
@@ -256,7 +271,8 @@ def allocate_sprint(
         tasks: list,
         dev_df: pd.DataFrame,
         model,
-        feature_columns: list
+        feature_columns: list,
+        weights: Optional[Union[CompositeWeights, Dict[str, float]]] = None
 ) -> list:
     """
     Allocate an entire sprint using GLOBAL LINEAR ASSIGNMENT (Hungarian Algorithm).
@@ -315,7 +331,8 @@ def allocate_sprint(
             task_profile=task,
             dev_df=current_dev_df,
             model=model,
-            feature_columns=feature_columns
+            feature_columns=feature_columns,
+            weights=weights
         )
         rankings_cache[i] = ranking_df
 
@@ -367,7 +384,8 @@ def rank_sprint_tasks(
         dev_df: pd.DataFrame,
         model,
         feature_columns: list,
-        top_n: int = 3
+        top_n: int = 3,
+        weights: Optional[Union[CompositeWeights, Dict[str, float]]] = None
 ) -> list:
     """
     Rank developers for each task in a sprint without final allocation.
@@ -411,7 +429,8 @@ def rank_sprint_tasks(
             task_profile=task,
             dev_df=current_dev_df,
             model=model,
-            feature_columns=feature_columns
+            feature_columns=feature_columns,
+            weights=weights
         )
 
         top_recommendations = ranking_df.head(top_n).to_dict(orient="records")
