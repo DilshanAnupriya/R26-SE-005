@@ -2,7 +2,12 @@ import pandas as pd
 import numpy as np
 import shap
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, Union
+
+try:
+    from .weight_optimizer import CompositeWeights, get_default_optimal_weights
+except ImportError:
+    from app.weight_optimizer import CompositeWeights, get_default_optimal_weights
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +18,8 @@ class ExplainabilityEngine:
     Uses multiple methods: SHAP values, feature importance, and rule-based reasoning.
     """
 
-    def __init__(self, model, feature_columns: List[str], shap_background_data=None):
+    def __init__(self, model, feature_columns: List[str], shap_background_data=None,
+                 weights: Optional[Union[CompositeWeights, Dict[str, float]]] = None):
         """
         Initialize explainability engine.
         
@@ -21,9 +27,18 @@ class ExplainabilityEngine:
             model: Trained ML model
             feature_columns: List of feature names used in training
             shap_background_data: Background data for SHAP (if None, uses synthetic)
+            weights: Normalized weights used in composite score calculation
         """
         self.model = model
         self.feature_columns = feature_columns
+        if weights is None:
+            self.weights = get_default_optimal_weights()
+        elif isinstance(weights, CompositeWeights):
+            self.weights = weights
+        elif isinstance(weights, dict):
+            self.weights = CompositeWeights.from_dict(weights)
+        else:
+            self.weights = get_default_optimal_weights()
         
         # Create SHAP explainer
         try:
@@ -158,43 +173,43 @@ class ExplainabilityEngine:
                                   workload_balance: float, consistency: float,
                                   learning_rate: float, final_score: float) -> Dict:
         """
-        Break down how the final score was calculated.
-        Weights: 15% ML + 35% Skill + 30% Workload + 10% Consistency + 10% Learning
+        Break down how the final score was calculated using active composite weights.
         """
-        ml_contribution = (ml_score / max(ml_score, 1)) * 100 * 0.15 if ml_score > 0 else 0
-        skill_contribution = skill_match * 35
-        workload_contribution = workload_balance * 30
-        consistency_contribution = consistency * 10
-        learning_contribution = learning_rate * 10
+        w = self.weights
+        ml_contribution = (ml_score / max(ml_score, 1)) * 100 * w.ml_prediction if ml_score > 0 else 0
+        skill_contribution = skill_match * (w.skill_match * 100.0)
+        workload_contribution = workload_balance * (w.workload_balance * 100.0)
+        consistency_contribution = consistency * (w.consistency * 100.0)
+        learning_contribution = learning_rate * (w.learning_rate * 100.0)
 
         return {
             "ml_prediction": {
                 "value": round(ml_score, 2),
-                "weight": "15%",
+                "weight": f"{round(w.ml_prediction * 100)}%",
                 "contribution": round(ml_contribution, 2),
                 "explanation": "ML model's estimate of task success"
             },
             "skill_match": {
                 "value": round(skill_match, 3),
-                "weight": "35%",
+                "weight": f"{round(w.skill_match * 100)}%",
                 "contribution": round(skill_contribution, 2),
                 "explanation": "Alignment with task requirements"
             },
             "workload_balance": {
                 "value": round(workload_balance, 3),
-                "weight": "30%",
+                "weight": f"{round(w.workload_balance * 100)}%",
                 "contribution": round(workload_contribution, 2),
                 "explanation": "Availability and capacity"
             },
             "consistency": {
                 "value": round(consistency, 2),
-                "weight": "10%",
+                "weight": f"{round(w.consistency * 100)}%",
                 "contribution": round(consistency_contribution, 2),
                 "explanation": "Historical performance stability"
             },
             "learning_rate": {
                 "value": round(learning_rate, 2),
-                "weight": "10%",
+                "weight": f"{round(w.learning_rate * 100)}%",
                 "contribution": round(learning_contribution, 2),
                 "explanation": "Speed of skill improvement"
             },
