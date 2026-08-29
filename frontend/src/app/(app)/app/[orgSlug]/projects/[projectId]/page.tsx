@@ -150,8 +150,8 @@ export default function ProjectPage({
         />
         <Metric
           label="Points delivered"
-          value={overview.data?.completedPoints}
-          suffix={overview.data ? ` / ${overview.data.totalPoints}` : undefined}
+          value={overview.data?.completedStoryPoints}
+          suffix={overview.data ? ` / ${overview.data.totalStoryPoints}` : undefined}
           loading={overview.isPending}
         />
         <Metric label="Blocked" value={overview.data?.blockedCount} loading={overview.isPending} />
@@ -217,13 +217,7 @@ export default function ProjectPage({
         <aside className="space-y-3" aria-label="Story detail">
           {selected ? (
             <>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">{selected.itemKey}</p>
-                <p className="mt-0.5 text-sm font-medium">{selected.title}</p>
-                {selected.description ? (
-                  <p className="mt-2 text-xs text-muted-foreground">{selected.description}</p>
-                ) : null}
-              </div>
+              <StoryDetail story={selected} />
 
               {/* Sprint Assignment */}
               <div className="rounded-lg border p-3 space-y-1.5">
@@ -319,14 +313,20 @@ function Metric({
   loading?: boolean;
 }) {
   return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
+    <div className="rounded-lg border border-line bg-surface p-3.5">
+      <p className="text-xs text-ink-2">{label}</p>
       {loading ? (
-        <Skeleton className="mt-1 h-7 w-16" />
+        <Skeleton className="mt-1.5 h-8 w-16" />
       ) : (
-        <p className="mt-0.5 text-xl font-semibold tabular-nums">
+        // The number is the whole point of a metric tile, so it carries the weight and
+        // the qualifier steps back rather than sharing it.
+        <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-ink">
           {value ?? "—"}
-          {suffix ? <span className="text-sm text-muted-foreground">{suffix}</span> : null}
+          {suffix ? (
+            <span className="ml-0.5 text-base font-normal tabular-nums text-ink-2">
+              {suffix}
+            </span>
+          ) : null}
         </p>
       )}
     </div>
@@ -353,43 +353,178 @@ function StoryRow({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors",
-        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:-outline-offset-2",
-        selected ? "bg-muted" : "hover:bg-muted/50",
+        "group grid w-full grid-cols-[3.75rem_minmax(0,1fr)_auto_2.5rem] items-center gap-3",
+        "px-3 py-2.5 text-left transition-colors duration-150",
+        "focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none focus-visible:-outline-offset-2",
+        selected ? "bg-accent-soft" : "hover:bg-surface-3",
       )}
     >
-      <span className="w-16 shrink-0 text-xs text-muted-foreground tabular-nums">
+      {/* Mono, so a column of keys aligns and stops competing with the titles it sits
+          beside. It is a reference number, not content — the row's job is the title
+          and the estimate. */}
+      <span
+        className={cn(
+          "truncate font-mono text-2xs tabular-nums transition-colors",
+          selected ? "text-accent-text" : "text-ink-2",
+        )}
+      >
         {story.itemKey}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm">{story.title}</span>
 
-      {sprintName ? (
-        <Badge variant="secondary" className="shrink-0 text-2xs px-1.5 py-0">
-          {sprintName}
-        </Badge>
-      ) : null}
+      <span
+        className={cn(
+          "min-w-0 truncate text-base transition-colors",
+          selected ? "font-medium text-ink" : "text-ink-2 group-hover:text-ink",
+        )}
+      >
+        {story.title}
+      </span>
 
-      {story.blocked ? (
-        <Badge variant="destructive" className="shrink-0">
-          blocked
-        </Badge>
-      ) : null}
+      <span className="flex shrink-0 items-center gap-1.5">
+        {sprintName ? (
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 text-2xs text-ink-2">
+            {sprintName}
+          </span>
+        ) : null}
+        {/* Blocked keeps its full weight. It is the one thing in the row that should
+            interrupt a scan. */}
+        {story.blocked ? (
+          <span className="rounded bg-red-soft px-1.5 py-0.5 text-2xs font-medium text-red">
+            blocked
+          </span>
+        ) : null}
+      </span>
 
-      {/* A suggested estimate is visibly a suggestion, never mistaken for the team's. */}
+      {/* The estimate is what a backlog is scanned for, so it gets the row's strongest
+          weight and a fixed column to line up in. Suggested and accepted values share
+          that column deliberately: the eye reads down one line of numbers, and the
+          dashed outline — not a different position — is what marks a value as the
+          model's rather than the team's. */}
       {showsSuggestion ? (
-        <Badge
-          variant="outline"
-          className="shrink-0 gap-1 border-dashed text-muted-foreground tabular-nums"
-        >
-          <Sparkles className="size-3" aria-hidden />
+        <span className="justify-self-end rounded border border-dashed border-accent px-1.5 py-0.5 text-sm font-medium tabular-nums text-accent-text">
           {suggested}
-          <span className="sr-only">suggested points, not yet accepted</span>
-        </Badge>
+          <span className="sr-only"> suggested points, not yet accepted</span>
+        </span>
       ) : (
-        <span className="w-8 shrink-0 text-right text-sm tabular-nums">
+        <span
+          className={cn(
+            "justify-self-end text-md font-semibold tabular-nums",
+            story.storyPoints == null ? "font-normal text-ink-3" : "text-ink",
+          )}
+        >
           {story.storyPoints ?? "—"}
         </span>
       )}
     </button>
+  );
+}
+
+
+/**
+ * What a story actually says, beside the estimate that was made from it.
+ *
+ * <p>Every field here was already on the story payload and none of it was rendered —
+ * the panel showed a key, a title and a description, then jumped straight to a number.
+ * Acceptance criteria and labels are not decoration in this product: they are two of
+ * the three things {@code num_components} is summed from, so a reader looking at an
+ * estimate they disagree with could not see the evidence it was built on.</p>
+ */
+function StoryDetail({ story }: { story: Story }) {
+  const criteria = (story.acceptanceCriteria ?? "")
+    .split("\n")
+    .map((line) => line.replace(/^[-*\u2022]\s*/, "").trim())
+    .filter(Boolean);
+
+  return (
+    <div className="rounded-lg border border-line bg-surface">
+      <div className="border-b border-line px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-2xs text-ink-2">{story.itemKey}</span>
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 text-2xs text-ink-2">
+            {story.type.toLowerCase().replace("_", " ")}
+          </span>
+          {story.priority !== "MEDIUM" ? (
+            <span className="rounded bg-surface-3 px-1.5 py-0.5 text-2xs text-ink-2">
+              {story.priority.toLowerCase()}
+            </span>
+          ) : null}
+        </div>
+        <h2 className="mt-1 text-md font-medium text-ink">{story.title}</h2>
+        {story.description ? (
+          <p className="mt-1.5 text-xs leading-relaxed text-ink-2">{story.description}</p>
+        ) : (
+          <p className="mt-1.5 text-xs text-ink-3">No description.</p>
+        )}
+      </div>
+
+      {/* Criteria as a real list rather than a wall of newline-separated text — the
+          count is what the estimator reads, so the reader should be able to count them
+          at a glance too. */}
+      <div className="border-b border-line px-3 py-2.5">
+        <p className="text-2xs font-medium text-ink-2">
+          Acceptance criteria
+          {criteria.length > 0 ? (
+            <span className="ml-1 tabular-nums text-ink-3">({criteria.length})</span>
+          ) : null}
+        </p>
+        {criteria.length > 0 ? (
+          <ul className="mt-1.5 space-y-1">
+            {criteria.map((line) => (
+              <li key={line} className="flex gap-1.5 text-xs leading-relaxed text-ink-2">
+                <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-ink-3" />
+                <span className="min-w-0">{line}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-xs text-ink-3">
+            None yet — the estimator reads these, so a story without them is sized on
+            structure alone.
+          </p>
+        )}
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 px-3 py-2.5 text-xs">
+        <div>
+          <dt className="text-2xs text-ink-3">Status</dt>
+          <dd className="text-ink-2">{story.status.toLowerCase().replace("_", " ")}</dd>
+        </div>
+        <div>
+          <dt className="text-2xs text-ink-3">Assignee</dt>
+          <dd className="truncate text-ink-2">{story.assigneeName ?? "Unassigned"}</dd>
+        </div>
+        {story.dueDate ? (
+          <div>
+            <dt className="text-2xs text-ink-3">Due</dt>
+            <dd className="tabular-nums text-ink-2">{story.dueDate}</dd>
+          </div>
+        ) : null}
+        {story.reopenedCount > 0 ? (
+          <div>
+            <dt className="text-2xs text-ink-3">Reopened</dt>
+            <dd className="tabular-nums text-amber">{story.reopenedCount}×</dd>
+          </div>
+        ) : null}
+      </dl>
+
+      {story.labels.length > 0 ? (
+        <div className="flex flex-wrap gap-1 border-t border-line px-3 py-2.5">
+          {story.labels.map((label) => (
+            <span
+              key={label.id}
+              className="rounded bg-surface-3 px-1.5 py-0.5 text-2xs text-ink-2"
+            >
+              {label.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {story.blocked ? (
+        <p className="border-t border-line bg-red-soft px-3 py-2 text-xs text-red">
+          Blocked{story.blockedReason ? ` — ${story.blockedReason}` : ""}
+        </p>
+      ) : null}
+    </div>
   );
 }

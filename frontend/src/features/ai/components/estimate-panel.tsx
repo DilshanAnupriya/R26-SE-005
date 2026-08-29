@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Pencil, RefreshCw, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, Pencil, RefreshCw, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import type { StoryPointEstimate } from "@/lib/api/ai-schemas";
 import { useEstimateStory, useSubmitFeedback } from "../hooks";
 import {
   BoundsLabel,
+  SnapLabel,
   ConfidenceBar,
   DegradedNotice,
   DriverList,
@@ -155,61 +156,106 @@ export function EstimatePanel({
   const disagrees = human != null && suggested != null && human !== suggested;
 
   return (
-    <section className="rounded-lg border p-3" aria-labelledby={`ai-estimate-${story.id}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3
-            id={`ai-estimate-${story.id}`}
-            className="flex items-center gap-1.5 text-sm font-medium"
-          >
-            <Sparkles className="size-3.5 text-primary" aria-hidden />
-            Suggested estimate
-            {estimate.isPending ? (
-              <span className="text-xs font-normal text-muted-foreground">re-estimating…</span>
-            ) : null}
-          </h3>
-
-          <div className="mt-1.5 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tabular-nums">{suggested ?? "—"}</span>
-            <span className="text-xs text-muted-foreground">points</span>
-            {prediction ? (
-              <BoundsLabel lower={prediction.lowerBound} upper={prediction.upperBound} />
-            ) : story.aiEstimate?.lowerBound != null ? (
-              <BoundsLabel
-                lower={story.aiEstimate.lowerBound}
-                upper={story.aiEstimate.upperBound}
-              />
-            ) : null}
-          </div>
-
-          <div className="mt-1.5">
-            <ConfidenceBar
-              confidence={prediction?.confidence ?? story.aiEstimate?.confidence}
-            />
-          </div>
-        </div>
-
-        {prediction ? <PredictionMeta prediction={prediction} /> : null}
+    <section
+      className="rounded-lg border border-line bg-surface"
+      aria-labelledby={`ai-estimate-${story.id}`}
+    >
+      {/* Header band on surface-2 so the estimate below reads as the panel's content
+          rather than one more row in a stack of equal-weight lines. */}
+      <div className="flex items-center justify-between gap-3 rounded-t-lg border-b border-line bg-surface-2 px-3 py-2">
+        <h3
+          id={`ai-estimate-${story.id}`}
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs font-medium text-ink-2"
+        >
+          <Sparkles className="size-3.5 shrink-0 text-accent" aria-hidden />
+          Suggested estimate
+          {estimate.isPending ? (
+            <span className="font-normal text-ink-3">· re-estimating…</span>
+          ) : null}
+        </h3>
       </div>
 
-      {/* Compare: the team's number beside the model's, whenever they differ. */}
-      {disagrees ? (
-        <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-muted/50 p-2 text-center">
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Your team</p>
-            <p className="text-lg font-semibold tabular-nums">{human}</p>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Model</p>
-            <p className="text-lg font-semibold tabular-nums">{suggested}</p>
+      <div className="p-3">
+        <div
+          // Keyed on the value so a re-estimate that lands somewhere new replays the
+          // entrance. Without it React reuses the node, the animation never re-runs,
+          // and the number changes with nothing to mark that it did.
+          key={`estimate-${suggested ?? "none"}-${prediction?.predictionId ?? "stored"}`}
+          className="flex items-start justify-between gap-3 animate-fade-up"
+        >
+          <div className="min-w-0">
+            {/* The number leads. Everything under it is qualification, and it was all
+                previously set at the same weight as the answer itself. */}
+            <div className="flex items-baseline gap-2">
+              <span className="text-5xl font-semibold leading-none tabular-nums tracking-tight text-ink">
+                {suggested ?? "—"}
+              </span>
+              <span className="text-xs text-ink-3">points</span>
+              {prediction ? (
+                <BoundsLabel lower={prediction.lowerBound} upper={prediction.upperBound} />
+              ) : story.aiEstimate?.lowerBound != null ? (
+                <BoundsLabel
+                  lower={story.aiEstimate.lowerBound}
+                  upper={story.aiEstimate.upperBound}
+                />
+              ) : null}
+            </div>
+
+            {/* Only appears when the rounding actually hid something. Most estimates say
+                nothing here, which is what makes the ones that do say something worth
+                reading. */}
+            <div className="mt-1.5">
+              {/* Falls back to the stored value, so the line does not vanish on reload
+                  — the same story showing "a low 8" and then nothing was the reason
+                  this looked inconsistent between one story and the next. */}
+              <SnapLabel
+                raw={prediction?.rawValue ?? story.aiEstimate?.rawPoints}
+                snapped={suggested}
+              />
+            </div>
+
+            <div className="mt-2">
+              <ConfidenceBar
+                confidence={prediction?.confidence ?? story.aiEstimate?.confidence}
+              />
+            </div>
           </div>
         </div>
-      ) : null}
+
+      {/* The team's own number, always — not only when it differs.
+          Showing this block solely on disagreement made agreement invisible: the card
+          said "8" and never said what you had, so a reader could not tell whether the
+          model had confirmed their estimate or never seen one. Agreement is a result,
+          and a result the model reached independently is worth stating out loud. */}
+      <div className="mt-3 flex items-center gap-2 rounded-md bg-surface-2 px-2.5 py-2 text-xs">
+        {human == null ? (
+          <span className="text-ink-2">
+            Your team has not sized this story yet.
+          </span>
+        ) : disagrees ? (
+          <>
+            <span className="tabular-nums font-semibold text-ink">{human}</span>
+            <span className="text-ink-2">yours</span>
+            <ArrowRight className="size-3 shrink-0 text-ink-3" aria-hidden />
+            <span className="tabular-nums font-semibold text-ink">{suggested}</span>
+            <span className="text-ink-2">the model&rsquo;s</span>
+            <span className="ml-auto shrink-0 rounded bg-amber-soft px-1.5 py-0.5 text-2xs font-medium text-amber">
+              {Math.abs(human - (suggested ?? 0))} apart
+            </span>
+          </>
+        ) : (
+          <>
+            <Check className="size-3.5 shrink-0 text-green" aria-hidden />
+            <span className="text-ink-2">
+              Matches your estimate of{" "}
+              <span className="tabular-nums font-semibold text-ink">{human}</span>
+            </span>
+          </>
+        )}
+      </div>
 
       {prediction?.explanation ? (
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          {prediction.explanation}
-        </p>
+        <p className="mt-3 text-xs leading-relaxed text-ink-2">{prediction.explanation}</p>
       ) : null}
 
       {prediction ? (
@@ -219,6 +265,12 @@ export function EstimatePanel({
           </div>
           <div className="mt-2">
             <DegradedNotice prediction={prediction} />
+          </div>
+          {/* Provenance sits at the foot rather than the header: it is what you check
+              after reading the estimate, not before, and down here it has the width to
+              say so without truncating. */}
+          <div className="mt-2 border-t border-line pt-2">
+            <PredictionMeta prediction={prediction} />
           </div>
         </>
       ) : null}
@@ -334,6 +386,7 @@ export function EstimatePanel({
           This suggestion was recorded earlier. Re-run it to accept or override.
         </p>
       )}
+      </div>
     </section>
   );
 }

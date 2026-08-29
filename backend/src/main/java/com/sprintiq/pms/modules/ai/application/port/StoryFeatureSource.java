@@ -169,8 +169,14 @@ public interface StoryFeatureSource {
      * because a planning session where numbers change by themselves is one nobody
      * trusts twice.</p>
      */
+    /**
+     * @param rawPoints the model's number before Fibonacci snapping, or null when the
+     *                  model does not snap. Stored so a suggestion reads the same after
+     *                  a reload as it did when it was made.
+     */
     void recordSuggestion(UUID storyId, UUID predictionId, BigDecimal points,
-                          BigDecimal confidence, BigDecimal lowerBound, BigDecimal upperBound);
+                          BigDecimal confidence, BigDecimal lowerBound, BigDecimal upperBound,
+                          BigDecimal rawPoints);
 
     /** Applies an accepted or overridden estimate as the story's real one. */
     void applyEstimate(UUID storyId, BigDecimal points, boolean fromModel);
