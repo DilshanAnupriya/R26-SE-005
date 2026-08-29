@@ -577,7 +577,7 @@ function SprintDetail({
                     spilloverStrategy: strategy,
                     retrospectiveSummary: summary || null,
                   },
-                  { onSuccess: () => setClosing(false) },
+                  { onSettled: () => setClosing(false) },
                 )
               }
             >
