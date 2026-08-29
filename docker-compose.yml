@@ -29,7 +29,12 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     container_name: sprintiq-mailpit
-    ports: ["1025:1025", "8025:8025"]   # SMTP, web UI
+    # Host ports shifted by one, exactly as postgres publishes 5433 rather than 5432:
+    # another project on this machine already owns 1025/8025, and a fixture that will
+    # not start because of an unrelated container is a fixture people stop running.
+    # Inside the compose network the backend still reaches mailpit:1025, so only the
+    # host mapping moves.
+    ports: ["1026:1025", "8026:8025"]   # SMTP, web UI
 
   backend:
     build: ./backend

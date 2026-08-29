@@ -124,6 +124,22 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
     BigDecimal sumCompletedPoints(@Param("projectId") UUID projectId);
 
     /**
+     * Total and completed points for many projects in one query.
+     *
+     * <p>The projects list needs this for every card it draws. Calling the two
+     * single-project sums per card would put forty queries behind one page.</p>
+     */
+    @Query("""
+            SELECT s.projectId,
+                   COALESCE(SUM(s.storyPoints), 0),
+                   COALESCE(SUM(CASE WHEN s.status = 'DONE' THEN s.storyPoints ELSE 0 END), 0)
+            FROM Story s
+            WHERE s.projectId IN :projectIds AND s.deletedAt IS NULL
+            GROUP BY s.projectId
+            """)
+    List<Object[]> sumPointsByProject(@Param("projectIds") Collection<UUID> projectIds);
+
+    /**
      * Story counts and points per epic, for a batch of epics in one query.
      *
      * <p>Grouped rather than fetched-and-counted because the caller is the roadmap,

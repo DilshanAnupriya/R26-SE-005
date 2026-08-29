@@ -102,9 +102,16 @@ export const projectOverviewSchema = z.object({
   openTaskCount: z.number().int(),
   blockedCount: z.number().int(),
   epicCount: z.number().int(),
-  totalPoints: z.coerce.number(),
-  completedPoints: z.coerce.number(),
-  completionPct: z.coerce.number(),
+  requirementCount: z.number().int().default(0),
+  milestoneCount: z.number().int().default(0),
+  completedMilestoneCount: z.number().int().default(0),
+  // Named to match the API. These were `totalPoints` / `completedPoints`, plus a
+  // `completionPct` the server has never sent — and because Zod treats a missing
+  // required key as a parse failure, the mismatch did not blank three numbers, it
+  // rejected the whole payload. Every metric on the project page rendered "—" while
+  // the endpoint was returning correct data all along.
+  totalStoryPoints: z.coerce.number(),
+  completedStoryPoints: z.coerce.number(),
   activeSprintId: z.uuid().nullish(),
   activeSprintName: z.string().nullish(),
 });
@@ -150,6 +157,8 @@ export const aiEstimateSchema = z.object({
   confidence: z.coerce.number().nullish(),
   lowerBound: z.coerce.number().nullish(),
   upperBound: z.coerce.number().nullish(),
+  /** Pre-snap model output, so a stored suggestion reads the same after a reload. */
+  rawPoints: z.coerce.number().nullish(),
   predictionId: z.uuid().nullish(),
 });
 export type AiEstimate = z.infer<typeof aiEstimateSchema>;
