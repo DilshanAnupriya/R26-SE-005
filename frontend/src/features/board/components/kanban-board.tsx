@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AlertTriangle, Check, GripVertical, RotateCcw, UserPlus, UserX } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -108,11 +108,20 @@ export function KanbanBoard({
             onDragOver={(event) => {
               if (disabled) return;
               event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
               setDragOverColumn(column.state.id);
             }}
-            onDragLeave={() => setDragOverColumn(null)}
+            onDragLeave={(event) => {
+              const currentTarget = event.currentTarget;
+              const relatedTarget = event.relatedTarget as Node | null;
+              if (relatedTarget && currentTarget.contains(relatedTarget)) {
+                return;
+              }
+              setDragOverColumn(null);
+            }}
             onDrop={(event) => {
               event.preventDefault();
+              event.stopPropagation();
               setDragOverColumn(null);
               const taskId = event.dataTransfer.getData("text/plain");
               if (taskId) {
@@ -212,22 +221,25 @@ function TaskCard({
 }) {
   const draggable = !disabled && Boolean(onPickUp);
   const finished = task.status === "DONE" || task.status === "CANCELLED";
-  // Stories are rendered through the task shape on this board and have no /tasks/{id} of
-  // their own, so every control here that calls one is hidden for them — a Reopen button
-  // or a detail dialog on a story row would 404.
   const isTask = isBoardTask(task);
   const openable = Boolean(onOpenTask);
+  const isDraggingRef = useRef(false);
+  const dragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (dragTimeoutRef.current) {
+        clearTimeout(dragTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /**
    * Opens the detail dialog from a click anywhere on the card that was not aimed at one
-   * of the controls living on it.
-   *
-   * <p>The guard is a `closest` rather than a `stopPropagation` on each control, because
-   * the assignee menu's items are portalled and the drag handle is focus-visible only:
-   * one rule here is checkable, whereas six scattered ones are how the "assign" click
-   * quietly starts costing the sprint a reopen too.</p>
+   * of the controls living on it, and was not part of a drag action.
    */
   function handleCardClick(event: React.MouseEvent<HTMLElement>) {
+    if (isDraggingRef.current) return;
     if (!openable) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest("button, a, input, select, textarea, [role='menuitem']")) {
@@ -240,8 +252,15 @@ function TaskCard({
     <article
       draggable={draggable}
       onDragStart={(event) => {
+        isDraggingRef.current = true;
         event.dataTransfer.setData("text/plain", task.id);
         event.dataTransfer.effectAllowed = "move";
+      }}
+      onDragEnd={() => {
+        if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+        dragTimeoutRef.current = setTimeout(() => {
+          isDraggingRef.current = false;
+        }, 150);
       }}
       onClick={handleCardClick}
       className={cn(

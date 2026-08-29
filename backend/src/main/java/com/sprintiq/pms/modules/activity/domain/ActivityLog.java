@@ -47,7 +47,7 @@ public class ActivityLog {
     private UUID entityId;
 
     /** Human-readable key ({@code PROJ-142}) denormalised so the feed reads without joins. */
-    @Column(name = "entity_key", length = 24)
+    @Column(name = "entity_key", length = 120)
     private String entityKey;
 
     @Column(name = "actor_id")

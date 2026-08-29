@@ -100,7 +100,7 @@ public class ActivityService {
                 .projectId(target.projectId())
                 .entityType(target.type().name())
                 .entityId(target.id())
-                .entityKey(target.key())
+                .entityKey(truncateKey(target.key()))
                 .actorId(TenantContext.userId().orElse(null))
                 .action(action)
                 .fieldName(field)
@@ -135,6 +135,11 @@ public class ActivityService {
     private static String text(Object value) {
         if (value == null) return null;
         return value instanceof Enum<?> enumValue ? enumValue.name() : String.valueOf(value);
+    }
+
+    private static String truncateKey(String key) {
+        if (key == null) return null;
+        return key.length() > 120 ? key.substring(0, 117) + "..." : key;
     }
 
     private static String truncate(String summary) {

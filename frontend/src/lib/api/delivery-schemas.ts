@@ -312,36 +312,36 @@ export const taskSchema = z.object({
   itemKey: z.string(),
   title: z.string(),
   description: z.string().nullish(),
-  type: z.string(),
+  type: z.string().nullish().transform((v) => v ?? "TASK"),
   status: taskStatusSchema,
-  priority: prioritySchema,
+  priority: prioritySchema.nullish().transform((v) => v ?? "MEDIUM"),
   assigneeId: z.uuid().nullish(),
   assigneeName: z.string().nullish(),
   assigneeAvatarUrl: z.string().nullish(),
-  estimateMinutes: z.number().int().nullish(),
-  spentMinutes: z.number().int().nullish(),
-  remainingMinutes: z.number().int().nullish(),
-  requiredSkills: z.array(z.string()).default([]),
+  estimateMinutes: z.coerce.number().int().nullish(),
+  spentMinutes: z.coerce.number().int().nullish().transform((v) => v ?? 0),
+  remainingMinutes: z.coerce.number().int().nullish(),
+  requiredSkills: z.array(z.string()).nullish().transform((v) => v ?? []),
   dueDate: z.string().nullish(),
-  blocked: z.boolean(),
+  blocked: z.boolean().nullish().transform(Boolean),
   blockedReason: z.string().nullish(),
   rank: z.string().nullish(),
-  reopenedCount: z.number().int().default(0),
+  reopenedCount: z.coerce.number().int().nullish().transform((v) => v ?? 0),
   /**
    * Work-clock state. Sent raw rather than as one "seconds so far" figure, because a
    * running clock has no correct stored value — whatever the server computed is stale
    * by the time it renders. The banked total plus the start of the current run is
    * enough for the client to tick it itself; see `lib/task-clock.ts`.
    */
-  elapsedSeconds: z.coerce.number().default(0),
+  elapsedSeconds: z.coerce.number().nullish().transform((v) => v ?? 0),
   /** Null while the clock is paused, which is exactly when the task is finished. */
   runningSince: z.string().nullish(),
   startedAt: z.string().nullish(),
   completedAt: z.string().nullish(),
-  createdAt: z.string(),
+  createdAt: z.string().nullish(),
   /** Top-level comments, and replies to them, counted separately. */
-  commentCount: z.coerce.number().default(0),
-  replyCount: z.coerce.number().default(0),
+  commentCount: z.coerce.number().nullish().transform((v) => v ?? 0),
+  replyCount: z.coerce.number().nullish().transform((v) => v ?? 0),
   /**
    * When the longest-waiting unanswered comment was posted, or null when every comment
    * has a reply from somebody other than its author.
