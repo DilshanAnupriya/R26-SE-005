@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -141,12 +142,30 @@ public class EstimationService {
         if (prediction.isUsable() && prediction.getPredictedValue() != null) {
             stories.recordSuggestion(features.storyId(), prediction.getId(),
                     prediction.getPredictedValue(), prediction.getConfidence(),
-                    prediction.getLowerBound(), prediction.getUpperBound());
+                    prediction.getLowerBound(), prediction.getUpperBound(),
+                    rawPointOf(prediction));
         }
 
         return new StoryPointEstimateResponse(features.storyId(), features.itemKey(), features.title(),
                 features.currentPoints(), prediction.getPredictedValue(),
                 PredictionEnvelope.from(prediction));
+    }
+
+    /**
+     * The model's pre-snap number, dug out of the response it already stored.
+     *
+     * <p>Read from the raw response rather than added to {@code AiPrediction}: it is
+     * meaningful for one model, and a column on the shared prediction table that only
+     * M1 ever fills would invite every future model to add its own.</p>
+     */
+    private BigDecimal rawPointOf(AiPrediction prediction) {
+        Map<String, Object> response = prediction.getRawResponse();
+        if (response == null || !(response.get("raw") instanceof Map<?, ?> raw)) {
+            return null;
+        }
+        return raw.get("point") instanceof Number point
+                ? BigDecimal.valueOf(point.doubleValue())
+                : null;
     }
 
     // ------------------------------------------------------------------ velocity

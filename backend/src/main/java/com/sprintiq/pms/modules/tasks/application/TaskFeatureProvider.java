@@ -291,4 +291,17 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
                 .sum();
         return new StoryTaskEffort(tasks.size(), estimatedCount, minutes);
     }
+
+    @Override
+    @Transactional
+    public void moveStoryTasksToSprint(UUID storyId, UUID sprintId) {
+        List<Task> tasks = taskRepository.findByStoryIdAndDeletedAtIsNullOrderByRankAsc(storyId);
+        List<Task> moved = tasks.stream()
+                .filter(task -> !java.util.Objects.equals(task.getSprintId(), sprintId))
+                .peek(task -> task.setSprintId(sprintId))
+                .toList();
+        if (!moved.isEmpty()) {
+            taskRepository.saveAll(moved);
+        }
+    }
 }

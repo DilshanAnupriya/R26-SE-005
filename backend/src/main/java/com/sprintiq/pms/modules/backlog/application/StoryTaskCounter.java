@@ -32,4 +32,19 @@ public interface StoryTaskCounter {
     }
 
     StoryTaskEffort effortForStory(UUID storyId);
+
+    /**
+     * Moves a story's tasks with it when the story is committed to a sprint, or back
+     * to the backlog when it is pulled out.
+     *
+     * <p>A task's sprint is not decoration. Everything that reads a sprint's work reads
+     * it — the cost model prices planned effort by summing task estimates for the
+     * sprint, the board draws from it, the watch sweeps it. A story that moved into a
+     * sprint while its tasks stayed behind is a sprint that looks committed and
+     * forecasts at zero dollars, with nothing on screen to say why.</p>
+     *
+     * @param sprintId the sprint the story now belongs to, or null when it has returned
+     *                 to the backlog
+     */
+    void moveStoryTasksToSprint(UUID storyId, UUID sprintId);
 }

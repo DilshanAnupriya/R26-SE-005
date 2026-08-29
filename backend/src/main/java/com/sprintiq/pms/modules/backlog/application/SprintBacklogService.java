@@ -33,6 +33,8 @@ public class SprintBacklogService {
     private final StoryRepository storyRepository;
     private final StoryService storyService;
     private final ActivityService activityService;
+    /** Carries a story's tasks with it — see {@code moveStoryTasksToSprint}. */
+    private final StoryTaskCounter storyTasks;
 
     /** Points summary a sprint needs, without exposing the stories themselves. */
     public record SprintPoints(BigDecimal committed, BigDecimal completed, long storyCount,
@@ -119,6 +121,9 @@ public class SprintBacklogService {
             }
             UUID previous = story.getSprintId();
             story.setSprintId(sprintId);
+            // The tasks go too. A story committed to a sprint while its breakdown stays
+            // in the backlog is the sprint the cost model prices at zero.
+            storyTasks.moveStoryTasksToSprint(story.getId(), sprintId);
             activityService.recordChange(target(story), ActivityAction.MOVED_TO_SPRINT, "sprintId",
                     previous, sprintId, "%s committed to a sprint".formatted(story.getItemKey()));
         }
@@ -144,6 +149,7 @@ public class SprintBacklogService {
                             .formatted(story.getItemKey()));
         }
         story.setSprintId(null);
+        storyTasks.moveStoryTasksToSprint(storyId, null);
         storyRepository.save(story);
         activityService.recordChange(target(story), ActivityAction.REMOVED_FROM_SPRINT, "sprintId",
                 sprintId, null, "%s returned to the backlog".formatted(story.getItemKey()));
