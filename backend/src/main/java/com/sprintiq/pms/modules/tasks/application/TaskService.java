@@ -101,6 +101,18 @@ public class TaskService {
             // A subtask always shares its parent's story and sprint; letting them diverge
             // would put a subtask in a sprint its parent is not in.
             sprintId = parent.getSprintId();
+        } else if (sprintId == null && request.storyId() != null) {
+            // The same rule one level up. A task broken out of a story that is already
+            // committed to a sprint belongs to that sprint, and nothing in the UI asks
+            // the person creating it to say so again.
+            //
+            // Left unset, the task is invisible to everything that reads a sprint's
+            // work: the cost model prices planned effort by summing task estimates for
+            // the sprint, so a sprint whose tasks were all created from the story view
+            // forecasts at zero — a confident, precise, entirely wrong number.
+            sprintId = storyRepository.findByIdAndDeletedAtIsNull(request.storyId())
+                    .map(story -> story.getSprintId())
+                    .orElse(null);
         }
         if (request.assigneeId() != null) {
             userService.requireActiveMember(request.assigneeId());

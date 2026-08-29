@@ -18,6 +18,7 @@ import com.sprintiq.pms.modules.users.application.UserSummary;
 import com.sprintiq.pms.tenancy.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,20 +62,31 @@ public class ProjectService {
      * projects-only deployment, which is why the overview tolerates an empty list.
      */
     private final List<ProjectStatisticsContributor> statisticsContributors;
+    /**
+     * Delivered-vs-committed points, in one query per page.
+     *
+     * <p>Optional so a projects-only deployment still starts: with no backlog module on
+     * the classpath there are no story points to report, and a card that says nothing is
+     * correct where a card that says 0% is a lie.</p>
+     */
+    private final Optional<ProjectProgressSource> progressSource;
 
     // ------------------------------------------------------------------ queries
 
     @Transactional(readOnly = true)
     public PageResponse<ProjectResponse> search(UUID workspaceId, ProjectStatus status, ProjectHealth health,
                                                 UUID leadId, PageQuery query) {
-        return PageResponse.from(projectRepository.search(workspaceId, status, health, leadId,
-                        query.searchTerm(), query.toPageable(SORT_FIELDS, Sort.by(Sort.Direction.DESC, "updatedAt"))),
-                this::toResponse);
+        Page<Project> page = projectRepository.search(workspaceId, status, health, leadId,
+                query.searchTerm(), query.toPageable(SORT_FIELDS, Sort.by(Sort.Direction.DESC, "updatedAt")));
+        // One query for the whole page rather than two per card.
+        Map<UUID, ProjectProgressSource.Progress> progress = progressFor(
+                page.getContent().stream().map(Project::getId).toList());
+        return PageResponse.from(page, project -> toResponse(project, progress.get(project.getId())));
     }
 
     @Transactional(readOnly = true)
     public ProjectResponse get(UUID projectId) {
-        return toResponse(require(projectId));
+        return toResponse(require(projectId), progressFor(List.of(projectId)).get(projectId));
     }
 
     /**
@@ -489,10 +501,27 @@ public class ProjectService {
         return value == null ? null : value.trim();
     }
 
+    private Map<UUID, ProjectProgressSource.Progress> progressFor(Collection<UUID> projectIds) {
+        return progressSource
+                .map(source -> source.progressFor(projectIds))
+                .orElseGet(Map::of);
+    }
+
     private ProjectResponse toResponse(Project project) {
+        return toResponse(project, null);
+    }
+
+    /**
+     * @param progress measured delivery, or null when it was not looked up. The stored
+     *                 {@code progressPct} column is the fallback and is always zero —
+     *                 nothing has ever written it — so a null here shows as 0%, which is
+     *                 exactly what every project card used to display.
+     */
+    private ProjectResponse toResponse(Project project, ProjectProgressSource.Progress progress) {
         return new ProjectResponse(project.getId(), project.getWorkspaceId(), project.getProjectKey(),
                 project.getName(), project.getDescription(), project.getStatus(), project.getHealth(),
-                project.getProgressPct(), project.getStartDate(), project.getTargetDate(),
+                progress == null ? project.getProgressPct() : progress.pct(),
+                project.getStartDate(), project.getTargetDate(),
                 project.getBudgetAmount(), project.getCurrency(), project.getLeadUserId(), project.getTeamId(),
                 project.getDomain(), project.getTechStack(), project.getDefaultSprintDays(),
                 project.getDefinitionOfReady(), project.getDefinitionOfDone(),

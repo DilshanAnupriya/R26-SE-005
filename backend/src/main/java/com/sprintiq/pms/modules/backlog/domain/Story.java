@@ -91,6 +91,16 @@ public class Story extends TenantAwareEntity implements SoftDeletable {
     @Column(name = "ai_story_points", precision = 5, scale = 2)
     private BigDecimal aiStoryPoints;
 
+    /**
+     * The model's number before it was snapped to the Fibonacci scale.
+     *
+     * <p>Kept so a stored suggestion reads the same after a reload as it did the moment
+     * it was made. Null for models that do not snap, and for every suggestion recorded
+     * before the column existed.</p>
+     */
+    @Column(name = "ai_raw_points", precision = 6, scale = 2)
+    private BigDecimal aiRawPoints;
+
     @Column(name = "ai_confidence", precision = 4, scale = 3)
     private BigDecimal aiConfidence;
 
