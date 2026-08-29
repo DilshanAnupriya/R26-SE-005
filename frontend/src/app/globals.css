@@ -435,6 +435,44 @@
 }
 
 /*
+ * The one card on a risk board that is allowed to move: a sprint still banded MEDIUM
+ * whose figure has climbed to within three points of HIGH.
+ *
+ * Reserved for that single state on purpose. Motion is the loudest thing a dashboard
+ * can do, and spending it on "already high" — a fact that has finished happening and
+ * that nobody can act on faster by being blinked at — would leave nothing louder for
+ * the sprint that is still about to tip over.
+ *
+ * The alarm rides on the ring and the glow rather than on opacity: fading the card
+ * itself would take its own numbers in and out of legibility, which is the opposite of
+ * what an alarm is for.
+ */
+@keyframes riskBlink {
+  from {
+    box-shadow:
+      0 0 0 0 transparent,
+      var(--shadow-card, 0 1px 2px rgb(0 0 0 / 0.06));
+    border-color: color-mix(in oklab, var(--risk-high) 45%, var(--line));
+  }
+  to {
+    box-shadow:
+      0 0 0 4px color-mix(in oklab, var(--risk-high) 22%, transparent),
+      0 6px 20px -6px color-mix(in oklab, var(--risk-high) 55%, transparent);
+    border-color: var(--risk-high);
+  }
+}
+
+/*
+ * `alternate` so it breathes rather than snapping back, and the strong end is the
+ * `to` keyframe deliberately: the global reduced-motion rule collapses every animation
+ * to one 0.01ms iteration, which lands `both`-filled on the last keyframe. A reader who
+ * has asked for less motion still gets the fully alarmed card, just without the pulse.
+ */
+@utility animate-risk-blink {
+  animation: riskBlink 1.25s ease-in-out infinite alternate both;
+}
+
+/*
  * Reduced motion keeps the fade and drops the movement. "Reduced" is not "none":
  * an element that simply appears with no transition at all is the jarring change
  * the animation existed to prevent.

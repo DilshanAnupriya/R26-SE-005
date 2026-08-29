@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSession } from "@/components/session-provider";
 import { ApiError } from "@/lib/api/errors";
@@ -108,6 +108,30 @@ export function useSprintRisk(sprintId: string | undefined) {
     // Reads the stored assessment. Producing a fresh one is an explicit action.
     queryFn: () => aiApi.latestRisk(api, sprintId!),
     enabled: status === "authenticated" && Boolean(sprintId),
+  });
+}
+
+/**
+ * The stored risk for several sprints at once, for a board of sprint cards.
+ *
+ * <p>`useQueries` rather than a loop of `useSprintRisk`, because a project's sprint
+ * count is not known until its list resolves and a variable number of hook calls is not
+ * something React permits — the same reason `useRequirementChangesFor` is shaped this
+ * way.</p>
+ *
+ * <p>Not the `/ai/risk/compare` endpoint, which looks like the obvious fit and is not:
+ * it throws below two sprints and above five, so a one-sprint project would error and a
+ * six-sprint one could not be shown at all. These share `queryKeys.ai.risk`, so a card
+ * and the sprint page behind it read the same cache entry rather than each fetching.</p>
+ */
+export function useSprintRisks(sprintIds: string[]) {
+  const { api, status } = useSession();
+  return useQueries({
+    queries: sprintIds.map((sprintId) => ({
+      queryKey: queryKeys.ai.risk(sprintId),
+      queryFn: () => aiApi.latestRisk(api, sprintId),
+      enabled: status === "authenticated",
+    })),
   });
 }
 
