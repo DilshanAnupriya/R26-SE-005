@@ -1,47 +1,39 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 /**
  * The SprintIQ mark.
  *
- * <p>Drawn as SVG rather than shipped as a raster: it appears at 22px in the top bar
- * and 30px in the sidebar, stays sharp at any density, and picks up the theme through
- * currentColor instead of needing a second file for dark mode.</p>
- *
- * <p>The glyph is a sprint burndown — a descending stroke over a rising bar — which
- * is what the product is actually about, rather than an abstract shape that could
- * belong to anything.</p>
+ * <p>The supplied public logo contains both the large mark and wordmark. At navigation
+ * sizes the wordmark is too small to read, so this component crops the source to its
+ * mark and lets {@link BrandLockup} render accessible, theme-aware product text.</p>
  */
 export function BrandMark({ size = 26, className }: { size?: number; className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex flex-none items-center justify-center rounded-[8px] text-white shadow-card",
+        "relative inline-flex flex-none overflow-hidden rounded-[8px] bg-[#07070c] shadow-card",
         className,
       )}
       style={{
         width: size,
         height: size,
-        background: "linear-gradient(135deg, var(--accent), var(--violet))",
       }}
       aria-hidden
     >
-      <svg
-        width={size * 0.62}
-        height={size * 0.62}
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.9}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {/* Burning down, left to right. */}
-        <path d="M2 3.5 L14 12.5" opacity={0.55} />
-        {/* Delivered work, rising. */}
-        <path d="M3.2 12.8 L3.2 10.4" />
-        <path d="M7 12.8 L7 8" />
-        <path d="M10.8 12.8 L10.8 5.6" />
-      </svg>
+      <Image
+        src="/SprintIQLOGO.png"
+        alt=""
+        width={1536}
+        height={1024}
+        className="pointer-events-none absolute top-0 h-auto max-w-none"
+        style={{
+          left: "52%",
+          width: size * 2,
+          transform: "translateX(-52%)",
+        }}
+        sizes={`${size}px`}
+      />
     </span>
   );
 }
