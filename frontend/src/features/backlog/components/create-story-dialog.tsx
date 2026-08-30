@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AcceptanceCriteriaList, parseCriteria } from "./acceptance-criteria-list";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -73,10 +74,7 @@ export function CreateStoryDialog({
     }
   }, [defaultSprintId, open]);
 
-  const criteriaCount = criteria
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean).length;
+  const criteriaCount = parseCriteria(criteria).length;
 
   const valid = title.trim() !== "";
 
@@ -267,20 +265,33 @@ export function CreateStoryDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="story-criteria">Acceptance criteria</Label>
-            <Textarea
-              id="story-criteria"
+            <Label>Acceptance criteria</Label>
+            {/*
+              A list rather than a textarea, because the count is load-bearing: the
+              estimator sums these and the requirement-change model reads how many there
+              are. A stray blank line in free text quietly changed both.
+            */}
+            <AcceptanceCriteriaList
               value={criteria}
-              onChange={(event) => setCriteria(event.target.value)}
-              rows={3}
-              placeholder={"Given a customer in the EU\nWhen an invoice is generated\nThen VAT is applied"}
-              className="font-mono text-sm"
+              onChange={setCriteria}
+              idPrefix="story-criteria"
             />
             <p className="flex items-center gap-1.5 text-2xs text-muted-foreground">
               <Sparkles className="size-3 flex-none text-primary" aria-hidden />
               {criteriaCount > 0
-                ? `${criteriaCount} line${criteriaCount === 1 ? "" : "s"} — the estimator counts these, so more detail here sharpens its range.`
-                : "One per line. The estimator uses these as its size signal."}
+                ? `${criteriaCount} criteri${criteriaCount === 1 ? "on" : "a"} — the estimator counts these, so more detail here sharpens its range.`
+                : "The estimator uses these as its size signal."}
+            </p>
+            {/*
+              Said here rather than discovered later. There is no story-edit form in the
+              product: once this is created, criteria move only through "Log a change",
+              which is what keeps the register describing the backlog it is supposed to
+              describe.
+            */}
+            <p className="text-2xs leading-relaxed text-ink-3">
+              Once the item is created these are locked. Changing them afterwards goes
+              through <span className="font-medium text-ink-2">Log a change</span>, so the
+              sprint&rsquo;s requirement-change risk hears about it.
             </p>
           </div>
 

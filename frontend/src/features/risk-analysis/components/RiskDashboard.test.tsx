@@ -66,6 +66,7 @@ vi.mock("../hooks", () => ({
   useAssessSprintRisk: () => ({ mutate: vi.fn(), isPending: false }),
   useRiskSteps: () => ({ data: undefined }),
   useToggleRiskStep: () => ({ mutate: vi.fn(), isPending: false, variables: undefined }),
+  useAbsorbRiskChange: () => ({ mutate: vi.fn(), isPending: false, variables: undefined }),
 }));
 
 // The four tab bodies are not what is under test here, and each one drags in charts and

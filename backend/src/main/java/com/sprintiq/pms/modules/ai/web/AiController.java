@@ -44,6 +44,7 @@ public class AiController {
     private final AiFeedbackService feedback;
     private final AiInsightsService insights;
     private final SprintRiskTrendService riskTrend;
+    private final SprintRiskAbsorptionService absorption;
     private final RiskRemediationService remediation;
     private final RiskAdvisorService advisor;
     private final CostRiskCrossCheckService crossCheck;
@@ -172,6 +173,21 @@ public class AiController {
     public List<RiskRemediationStepResponse> toggleRiskStep(
             @PathVariable UUID sprintId, @Valid @RequestBody ToggleRiskStepRequest request) {
         return remediation.toggle(sprintId, request.riskType(), request.stepKey(), request.done());
+    }
+
+    @Operation(summary = "Record that a sprint has been re-planned around a logged change",
+            description = "A logged requirement change stands: no feature vector carries "
+                    + "one, so no re-assessment can absorb it. This is how a team answers "
+                    + "it — a standing credit worth five-eighths of the charge, on the same "
+                    + "audit trail, reversible by sending absorbed=false. Never the whole "
+                    + "charge: the requirement still moved, which is the thing the model is "
+                    + "predicting.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @PostMapping("/risk/sprint/{sprintId}/adjustments/{adjustmentId}/absorb")
+    public List<RiskAdjustmentResponse> absorbRiskChange(
+            @PathVariable UUID sprintId, @PathVariable UUID adjustmentId,
+            @Valid @RequestBody AbsorbRiskChangeRequest request) {
+        return absorption.absorb(sprintId, adjustmentId, request.absorbed());
     }
 
     @Operation(summary = "Narrative advice over a sprint's risk",
