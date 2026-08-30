@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 
@@ -103,9 +104,23 @@ public class GlobalExceptionHandler {
         return build(ErrorCode.PAYLOAD_TOO_LARGE, "File exceeds the maximum allowed size", request);
     }
 
-    @ExceptionHandler({NoHandlerFoundException.class, HttpRequestMethodNotSupportedException.class})
+    /**
+     * A path nothing is mapped to.
+     *
+     * <p>{@link NoResourceFoundException} is the one Spring actually throws for an
+     * unmapped path; {@link NoHandlerFoundException} only appears when the dispatcher is
+     * configured to raise it. Without the former listed here an unknown URL fell to the
+     * catch-all below and came back as <em>"An unexpected error occurred"</em> with a
+     * correlation id — a 500 that reads like a crash for what is a typo, and which sends
+     * whoever is debugging it hunting through logs for an exception that says only that
+     * the route does not exist. It also hides the most ordinary cause of all: a running
+     * server that predates the endpoint being called.</p>
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class,
+            HttpRequestMethodNotSupportedException.class})
     public ResponseEntity<ApiError> handleNoHandler(Exception ex, HttpServletRequest request) {
-        return build(ErrorCode.NOT_FOUND, "No handler for " + request.getRequestURI(), request);
+        return build(ErrorCode.NOT_FOUND,
+                "No handler for " + request.getMethod() + " " + request.getRequestURI(), request);
     }
 
     @ExceptionHandler(Exception.class)
