@@ -13,6 +13,8 @@ import com.sprintiq.pms.modules.activity.domain.ActivityAction;
 import com.sprintiq.pms.modules.activity.domain.ActivityLog;
 import com.sprintiq.pms.modules.backlog.domain.*;
 import com.sprintiq.pms.modules.backlog.web.dto.BacklogDtos.*;
+import com.sprintiq.pms.modules.notifications.application.NotificationService;
+import com.sprintiq.pms.modules.notifications.domain.NotificationType;
 import com.sprintiq.pms.modules.projects.application.*;
 import com.sprintiq.pms.modules.projects.web.dto.ProjectDtos.LabelResponse;
 import com.sprintiq.pms.modules.users.application.UserService;
@@ -53,6 +55,7 @@ public class StoryService {
     private final UserService userService;
     private final ActivityService activityService;
     private final StoryTaskCounter taskCounter;
+    private final NotificationService notifications;
 
     // ------------------------------------------------------------------ queries
 
@@ -159,6 +162,14 @@ public class StoryService {
             labelService.apply(EntityType.STORY, story.getId(), request.labelIds());
         }
         activityService.recordCreated(target(story), "%s created".formatted(story.getItemKey()));
+
+        if (request.assigneeId() != null) {
+            notifications.notify(new NotificationService.Notify(request.assigneeId(),
+                    NotificationType.ASSIGNED, "%s was assigned to you".formatted(story.getItemKey()),
+                    story.getTitle(), EntityType.STORY, story.getId(),
+                    "/projects/%s/stories/%s".formatted(story.getProjectId(), story.getId())));
+        }
+
         return toResponse(story);
     }
 
@@ -263,6 +274,20 @@ public class StoryService {
                 request.assigneeId() == null
                         ? "%s unassigned".formatted(story.getItemKey())
                         : "%s assigned".formatted(story.getItemKey()));
+
+        if (request.assigneeId() != null) {
+            notifications.notify(new NotificationService.Notify(request.assigneeId(),
+                    NotificationType.ASSIGNED, "%s was assigned to you".formatted(story.getItemKey()),
+                    story.getTitle(), EntityType.STORY, story.getId(),
+                    "/projects/%s/stories/%s".formatted(story.getProjectId(), story.getId())));
+        }
+        if (previous != null && !previous.equals(request.assigneeId())) {
+            notifications.notify(new NotificationService.Notify(previous,
+                    NotificationType.UNASSIGNED, "%s is no longer yours".formatted(story.getItemKey()),
+                    story.getTitle(), EntityType.STORY, story.getId(),
+                    "/projects/%s/stories/%s".formatted(story.getProjectId(), story.getId())));
+        }
+
         return toResponse(story);
     }
 

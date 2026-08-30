@@ -17,6 +17,7 @@ node_modules/
 .env
 .env.local
 *.local
+*.png
 
 # IDE
 .idea/workspace.xml

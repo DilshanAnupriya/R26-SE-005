@@ -272,7 +272,7 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-950 border-slate-800 p-0 shadow-2xl">
+      <DialogContent className="w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-950 border-slate-800 p-0 shadow-2xl">
         {/* Header with Avatar & Role */}
         <DialogHeader className="p-6 pb-4 border-b border-slate-800/80 bg-slate-900/50">
           <div className="flex items-center justify-between">
@@ -314,16 +314,22 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
         ) : (
           <form onSubmit={handleSave} className="p-6 space-y-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="w-full grid grid-cols-2 bg-slate-900/80 border border-slate-800 mb-6">
-                <TabsTrigger value="account" className="text-xs gap-1.5 py-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-white">
-                  <User className="w-3.5 h-3.5" />
-                  Account & Organization
+              <TabsList className="w-full grid grid-cols-2 h-10 p-1 bg-slate-900/80 border border-slate-800 rounded-lg mb-6">
+                <TabsTrigger
+                  value="account"
+                  className="text-xs font-medium gap-2 py-2 px-3 rounded-md transition-all data-[state=active]:bg-primary/20 data-[state=active]:text-white text-slate-400 hover:text-slate-200"
+                >
+                  <User className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Account & Organization</span>
                 </TabsTrigger>
-                <TabsTrigger value="developer" className="text-xs gap-1.5 py-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-white">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  Developer & AI Skills
+                <TabsTrigger
+                  value="developer"
+                  className="text-xs font-medium gap-2 py-2 px-3 rounded-md transition-all data-[state=active]:bg-primary/20 data-[state=active]:text-white text-slate-400 hover:text-slate-200"
+                >
+                  <Sparkles className="w-3.5 h-3.5 shrink-0 text-primary" />
+                  <span className="truncate">Developer & AI Skills</span>
                   {isDeveloperEnabled && (
-                    <span className="ml-1 text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded-full font-mono">
+                    <span className="ml-1 text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded-full font-mono shrink-0">
                       Active
                     </span>
                   )}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { BrandMark } from "@/components/design/brand";
 import { SiteNav } from "@/components/marketing/site-nav";
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
@@ -21,9 +21,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
             <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-              <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <Sparkles className="size-3.5" />
-              </span>
+              <BrandMark size={24} />
               SprintIQ
             </Link>
             <p className="text-xs text-muted-foreground">
