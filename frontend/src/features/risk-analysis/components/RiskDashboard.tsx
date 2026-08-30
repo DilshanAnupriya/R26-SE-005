@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -37,11 +38,19 @@ import { SprintRiskOverview } from "./sprint-risk-overview";
  * awkward.</p>
  */
 export default function RiskDashboard() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const projects = useProjects();
   const projectList = workableProjects(projects.data?.content ?? []);
 
-  const [projectId, setProjectId] = useState<string>("");
-  const [sprintId, setSprintId] = useState<string>("");
+  // Seeded from the query, which is how the sprint risk board hands this page a sprint.
+  // Read once as initial state rather than tracked: after the first paint the pickers
+  // own the selection and the effect below writes it back, so a click in a Select is
+  // never in a race with the address bar.
+  const [projectId, setProjectId] = useState<string>(() => searchParams.get("projectId") ?? "");
+  const [sprintId, setSprintId] = useState<string>(() => searchParams.get("sprintId") ?? "");
 
   // Land on something useful: the first workable project, and its active sprint if it
   // has one. An empty picker on a page whose whole content depends on it is a dead end.
@@ -54,6 +63,15 @@ export default function RiskDashboard() {
   const sprints = useSprints(projectId || undefined);
   const sprintList = sprints.data?.content ?? [];
 
+  // A project arrived at by link may be finished, and `workableProjects` drops those.
+  // It still belongs in its own picker while it is the one being read — otherwise the
+  // trigger sits blank above a page full of that project's data.
+  const chosen = (projects.data?.content ?? []).find((project) => project.id === projectId);
+  const pickerProjects =
+    chosen && !projectList.some((project) => project.id === chosen.id)
+      ? [chosen, ...projectList]
+      : projectList;
+
   useEffect(() => {
     if (sprintList.length === 0) {
       return;
@@ -63,6 +81,25 @@ export default function RiskDashboard() {
       setSprintId((active ?? sprintList[0]).id);
     }
   }, [sprintList, sprintId]);
+
+  // Keep the address bar honest about what is on screen: the view then survives a
+  // refresh, and anywhere that knows a sprint can link straight to its analysis.
+  useEffect(() => {
+    if (!projectId) {
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set("projectId", projectId);
+    if (sprintId) {
+      params.set("sprintId", sprintId);
+    }
+    const next = `${pathname}?${params.toString()}`;
+    // Guarded, because arriving on a link already matching this would otherwise cost a
+    // pointless navigation on first paint.
+    if (next !== window.location.pathname + window.location.search) {
+      router.replace(next, { scroll: false });
+    }
+  }, [projectId, sprintId, pathname, router]);
 
   const risk = useSprintRisk(sprintId || undefined);
   const adjustments = useRiskAdjustments(sprintId || undefined);
@@ -81,7 +118,7 @@ export default function RiskDashboard() {
     );
   }
 
-  if (projectList.length === 0) {
+  if (pickerProjects.length === 0) {
     return (
       <EmptyState
         title="No projects yet"
@@ -107,7 +144,7 @@ export default function RiskDashboard() {
               <SelectValue placeholder="Project" />
             </SelectTrigger>
             <SelectContent>
-              {projectList.map((project) => (
+              {pickerProjects.map((project) => (
                 <SelectItem key={project.id} value={project.id}>
                   {project.name}
                 </SelectItem>

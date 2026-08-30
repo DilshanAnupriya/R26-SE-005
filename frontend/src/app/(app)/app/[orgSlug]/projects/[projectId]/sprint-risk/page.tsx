@@ -114,6 +114,9 @@ export default function ProjectSprintRiskPage({
               sprint={sprint}
               risk={risks[index]?.data}
               isLoading={risks[index]?.isLoading ?? true}
+              // The risk analysis page, opened on this sprint. It is scoped by two
+              // pickers rather than by route, so the selection travels as a query.
+              href={`/app/${orgSlug}/risk?projectId=${projectId}&sprintId=${sprint.id}`}
             />
           ))}
         </div>
