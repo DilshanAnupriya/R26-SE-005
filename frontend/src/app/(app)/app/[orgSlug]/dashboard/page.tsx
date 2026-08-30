@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useSession } from "@/components/session-provider";
 import { useProjects } from "@/features/projects/hooks";
+import { ProjectRiskCards } from "@/features/risk-analysis/components/project-risk-cards";
 import { Card, CardHeader, ProgressBar } from "@/components/design/surfaces";
 import { Burndown } from "@/components/design/charts";
 import { Avatar, ProjectKey, StatusPill } from "@/components/design/item-chrome";
@@ -33,6 +34,18 @@ export default function DashboardPage() {
 
   const firstName = user?.fullName?.split(/\s+/)[0] ?? "there";
   const items = projects.data?.content ?? [];
+  /**
+   * The projects still in play — everything except the finished and the abandoned.
+   *
+   * <p>Wider than the `ACTIVE` status the stat card counts, and deliberately: a project
+   * in `PLANNING` already has sprints, and those sprints already carry risk scores worth
+   * looking at before the project is formally started. Filtering on `ACTIVE` here would
+   * hide a project's risk board for exactly as long as its risk is still cheap to act
+   * on.</p>
+   */
+  const liveProjects = items.filter(
+    (project) => project.status !== "COMPLETED" && project.status !== "CANCELLED",
+  );
 
   const dateLabel = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
@@ -93,6 +106,18 @@ export default function DashboardPage() {
           icon={CalendarDays}
           tint="var(--blue)"
           tintSoft="var(--blue-soft)"
+        />
+      </div>
+
+      {/* Active projects, each a way in to its sprint risk board. */}
+      <div className="mb-6">
+        <h2 className="mb-3 text-sm font-semibold tracking-[0.06em] text-ink-3 uppercase">
+          Sprint risk by project
+        </h2>
+        <ProjectRiskCards
+          projects={liveProjects}
+          orgSlug={orgSlug}
+          isLoading={projects.isLoading}
         />
       </div>
 
