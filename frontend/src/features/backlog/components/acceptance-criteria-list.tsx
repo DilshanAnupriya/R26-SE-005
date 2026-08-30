@@ -107,7 +107,11 @@ export function AcceptanceCriteriaList({
           {emptyHint}
         </p>
       ) : (
-        <ul className="space-y-1.5">
+        /*
+          Capped, with its own scroll. A story with fifteen criteria should make this
+          list scroll rather than push the dialog buttons off the screen.
+        */
+        <ul className="max-h-44 space-y-1.5 overflow-y-auto pr-0.5">
           {rows.map((row, index) => (
             <li key={row.id} className="flex items-center gap-1.5">
               <span
