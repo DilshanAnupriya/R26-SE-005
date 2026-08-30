@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { getTokenStore } from "@/lib/api/token-store";
 import { getActiveOrganization } from "@/lib/api/org-context";
+import { useSession } from "@/components/session-provider";
+import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   AlertTriangle, 
@@ -12,7 +14,8 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Wand2
+  Wand2,
+  ShieldAlert,
 } from "lucide-react";
 
 async function authFetch(url: string, options: RequestInit = {}) {
@@ -63,6 +66,14 @@ interface Developer {
 }
 
 export default function SimulatorView() {
+  const { user, hasPermission } = useSession();
+  const roleCode = user?.activeRole?.toUpperCase() || "MEMBER";
+  const canManageAllocations = 
+    roleCode === "OWNER" || 
+    roleCode === "ADMIN" || 
+    roleCode === "MANAGER" || 
+    hasPermission("sprint:manage");
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
@@ -185,6 +196,7 @@ export default function SimulatorView() {
   }, [assignments]);
 
   const handleApplyConfiguration = async () => {
+    if (!canManageAllocations) return;
     const assignmentList = Object.entries(assignments).map(([taskId, devId]) => ({
       developerId: devId,
       taskId: Number(taskId)
@@ -223,6 +235,7 @@ export default function SimulatorView() {
   const overallHealth = healthScore;
 
   const handleAssign = (taskId: number, devId: number) => {
+    if (!canManageAllocations) return;
     if (taskId === null) {
       const draggedId = Number(localStorage.getItem("draggedTaskId"));
       if (draggedId) {
@@ -235,12 +248,14 @@ export default function SimulatorView() {
   };
 
   const onDragStart = (e: React.DragEvent, taskId: number) => {
+    if (!canManageAllocations) return;
     e.dataTransfer.setData("taskId", taskId.toString());
     localStorage.setItem("draggedTaskId", taskId.toString());
   };
 
   const onDrop = (e: React.DragEvent, devId: number) => {
     e.preventDefault();
+    if (!canManageAllocations) return;
     const taskId = e.dataTransfer.getData("taskId");
     if (taskId) {
       setAssignments(prev => ({ ...prev, [Number(taskId)]: devId }));
@@ -250,6 +265,7 @@ export default function SimulatorView() {
   };
 
   const handleAutoOptimize = async () => {
+    if (!canManageAllocations) return;
     setLoading(true);
     try {
       const payload = {
@@ -282,6 +298,7 @@ export default function SimulatorView() {
   };
 
   const handleUnassign = (taskId: number) => {
+    if (!canManageAllocations) return;
     setAssignments(prev => {
       const newMap = { ...prev };
       delete newMap[taskId];
@@ -327,21 +344,40 @@ export default function SimulatorView() {
         <div className="flex items-center space-x-4">
           <button 
             onClick={handleAutoOptimize}
-            className="bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2 cursor-pointer"
+            disabled={!canManageAllocations}
+            className={cn(
+              "px-6 py-2 rounded-xl text-sm font-bold text-white transition-all flex items-center gap-2",
+              canManageAllocations
+                ? "bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 cursor-pointer"
+                : "bg-indigo-600/40 opacity-60 cursor-not-allowed shadow-none"
+            )}
+            title={canManageAllocations ? "Auto-fill sprint assignments with AI" : "AI Smart Fill restricted to Owners, Admins, and Managers"}
           >
             <Wand2 className="w-4 h-4" />
             <span>AI Smart Fill</span>
           </button>
           <button 
             onClick={() => setAssignments({})}
-            className="glass px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 text-foreground hover:bg-muted transition-colors border border-border cursor-pointer"
+            disabled={!canManageAllocations}
+            className={cn(
+              "glass px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 text-foreground transition-colors border border-border",
+              canManageAllocations ? "hover:bg-muted cursor-pointer" : "opacity-60 cursor-not-allowed"
+            )}
+            title={canManageAllocations ? "Reset assignments in simulation" : "Restricted to Managers & Admins"}
           >
             <RefreshCw className="w-4 h-4" />
             <span>Reset Simulation</span>
           </button>
           <button 
             onClick={handleApplyConfiguration}
-            className="bg-primary hover:bg-primary/90 px-6 py-2 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-primary/20 cursor-pointer"
+            disabled={!canManageAllocations}
+            className={cn(
+              "px-6 py-2 rounded-xl text-sm font-bold text-white transition-all",
+              canManageAllocations
+                ? "bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 cursor-pointer"
+                : "bg-primary/40 opacity-60 cursor-not-allowed shadow-none"
+            )}
+            title={canManageAllocations ? "Apply simulated assignments to live sprint" : "Applying simulated assignments is restricted to Owners, Admins, and Managers"}
           >
             Apply Configuration
           </button>
@@ -480,19 +516,24 @@ export default function SimulatorView() {
                               </div>
                             </div>
                           </div>
-                          <button 
-                            onClick={() => handleUnassign(task.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-red-500 cursor-pointer"
-                          >
-                            <Plus className="w-4 h-4 rotate-45" />
-                          </button>
+                          {canManageAllocations && (
+                            <button 
+                              onClick={() => handleUnassign(task.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-red-500 cursor-pointer"
+                              title="Unassign task"
+                            >
+                              <Plus className="w-4 h-4 rotate-45" />
+                            </button>
+                          )}
                         </motion.div>
                       );
                     })}
                   
-                  <div className="h-12 border-2 border-dashed border-border rounded-xl flex items-center justify-center text-muted-foreground text-xs font-medium italic">
-                    Drop to assign
-                  </div>
+                  {canManageAllocations && (
+                    <div className="h-12 border-2 border-dashed border-border rounded-xl flex items-center justify-center text-muted-foreground text-xs font-medium italic">
+                      Drop to assign
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -532,12 +573,15 @@ export default function SimulatorView() {
                     <motion.div
                       layoutId={`task-${task.id}`}
                       key={task.id}
-                      draggable
+                      draggable={canManageAllocations}
                       onDragStart={(e) => onDragStart(e as any, task.id)}
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      className="bg-card p-4 rounded-2xl border border-border hover:border-primary/50 transition-all cursor-grab active:cursor-grabbing group shadow-sm"
+                      className={cn(
+                        "bg-card p-4 rounded-2xl border border-border transition-all group shadow-sm",
+                        canManageAllocations ? "hover:border-primary/50 cursor-grab active:cursor-grabbing" : "cursor-default"
+                      )}
                     >
                       <div className="flex justify-between items-start mb-2">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${
@@ -559,23 +603,25 @@ export default function SimulatorView() {
                       
                       <div className="flex items-center justify-between pt-3 border-t border-border">
                         <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{task.type}</span>
-                        <div className="flex -space-x-1 overflow-hidden">
-                          {developers.slice(0, 4).map(dev => (
-                            <button
-                              key={dev.id}
-                              onClick={() => handleAssign(task.id, dev.id)}
-                              className="w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-[8px] font-bold text-foreground hover:bg-primary hover:text-white transition-all ring-2 ring-card"
-                              title={`Assign to ${dev.firstName}`}
-                            >
-                              {dev.firstName[0]}
-                            </button>
-                          ))}
-                          {developers.length > 4 && (
-                            <div className="w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-[8px] font-bold text-muted-foreground ring-2 ring-card">
-                              +{developers.length - 4}
-                            </div>
-                          )}
-                        </div>
+                        {canManageAllocations && (
+                          <div className="flex -space-x-1 overflow-hidden">
+                            {developers.slice(0, 4).map(dev => (
+                              <button
+                                key={dev.id}
+                                onClick={() => handleAssign(task.id, dev.id)}
+                                className="w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-[8px] font-bold text-foreground hover:bg-primary hover:text-white transition-all ring-2 ring-card"
+                                title={`Assign to ${dev.firstName}`}
+                              >
+                                {dev.firstName[0]}
+                              </button>
+                            ))}
+                            {developers.length > 4 && (
+                              <div className="w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-[8px] font-bold text-muted-foreground ring-2 ring-card">
+                                +{developers.length - 4}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   ))}

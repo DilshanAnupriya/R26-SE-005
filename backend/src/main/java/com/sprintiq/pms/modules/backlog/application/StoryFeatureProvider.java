@@ -76,7 +76,8 @@ public class StoryFeatureProvider implements StoryFeatureSource, WorkItemFeature
     @Override
     @Transactional
     public void recordSuggestion(UUID storyId, UUID predictionId, BigDecimal points,
-                                 BigDecimal confidence, BigDecimal lowerBound, BigDecimal upperBound) {
+                                 BigDecimal confidence, BigDecimal lowerBound, BigDecimal upperBound,
+                                 BigDecimal rawPoints) {
         Story story = storyRepository.findByIdAndDeletedAtIsNull(storyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Story", storyId));
         story.setAiStoryPoints(points);
@@ -84,6 +85,7 @@ public class StoryFeatureProvider implements StoryFeatureSource, WorkItemFeature
         story.setAiLowerBound(lowerBound);
         story.setAiUpperBound(upperBound);
         story.setAiPredictionId(predictionId);
+        story.setAiRawPoints(rawPoints);
         // storyPoints and estimateSource are untouched on purpose: a suggestion is not
         // an estimate until someone says so.
         storyRepository.save(story);

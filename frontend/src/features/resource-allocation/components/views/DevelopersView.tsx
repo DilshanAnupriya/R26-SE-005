@@ -303,7 +303,7 @@ export default function DevelopersView() {
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center space-x-4">
                     <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-primary/20 group-hover:border-primary/60 transition-colors">
-                      <Image src={dev.avatar} alt={dev.name} fill className="object-cover" />
+                      <Image src={dev.avatar} alt={dev.name} fill unoptimized className="object-cover" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -401,7 +401,7 @@ export default function DevelopersView() {
               <div className="p-6 border-b border-border flex items-start justify-between bg-muted/40">
                 <div className="flex items-center space-x-4">
                   <div className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-primary/40 ring-4 ring-primary/10">
-                    <Image src={selectedDev.avatar} alt={selectedDev.name} fill className="object-cover" />
+                    <Image src={selectedDev.avatar} alt={selectedDev.name} fill unoptimized className="object-cover" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">

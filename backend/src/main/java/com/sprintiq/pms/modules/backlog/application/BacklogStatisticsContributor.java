@@ -2,6 +2,7 @@ package com.sprintiq.pms.modules.backlog.application;
 
 import com.sprintiq.pms.modules.backlog.domain.EpicRepository;
 import com.sprintiq.pms.modules.backlog.domain.StoryRepository;
+import com.sprintiq.pms.modules.projects.application.ProjectProgressSource;
 import com.sprintiq.pms.modules.projects.application.ProjectStatistics;
 import com.sprintiq.pms.modules.projects.application.ProjectStatisticsContributor;
 import com.sprintiq.pms.modules.projects.application.WorkflowStateUsageCounter;
@@ -9,6 +10,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -21,7 +26,8 @@ import java.util.UUID;
  */
 @Component
 @RequiredArgsConstructor
-public class BacklogStatisticsContributor implements ProjectStatisticsContributor, WorkflowStateUsageCounter {
+public class BacklogStatisticsContributor
+        implements ProjectStatisticsContributor, WorkflowStateUsageCounter, ProjectProgressSource {
 
     private final StoryRepository storyRepository;
     private final EpicRepository epicRepository;
@@ -38,6 +44,20 @@ public class BacklogStatisticsContributor implements ProjectStatisticsContributo
                 storyRepository.sumPoints(projectId),
                 storyRepository.sumCompletedPoints(projectId),
                 null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, Progress> progressFor(Collection<UUID> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, Progress> progress = new HashMap<>();
+        for (Object[] row : storyRepository.sumPointsByProject(projectIds)) {
+            progress.put((UUID) row[0],
+                    new Progress((BigDecimal) row[1], (BigDecimal) row[2]));
+        }
+        return progress;
     }
 
     @Override

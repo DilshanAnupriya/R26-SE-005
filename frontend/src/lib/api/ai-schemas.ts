@@ -47,6 +47,13 @@ export const predictionEnvelopeSchema = z.object({
   confidence: z.coerce.number().nullish(),
   lowerBound: z.coerce.number().nullish(),
   upperBound: z.coerce.number().nullish(),
+  /**
+   * The model's number before it was snapped to the Fibonacci scale.
+   *
+   * Everything between 6.5 and 10.5 comes back as an 8, so two stories the model rated
+   * 6.8 and 9.9 look identical on screen. This is what tells them apart.
+   */
+  rawValue: z.coerce.number().nullish(),
   drivers: z.array(predictionDriverSchema).default([]),
   explanation: z.string().nullish(),
   status: predictionStatusSchema,

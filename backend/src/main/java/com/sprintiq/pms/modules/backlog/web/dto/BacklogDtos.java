@@ -239,13 +239,18 @@ public final class BacklogDtos {
             BigDecimal confidence,
             BigDecimal lowerBound,
             BigDecimal upperBound,
+            /**
+             * The model's number before Fibonacci snapping. Null for a suggestion
+             * recorded before this was stored, and for models that do not snap.
+             */
+            BigDecimal rawPoints,
             UUID predictionId) {
 
         public static AiEstimate of(BigDecimal points, BigDecimal confidence, BigDecimal lower,
-                                    BigDecimal upper, UUID predictionId) {
+                                    BigDecimal upper, BigDecimal rawPoints, UUID predictionId) {
             return points == null && predictionId == null
                     ? null
-                    : new AiEstimate(points, confidence, lower, upper, predictionId);
+                    : new AiEstimate(points, confidence, lower, upper, rawPoints, predictionId);
         }
     }
 
