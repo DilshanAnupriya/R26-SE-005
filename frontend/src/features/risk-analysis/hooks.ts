@@ -93,6 +93,52 @@ export function useRiskSteps(sprintId: string | undefined) {
  * invalidated: the checkbox has to settle immediately, and a refetch round trip is long
  * enough to look like the tick did not register.</p>
  */
+/**
+ * Records that the sprint has been re-planned around one logged requirement change.
+ *
+ * <p>The register’s charge cannot be folded away by re-scoring — nothing the models
+ * read represents a logged change — so this is the only way that entry ever comes
+ * down. It never comes down in full: the requirement still moved, and that is the thing
+ * the model is predicting.</p>
+ */
+export function useAbsorbRiskChange(sprintId: string | undefined) {
+  const { api } = useSession();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { adjustmentId: string; absorbed: boolean }) =>
+      riskApi.absorbChange(api, sprintId!, input),
+
+    onSuccess: (adjustments, input) => {
+      if (!sprintId) return;
+      queryClient.setQueryData(queryKeys.ai.riskAdjustments(sprintId), adjustments);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(sprintId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskSteps(sprintId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskTrend(sprintId) });
+
+      // The credit is keyed on the charge’s own source key, not on its row id — that
+      // is what lets withdrawing the underlying change withdraw the credit with it.
+      const charge = adjustments.find((entry) => entry.id === input.adjustmentId);
+      const credit = charge?.sourceKey
+        ? adjustments.find((entry) => entry.sourceKey === `ABSORBED:${charge.sourceKey}`)
+        : undefined;
+      toast.success(
+        input.absorbed
+          ? credit
+            ? `Re-planned — risk ${Math.abs(Math.round(credit.delta))} pts lower. The change stays on the record.`
+            : "Re-planned for."
+          : "Claim withdrawn — the change is charged in full again.",
+      );
+    },
+
+    onError: (error) => {
+      toast.error(
+        error instanceof ApiError ? error.message : "Could not record that.",
+      );
+    },
+  });
+}
+
 export function useToggleRiskStep(sprintId: string | undefined) {
   const { api } = useSession();
   const queryClient = useQueryClient();

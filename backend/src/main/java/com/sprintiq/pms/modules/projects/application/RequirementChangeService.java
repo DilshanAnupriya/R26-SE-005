@@ -3,6 +3,7 @@ package com.sprintiq.pms.modules.projects.application;
 import com.sprintiq.pms.common.domain.EntityType;
 import com.sprintiq.pms.common.error.ResourceNotFoundException;
 import com.sprintiq.pms.modules.activity.application.ActivityService;
+import com.sprintiq.pms.modules.ai.application.SprintRiskAbsorptionService;
 import com.sprintiq.pms.modules.ai.application.SprintRiskAdjustmentService;
 import com.sprintiq.pms.modules.ai.domain.RiskType;
 import com.sprintiq.pms.modules.projects.domain.*;
@@ -132,7 +133,12 @@ public class RequirementChangeService {
         // Standing, not absorbable. Scope added on the ninth is a fact about this sprint
         // for the rest of its life, and no feature vector carries it — the models read
         // churn off the requirements table, which a story-driven project leaves empty.
-        adjustments.recordStanding(request.sprintId(), RiskType.REQUIREMENT_CHANGE,
+        // Keyed on the change, not anonymous. The key is what lets the panel offer this
+        // one entry a tick, and what lets withdrawing the change below withdraw the
+        // credit somebody claimed against it — an anonymous row can be paired with
+        // neither.
+        adjustments.restateStanding(request.sprintId(), RiskType.REQUIREMENT_CHANGE,
+                SprintRiskAbsorptionService.registerKey(change.getId()),
                 delta, type.reason(direction));
 
         activityService.recordCreated(
@@ -159,6 +165,11 @@ public class RequirementChangeService {
         adjustments.recordStanding(change.getSprintId(), RiskType.REQUIREMENT_CHANGE,
                 change.getRiskDelta().negate(),
                 "Requirement change withdrawn: %s".formatted(change.getChangeType()));
+        // And any claim that the sprint had been re-planned around it. The charge is
+        // reversed above; leaving its credit behind would pay a sprint for absorbing a
+        // change that no longer stands, which is the one way this could be run in a loop.
+        adjustments.clear(change.getSprintId(), SprintRiskAbsorptionService.absorbedKey(
+                SprintRiskAbsorptionService.registerKey(change.getId())));
 
         repository.delete(change);
     }
