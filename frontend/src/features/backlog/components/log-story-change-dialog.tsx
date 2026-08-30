@@ -26,6 +26,11 @@ import { REQUIREMENT_CHANGE_TYPES, type RequirementChangeType } from "@/features
 import type { Priority, Story } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
 import { useApplyRequirementChange, useStory } from "../hooks";
+import {
+  AcceptanceCriteriaList,
+  joinCriteria,
+  parseCriteria,
+} from "./acceptance-criteria-list";
 
 /**
  * Change a requirement on one story, and put it on the record in the same action.
@@ -60,6 +65,9 @@ const TYPE_FIELD: Record<RequirementChangeType, string> = {
   OTHER: "none",
 };
 
+/** The two fields the form shows whatever the change type says, and can retarget it. */
+type PermanentField = "priority" | "acceptanceCriteria";
+
 /** High to low, so the list reads the way people rank things. */
 const PRIORITIES: Priority[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "LOWEST"];
 const PRIORITY_WEIGHT: Record<Priority, number> = {
@@ -89,7 +97,12 @@ export function LogStoryChangeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      {/*
+        Wider than the default, because this form is now two columns of paired controls
+        rather than one tall stack — and the criteria list needs room for a sentence per
+        row without wrapping every one of them.
+      */}
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Log a change</DialogTitle>
           <DialogDescription>
@@ -124,19 +137,23 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
 
   const [changeType, setChangeType] = useState<RequirementChangeType>("SCOPE_ADDED");
   /**
-   * The type the author last chose for themselves.
+   * The type the author last chose, and which field's edit pushed it aside.
    *
-   * <p>Moving the priority switches the type to PRIORITY_CHANGED, because that is what
-   * the edit has become. Setting it back has to undo that too, or the form is stranded on
-   * a change type nobody picked, describing a field that no longer moved.</p>
+   * <p>Editing one of the permanent fields switches the type to the one that field owns,
+   * because that is what the edit has become. Setting the field back has to undo that
+   * too, or the form is stranded on a change type nobody picked, describing a field that
+   * no longer moved — which the server then refuses as a no-op.</p>
    */
-  const [typeBeforePriority, setTypeBeforePriority] =
-    useState<RequirementChangeType | null>(null);
+  const [displaced, setDisplaced] =
+    useState<{ type: RequirementChangeType; by: PermanentField } | null>(null);
   // Starting where the story already is, so what gets submitted is a diff the user made
   // rather than a blank they retyped.
   const [priority, setPriority] = useState<Priority>(story.priority);
   const [description, setDescription] = useState(story.description ?? "");
-  const [acceptanceCriteria, setAcceptanceCriteria] = useState(story.acceptanceCriteria ?? "");
+  // Normalised on the way in, so "moved" means the criteria actually differ rather than
+  // that a stray bullet or blank line was tidied up on first edit.
+  const originalCriteria = joinCriteria(parseCriteria(story.acceptanceCriteria));
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState(originalCriteria);
   const [storyPoints, setStoryPoints] = useState(
     story.storyPoints == null ? "" : String(story.storyPoints),
   );
@@ -146,33 +163,45 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
 
   const loaded = story;
 
-  /** The dropdown's own choice, which supersedes anything the priority field switched to. */
+  /** The dropdown's own choice, which supersedes anything a field switched to. */
   function chooseType(next: RequirementChangeType) {
-    setTypeBeforePriority(null);
+    setDisplaced(null);
     setChangeType(next);
   }
 
   /**
-   * Moving the priority is a priority change, so the form says so.
+   * Points the change type at the field somebody just edited, and back again when they
+   * undo it.
    *
-   * <p>The server writes only the field the chosen type owns, so a priority edited while
-   * the type still reads "Description updated" would be dropped on the floor and the
-   * sprint charged for something else entirely. Switching the type is what makes this
-   * control mean what it looks like it means.</p>
+   * <p>The server writes only the field the chosen type owns, so criteria edited while
+   * the type still reads "Scope added" would be dropped on the floor and the sprint
+   * charged for something else entirely. Switching the type is what makes these controls
+   * mean what they look like they mean.</p>
    */
-  function choosePriority(next: Priority) {
-    setPriority(next);
-    if (next !== story.priority) {
-      if (changeType !== "PRIORITY_CHANGED") {
-        setTypeBeforePriority(changeType);
-        setChangeType("PRIORITY_CHANGED");
+  function retarget(by: PermanentField, moved: boolean, target: RequirementChangeType) {
+    if (moved) {
+      if (changeType !== target) {
+        setDisplaced({ type: changeType, by });
+        setChangeType(target);
       }
       return;
     }
-    if (typeBeforePriority !== null) {
-      setChangeType(typeBeforePriority);
-      setTypeBeforePriority(null);
+    // Put back only what this field displaced. Undoing the criteria must not steal the
+    // type back from a priority edit that is still standing.
+    if (displaced?.by === by && changeType === target) {
+      setChangeType(displaced.type);
+      setDisplaced(null);
     }
+  }
+
+  function choosePriority(next: Priority) {
+    setPriority(next);
+    retarget("priority", next !== story.priority, "PRIORITY_CHANGED");
+  }
+
+  function chooseCriteria(next: string) {
+    setAcceptanceCriteria(next);
+    retarget("acceptanceCriteria", next !== originalCriteria, "ACCEPTANCE_CRITERIA_CHANGED");
   }
 
   function submit(event: React.FormEvent) {
@@ -195,26 +224,52 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    /*
+      Bounded rather than allowed to run off the screen. The dialog is centred on the
+      viewport, so an over-tall form clipped at both ends with no way to reach either —
+      the submit button included.
+    */
+    <form onSubmit={submit} className="max-h-[72dvh] space-y-3 overflow-y-auto pr-1">
       {/*
         The story first, and stated rather than chosen. The dialog is opened from a
         row, so a picker here could only ever disagree with the row that opened it.
       */}
+      {/*
+        One line at this width. The key, the title and the facts that matter read across
+        rather than stacking, which is a row of dialog height back.
+      */}
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg border border-line bg-surface-2 px-3 py-2">
+        <span className="font-mono text-2xs text-ink-3">{loaded.itemKey}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{loaded.title}</span>
+        <span className="text-xs text-ink-3">
+          {priorityLabel(loaded.priority)} priority
+          {loaded.storyPoints != null ? ` · ${loaded.storyPoints} points` : " · unestimated"}
+          {loaded.sprintId ? "" : " · not in a sprint"}
+        </span>
+      </div>
+
+      {/*
+        Two selects, one row. They belong together at this width: the left one names what
+        is being logged, and moving the right one is what sets it.
+      */}
+      <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-1.5">
-        <Label>User story</Label>
-        <div className="rounded-lg border border-line bg-surface-2 px-3 py-2">
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xs text-ink-3">{loaded.itemKey}</span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">
-              {loaded.title}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-ink-3">
-            {priorityLabel(loaded.priority)} priority
-            {loaded.storyPoints != null ? ` · ${loaded.storyPoints} points` : " · unestimated"}
-            {loaded.sprintId ? "" : " · not in a sprint"}
-          </p>
-        </div>
+        <Label htmlFor="story-change-type">What changed?</Label>
+        <Select
+          value={changeType}
+          onValueChange={(value) => chooseType(value as RequirementChangeType)}
+        >
+          <SelectTrigger id="story-change-type" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REQUIREMENT_CHANGE_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {TYPE_LABEL[type]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/*
@@ -266,38 +321,64 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
           />
         ) : null}
       </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="story-change-type">What changed?</Label>
-        <Select
-          value={changeType}
-          onValueChange={(value) => chooseType(value as RequirementChangeType)}
-        >
-          <SelectTrigger id="story-change-type" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {REQUIREMENT_CHANGE_TYPES.map((type) => (
-              <SelectItem key={type} value={type}>
-                {TYPE_LABEL[type]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="story-change-note">Detail</Label>
-        <Textarea
-          id="story-change-note"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          rows={2}
-          placeholder="Why this moved, and who asked"
+      {/*
+        Acceptance criteria, permanent for the same reason priority is: it is one of the
+        two things people open this dialog to change, and a control the change-type
+        dropdown has to reveal is one that gets missed. The count is what the register
+        reads, so adding a row here raises the risk and deleting one lowers it.
+      */}
+      <div
+        className={cn(
+          "space-y-1.5 rounded-lg border p-3 transition-colors",
+          changeType === "ACCEPTANCE_CRITERIA_CHANGED"
+            ? "border-accent bg-accent-soft/40"
+            : "border-line bg-surface-2/50",
+        )}
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <Label>Acceptance criteria</Label>
+          <span className="text-2xs text-ink-3">
+            {acceptanceCriteria === originalCriteria
+              ? `${countCriteria(originalCriteria)} unchanged`
+              : `Was ${countCriteria(originalCriteria)}, now ${countCriteria(acceptanceCriteria)}`}
+          </span>
+        </div>
+        <AcceptanceCriteriaList
+          value={originalCriteria}
+          onChange={chooseCriteria}
+          idPrefix="story-change-criterion"
         />
+        {acceptanceCriteria !== originalCriteria ? (
+          <DirectionPreview
+            field="acceptanceCriteria"
+            story={loaded}
+            priority={priority}
+            description={description}
+            acceptanceCriteria={acceptanceCriteria}
+            storyPoints={storyPoints}
+            changeType="ACCEPTANCE_CRITERIA_CHANGED"
+          />
+        ) : null}
       </div>
 
-      {/* The change itself, under the detail — this is what actually edits the story. */}
+      {/*
+        Both permanent fields moved, and the server writes only one. Said here rather
+        than discovered afterwards, when the other edit has silently not happened.
+      */}
+      {priority !== loaded.priority && acceptanceCriteria !== originalCriteria ? (
+        <p className="rounded-lg border border-amber/30 bg-amber-soft px-3 py-2 text-xs leading-relaxed text-amber">
+          Priority and acceptance criteria have both moved, and one change is logged at a
+          time. Only the{" "}
+          <span className="font-semibold">
+            {changeType === "PRIORITY_CHANGED" ? "priority" : "criteria"}
+          </span>{" "}
+          edit will be saved — log the other as a second change.
+        </p>
+      ) : null}
+
+      {/* What actually edits the story, for whichever type is selected. */}
       <ChangeEditor
         changeType={changeType}
         story={loaded}
@@ -305,19 +386,32 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
         description={description}
         onDescription={setDescription}
         acceptanceCriteria={acceptanceCriteria}
-        onAcceptanceCriteria={setAcceptanceCriteria}
         storyPoints={storyPoints}
         onStoryPoints={setStoryPoints}
       />
 
-      <div className="space-y-1.5">
-        <Label htmlFor="story-change-requester">Requested by</Label>
-        <Input
-          id="story-change-requester"
-          value={requestedByName}
-          onChange={(event) => setRequestedByName(event.target.value)}
-          placeholder="e.g. Product owner, compliance, the customer"
-        />
+      {/* The two free-text fields, paired — neither needs the full width. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="story-change-note">Detail</Label>
+          <Textarea
+            id="story-change-note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            rows={2}
+            placeholder="Why this moved, and who asked"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="story-change-requester">Requested by</Label>
+          <Input
+            id="story-change-requester"
+            value={requestedByName}
+            onChange={(event) => setRequestedByName(event.target.value)}
+            placeholder="e.g. Product owner, compliance"
+          />
+        </div>
       </div>
 
       {loaded.sprintId ? (
@@ -376,7 +470,6 @@ function ChangeEditor({
   description,
   onDescription,
   acceptanceCriteria,
-  onAcceptanceCriteria,
   storyPoints,
   onStoryPoints,
 }: {
@@ -386,7 +479,6 @@ function ChangeEditor({
   description: string;
   onDescription: (value: string) => void;
   acceptanceCriteria: string;
-  onAcceptanceCriteria: (value: string) => void;
   storyPoints: string;
   onStoryPoints: (value: string) => void;
 }) {
@@ -412,6 +504,19 @@ function ChangeEditor({
     );
   }
 
+  if (field === "acceptanceCriteria") {
+    // Also a permanent field further up the form, for the same reason as priority: one
+    // value, one control, or the form can disagree with itself about what is being
+    // logged.
+    return (
+      <p className="rounded-lg border border-dashed border-line px-3 py-2 text-xs leading-relaxed text-ink-3">
+        Add, edit or delete rows in the{" "}
+        <span className="font-medium text-ink-2">Acceptance criteria</span> field above. The
+        direction appears beside it as soon as the list changes.
+      </p>
+    );
+  }
+
   const editor =
     field === "storyPoints" ? (
       <Input
@@ -426,18 +531,10 @@ function ChangeEditor({
     ) : (
       <Textarea
         id="story-change-field"
-        rows={field === "acceptanceCriteria" ? 5 : 4}
-        value={field === "acceptanceCriteria" ? acceptanceCriteria : description}
-        onChange={(event) =>
-          field === "acceptanceCriteria"
-            ? onAcceptanceCriteria(event.target.value)
-            : onDescription(event.target.value)
-        }
-        placeholder={
-          field === "acceptanceCriteria"
-            ? "One criterion per line"
-            : "What this story is, in full"
-        }
+        rows={4}
+        value={description}
+        onChange={(event) => onDescription(event.target.value)}
+        placeholder="What this story is, in full"
       />
     );
 
@@ -546,9 +643,15 @@ function movement(
   }
 }
 
+/**
+ * How many criteria a block of text holds.
+ *
+ * <p>Shared with the editor rather than re-implemented, so "a criterion" means one thing
+ * on both sides of this dialog — and the same thing the server counts when it decides
+ * which way the change pushed.</p>
+ */
 function countCriteria(text: string | null | undefined): number {
-  if (!text) return 0;
-  return text.split(/\r?\n/).filter((line) => line.trim() !== "").length;
+  return parseCriteria(text).length;
 }
 
 function compact(text: string | null | undefined): number {

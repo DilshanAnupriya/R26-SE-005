@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/design/surfaces";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   PredictionDriver,
+  RiskAdjustment,
   RiskAssessment,
   RiskRemediationStep,
   RiskType,
@@ -17,6 +18,48 @@ import { asPercent, SEVERITY_COLOUR, SeverityBadge, type RiskSeverityLabel } fro
 
 /** What the parent hands down so a tick can be recorded. */
 export type StepToggle = (input: { riskType: RiskType; stepKey: string; done: boolean }) => void;
+
+/** The same, for the one finding that is a logged change rather than a board reading. */
+export type AbsorbToggle = (input: { adjustmentId: string; absorbed: boolean }) => void;
+
+/** The ledger key a logged requirement change is written under. Mirrors the server’s. */
+const REGISTER_PREFIX = "REQ_CHANGE:";
+
+/**
+ * One logged change, and the claim answering it if somebody has made one.
+ *
+ * <p>Paired on the charge’s own source key rather than on its row id, because that is
+ * the pairing the server writes — and the one withdrawing the change takes apart.</p>
+ */
+function loggedChangesFor(
+  adjustments: RiskAdjustment[],
+  riskType: RiskType,
+): { charge: RiskAdjustment; credit?: RiskAdjustment }[] {
+  return adjustments
+    .filter(
+      (entry) =>
+        entry.riskType === riskType &&
+        entry.survivesScoring &&
+        entry.sourceKey?.startsWith(REGISTER_PREFIX),
+    )
+    .map((charge) => ({
+      charge,
+      credit: adjustments.find(
+        (entry) => entry.sourceKey === `ABSORBED:${charge.sourceKey}`,
+      ),
+    }));
+}
+
+/**
+ * What ticking one is worth, before the server has priced it.
+ *
+ * <p>Mirrors {@code SprintRiskAbsorptionService.reliefFor}: five-eighths of the charge,
+ * bounded so a point always stays standing. A preview, not the decision — the server
+ * recomputes it from the entry it actually loads.</p>
+ */
+function reliefFor(charge: RiskAdjustment): number {
+  return Math.max(0, Math.min(Math.round(charge.delta * 0.625), charge.delta - 1));
+}
 
 /**
  * Why each of the three scores reads the way it does.
@@ -87,17 +130,25 @@ function scoreOf(assessment?: RiskAssessment | null): number | null {
 
 export function RiskExplanations({
   risk,
+  adjustments,
   steps,
   loading,
   onToggleStep,
   togglingStepKey,
+  onAbsorb,
+  absorbingId,
 }: {
   risk?: SprintRisk;
+  /** The whole ledger, so each tab can show the logged changes charged to its risk. */
+  adjustments?: RiskAdjustment[];
   steps?: RiskRemediationStep[];
   loading?: boolean;
   onToggleStep?: StepToggle;
   /** The step currently in flight, so only its own row shows a spinner. */
   togglingStepKey?: string | null;
+  onAbsorb?: AbsorbToggle;
+  /** The logged change currently in flight, for the same reason. */
+  absorbingId?: string | null;
 }) {
   // Null until somebody picks a tab, so the panel opens on the loudest risk without
   // yanking the reader back to it every time the sprint is re-assessed.
@@ -149,8 +200,11 @@ export function RiskExplanations({
                 steps={(steps ?? []).filter(
                   (step) => step.riskType === RISK_TYPE_FOR_KEY[model.key],
                 )}
+                changes={loggedChangesFor(adjustments ?? [], RISK_TYPE_FOR_KEY[model.key])}
                 onToggleStep={onToggleStep}
                 togglingStepKey={togglingStepKey}
+                onAbsorb={onAbsorb}
+                absorbingId={absorbingId}
               />
             </TabsContent>
           ))}
@@ -183,16 +237,22 @@ function RiskExplanation({
   riskType,
   assessment,
   steps,
+  changes,
   onToggleStep,
   togglingStepKey,
+  onAbsorb,
+  absorbingId,
 }: {
   title: string;
   question: string;
   riskType: RiskType;
   assessment?: RiskAssessment | null;
   steps: RiskRemediationStep[];
+  changes: { charge: RiskAdjustment; credit?: RiskAdjustment }[];
   onToggleStep?: StepToggle;
   togglingStepKey?: string | null;
+  onAbsorb?: AbsorbToggle;
+  absorbingId?: string | null;
 }) {
   const band = bandOf(assessment);
 
@@ -265,6 +325,37 @@ function RiskExplanation({
           of board activity since then {delta > 0 ? "raised" : "lowered"} it to{" "}
           {asPercent(displayed)}% — itemised under &ldquo;Since the last assessment&rdquo; below.
         </p>
+      ) : null}
+
+      {/*
+        Directly under the note about the adjustment, because for this risk these entries
+        usually *are* the adjustment. They lived only in the ledger card at the foot of
+        the page, which mixes all three risks together — so the one finding somebody had
+        gone to the trouble of writing down was the one that never appeared beside the
+        score it moved.
+      */}
+      {changes.length > 0 ? (
+        <section>
+          <h4 className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">
+            Logged changes the model cannot see
+          </h4>
+          <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
+            Written down by hand and charged to this sprint. No reading below carries a
+            logged change, so re-assessing cannot fold these away — ticking one is the only
+            thing that brings it down, and it never brings it down in full.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {changes.map(({ charge, credit }) => (
+              <LoggedChangeRow
+                key={charge.id}
+                charge={charge}
+                credit={credit}
+                onAbsorb={onAbsorb}
+                busy={absorbingId === charge.id}
+              />
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       <section>
@@ -434,6 +525,99 @@ function DriverRow({
           fact about the team — or the model was asked and moving it did not lower the score.
         </p>
       ) : null}
+    </li>
+  );
+}
+
+/**
+ * One logged requirement change, and the claim that the sprint was re-planned around it.
+ *
+ * <p>The tick says something narrower than "fixed", because a requirement change cannot
+ * be unmade. It says the plan was adjusted to take it — something was moved out, or
+ * re-negotiated — which is a claim about the sprint no model can read, so it is recorded
+ * the way a claimed step is and reversed the same way.</p>
+ *
+ * <p>A change that <em>lowered</em> the risk is stated rather than offered. There is
+ * nothing to plan around in a sprint getting easier, and a checkbox beside one would
+ * invite somebody to try.</p>
+ */
+function LoggedChangeRow({
+  charge,
+  credit,
+  onAbsorb,
+  busy,
+}: {
+  charge: RiskAdjustment;
+  credit?: RiskAdjustment;
+  onAbsorb?: AbsorbToggle;
+  busy?: boolean;
+}) {
+  const charged = Math.round(Math.abs(charge.delta));
+
+  if (charge.delta <= 0) {
+    return (
+      <li className="flex items-start gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-2">
+        <ArrowDown className="mt-0.5 size-3.5 shrink-0 text-green" aria-hidden />
+        <span className="min-w-0 flex-1 text-xs">{charge.reason}</span>
+        <span className="shrink-0 rounded bg-green-soft px-1.5 py-0.5 text-[10px] font-semibold text-green tabular-nums">
+          −{charged} pts
+        </span>
+      </li>
+    );
+  }
+
+  const absorbed = credit != null;
+  // Magnitude first, then round. `Math.round(-2.5)` is -2 — rounding a negative half
+  // goes toward zero, so rounding the signed credit made the row say it had applied one
+  // point fewer than the preview beside it had just promised.
+  const relief = absorbed ? Math.round(Math.abs(credit.delta)) : reliefFor(charge);
+
+  return (
+    <li>
+      <label
+        className={cn(
+          "flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 transition-colors",
+          absorbed
+            ? "border-green/30 bg-green-soft/60"
+            : "border-line bg-surface-2 hover:border-line-strong",
+          (busy || !onAbsorb) && "cursor-default opacity-70",
+        )}
+      >
+        <input
+          type="checkbox"
+          className="mt-0.5 size-3.5 shrink-0 accent-[var(--green)]"
+          checked={absorbed}
+          disabled={busy || !onAbsorb}
+          onChange={(event) =>
+            onAbsorb?.({ adjustmentId: charge.id, absorbed: event.target.checked })
+          }
+        />
+
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className={cn("text-xs font-medium", absorbed && "text-ink-2")}>
+              {charge.reason}
+            </span>
+            <span
+              className={cn(
+                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+                absorbed ? "bg-green-soft text-green" : "bg-red-soft text-red",
+              )}
+            >
+              {absorbed ? `+${charged}, −${relief} applied` : `+${charged} pts`}
+            </span>
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-3">
+            {absorbed
+              ? `Re-planned for — ${relief} of its ${charged} points are off. The rest stands, because the requirement did move.`
+              : `Tick once the plan has been adjusted around it — worth ${relief} of its ${charged} points.`}
+          </span>
+        </span>
+
+        {busy ? (
+          <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-ink-3" aria-hidden />
+        ) : null}
+      </label>
     </li>
   );
 }

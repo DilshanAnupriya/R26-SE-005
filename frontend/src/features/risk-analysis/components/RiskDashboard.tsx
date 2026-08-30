@@ -16,6 +16,7 @@ import { workableProjects } from "@/features/projects/api";
 import { useProjects } from "@/features/projects/hooks";
 import { useSprints } from "@/features/sprints/hooks";
 import {
+  useAbsorbRiskChange,
   useAssessSprintRisk,
   useDailyRiskTrend,
   useRiskAdjustments,
@@ -108,6 +109,7 @@ export default function RiskDashboard() {
   const assess = useAssessSprintRisk(sprintId || undefined);
   const steps = useRiskSteps(sprintId || undefined);
   const toggleStep = useToggleRiskStep(sprintId || undefined);
+  const absorb = useAbsorbRiskChange(sprintId || undefined);
 
   if (projects.isLoading) {
     return (
@@ -193,6 +195,8 @@ export default function RiskDashboard() {
               togglingStepKey={
                 toggleStep.isPending ? (toggleStep.variables?.stepKey ?? null) : null
               }
+              onAbsorb={absorb.mutate}
+              absorbingId={absorb.isPending ? (absorb.variables?.adjustmentId ?? null) : null}
             />
           </TabsContent>
 
