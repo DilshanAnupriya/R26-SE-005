@@ -29,6 +29,9 @@ const SPRINT: Sprint = {
   storyCount: 9,
 };
 
+/** Where the board sends a card: the risk analysis page, opened on this sprint. */
+const HREF = `/app/nd/risk?projectId=${SPRINT.projectId}&sprintId=${SPRINT.id}`;
+
 function risk(score: number, level: OverallRisk["level"]): SprintRisk {
   return {
     sprintId: SPRINT.id,
@@ -42,7 +45,7 @@ function risk(score: number, level: OverallRisk["level"]): SprintRisk {
 
 function renderCard(value: SprintRisk | undefined, isLoading = false) {
   const { container } = render(
-    <SprintRiskCard sprint={SPRINT} risk={value} isLoading={isLoading} />,
+    <SprintRiskCard sprint={SPRINT} risk={value} isLoading={isLoading} href={HREF} />,
   );
   return container.querySelector("article") as HTMLElement;
 }
@@ -116,5 +119,24 @@ describe("sprint risk card", () => {
     renderCard(undefined, true);
     expect(screen.getByText("Reading risk…")).toBeInTheDocument();
     expect(screen.queryByText("Never assessed")).not.toBeInTheDocument();
+  });
+
+  it("sends the whole card to that sprint's risk analysis", () => {
+    const { container } = render(
+      <SprintRiskCard sprint={SPRINT} risk={risk(0.42, "MEDIUM")} isLoading={false} href={HREF} />,
+    );
+
+    const link = container.querySelector("a");
+    expect(link).toHaveAttribute("href", HREF);
+    // Inside the anchor rather than beside it: the figure, the meter and the name are
+    // all the same target, so a click anywhere on the card has to count.
+    expect(link?.querySelector("article")).not.toBeNull();
+    // And it is still one link, not one per element the card happens to contain.
+    expect(container.querySelectorAll("a")).toHaveLength(1);
+  });
+
+  it("names its destination for a reader who cannot see the card", () => {
+    renderCard(risk(0.42, "MEDIUM"));
+    expect(screen.getByText(/Open risk analysis for Sprint 7/)).toBeInTheDocument();
   });
 });
