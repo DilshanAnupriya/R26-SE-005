@@ -13,6 +13,10 @@ import type { Story } from "@/lib/api/delivery-schemas";
  * previews has to agree with the direction the server derives, because a form that says
  * "this will lower the risk" and then raises it teaches people to stop trusting the
  * number.</p>
+ *
+ * <p>Priority is the exception to the first rule and has its own group below: it is a
+ * permanent field rather than one the change-type dropdown reveals, so moving it has to
+ * carry the change type along with it.</p>
  */
 
 const STORY_ID = "3f1b6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed";
@@ -69,8 +73,7 @@ describe("Log a change", () => {
     const user = userEvent.setup();
     open();
 
-    await choose(user, await screen.findByLabelText("What changed?"), "Priority changed");
-    await choose(user, await screen.findByLabelText("New priority"), "Critical");
+    await choose(user, await screen.findByLabelText("Priority"), "Critical");
     await user.click(screen.getByRole("button", { name: "Log change" }));
 
     await waitFor(() => expect(applyChange).toHaveBeenCalled());
@@ -82,26 +85,6 @@ describe("Log a change", () => {
     expect(body.newDescription).toBeNull();
     expect(body.newAcceptanceCriteria).toBeNull();
     expect(body.newStoryPoints).toBeNull();
-  });
-
-  it("previews a raised priority as harder", async () => {
-    const user = userEvent.setup();
-    open();
-
-    await choose(user, await screen.findByLabelText("What changed?"), "Priority changed");
-    await choose(user, await screen.findByLabelText("New priority"), "Critical");
-
-    expect(await screen.findByText(/requirement-change risk will go up/i)).toBeInTheDocument();
-  });
-
-  it("previews a dropped priority as easier", async () => {
-    const user = userEvent.setup();
-    open();
-
-    await choose(user, await screen.findByLabelText("What changed?"), "Priority changed");
-    await choose(user, await screen.findByLabelText("New priority"), "Low");
-
-    expect(await screen.findByText(/requirement-change risk will come down/i)).toBeInTheDocument();
   });
 
   it("previews a longer description as harder and a shorter one as easier", async () => {
@@ -145,8 +128,107 @@ describe("Log a change", () => {
   it("says nothing has moved until something has", async () => {
     open();
 
-    expect(
-      await screen.findByText(/Nothing has moved yet/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Nothing has moved yet/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Priority, which is a permanent field and therefore its own set of rules.
+ *
+ * <p>It sits on the form from the moment it opens, showing the story's current level.
+ * The alternative — revealed only once "Priority changed" is chosen from a dropdown —
+ * meant the single property people most often come here to move was the one they had to
+ * go looking for, and priorities got changed on the board instead, where nothing charges
+ * the sprint's risk.</p>
+ */
+describe("Log a change · priority", () => {
+  beforeEach(() => {
+    applyChange.mockReset();
+  });
+
+  it("shows the story's current priority without a change type being picked", async () => {
+    open();
+
+    const priority = await screen.findByLabelText("Priority");
+    expect(priority).toHaveTextContent("Medium");
+    expect(screen.getByText("Unchanged")).toBeInTheDocument();
+    // The dialog opens on "Scope added", so this field is visible on a form whose
+    // change type owns an entirely different one.
+    expect(await screen.findByLabelText("What changed?")).toHaveTextContent("Scope added");
+  });
+
+  it("carries the change type along when the priority moves", async () => {
+    const user = userEvent.setup();
+    open();
+
+    await choose(user, await screen.findByLabelText("Priority"), "High");
+
+    // Without this the server would write the estimate this form was set to edit and
+    // drop the priority silently, charging the sprint for the wrong thing.
+    expect(await screen.findByLabelText("What changed?")).toHaveTextContent("Priority changed");
+    expect(screen.getByText("Was Medium")).toBeInTheDocument();
+  });
+
+  it("reads a raised priority as an increase", async () => {
+    const user = userEvent.setup();
+    open();
+
+    await choose(user, await screen.findByLabelText("Priority"), "High");
+    expect(await screen.findByText(/requirement-change risk will go up/i)).toBeInTheDocument();
+
+    await choose(user, await screen.findByLabelText("Priority"), "Critical");
+    expect(await screen.findByText(/requirement-change risk will go up/i)).toBeInTheDocument();
+  });
+
+  it("reads a lowered priority as a decrease", async () => {
+    const user = userEvent.setup();
+    open();
+
+    await choose(user, await screen.findByLabelText("Priority"), "Low");
+    expect(await screen.findByText(/requirement-change risk will come down/i)).toBeInTheDocument();
+
+    await choose(user, await screen.findByLabelText("Priority"), "Lowest");
+    expect(await screen.findByText(/requirement-change risk will come down/i)).toBeInTheDocument();
+  });
+
+  it("submits the level the author chose, not the one the story had", async () => {
+    const user = userEvent.setup();
+    open();
+
+    await choose(user, await screen.findByLabelText("Priority"), "Low");
+    await user.click(screen.getByRole("button", { name: "Log change" }));
+
+    await waitFor(() => expect(applyChange).toHaveBeenCalled());
+    const body = applyChange.mock.calls[0][0];
+    expect(body.changeType).toBe("PRIORITY_CHANGED");
+    expect(body.newPriority).toBe("LOW");
+  });
+
+  it("gives the change type back when the priority is set to where it started", async () => {
+    const user = userEvent.setup();
+    open();
+
+    await choose(user, await screen.findByLabelText("What changed?"), "Description updated");
+    await choose(user, await screen.findByLabelText("Priority"), "Critical");
+    expect(await screen.findByLabelText("What changed?")).toHaveTextContent("Priority changed");
+
+    // Changing your mind must not strand the form on a type nobody picked, describing a
+    // field that is back where it was — the server refuses that as a no-op change.
+    await choose(user, await screen.findByLabelText("Priority"), "Medium");
+    expect(await screen.findByLabelText("What changed?")).toHaveTextContent("Description updated");
+    expect(screen.getByText("Unchanged")).toBeInTheDocument();
+  });
+
+  it("does not offer a second priority control when the type names it", async () => {
+    const user = userEvent.setup();
+    open();
+
+    await choose(user, await screen.findByLabelText("What changed?"), "Priority changed");
+
+    // One value, one control. Two selects bound to the same state would let the form
+    // disagree with itself about what is being logged.
+    expect(screen.getAllByLabelText("Priority")).toHaveLength(1);
+    expect(screen.queryByLabelText("New priority")).not.toBeInTheDocument();
+    expect(screen.getByText(/Set the new priority in the/i)).toBeInTheDocument();
   });
 });
