@@ -50,6 +50,18 @@ public class SprintBacklogService {
                                  long defectCount, long reopenedCount, long unestimatedCount,
                                  long contributorCount) {}
 
+    /**
+     * Stories in this sprint whose work started before the sprint did.
+     *
+     * <p>Separate from {@link #snapshotOf} because it needs the sprint's start date,
+     * and the snapshot deliberately knows nothing about the sprint row — it counts what
+     * is in the sprint, not what the sprint is.</p>
+     */
+    @Transactional(readOnly = true)
+    public long carriedOverIn(UUID sprintId, java.time.Instant sprintStart) {
+        return sprintStart == null ? 0L : storyRepository.countCarriedOver(sprintId, sprintStart);
+    }
+
     @Transactional(readOnly = true)
     public SprintSnapshot snapshotOf(UUID sprintId) {
         List<Story> stories = storyRepository.findBySprintIdAndDeletedAtIsNull(sprintId);

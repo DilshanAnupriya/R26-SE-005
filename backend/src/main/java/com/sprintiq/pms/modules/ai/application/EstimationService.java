@@ -1,6 +1,7 @@
 package com.sprintiq.pms.modules.ai.application;
 
 import com.sprintiq.pms.common.domain.EntityType;
+import com.sprintiq.pms.modules.ai.application.port.DeveloperFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.ProjectContextSource;
 import com.sprintiq.pms.modules.ai.application.port.SprintFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.StoryFeatureSource;
@@ -35,6 +36,8 @@ public class EstimationService {
     private final StoryFeatureSource stories;
     private final SprintFeatureSource sprints;
     private final ProjectContextSource projects;
+    /** Real seniority, for the experience input the service otherwise guesses from a band. */
+    private final DeveloperFeatureSource developers;
     private final AppProperties properties;
 
     // -------------------------------------------------------------- story points
@@ -199,11 +202,25 @@ public class EstimationService {
                 .put("team_size", teamSizeFor(sprint))
                 .put("sprint_duration_days", sprint.durationDays())
                 .put("planned_story_points", sprint.committedPoints())
-                .put("leave_days", sprint.absenceDays())
+                // Only when somebody actually planned capacity. Unplanned, this is a
+                // zero that means "not recorded", and sending it would tell the model
+                // nobody was away — the flattering reading of a gap. Absent, the
+                // service substitutes its training median and says it did.
+                .put("leave_days", sprint.capacityPlanned() ? sprint.absenceDays() : null)
                 .putNumber("num_bugs", sprint.defectCount())  // a long: zero is real
-                .put("developer_availability", availability(sprint))
+                // Measured, not assumed. Absent, the service substituted a dataset
+                // median of 6 — spillover this team may not have — and a zero here is
+                // a real reading rather than a gap.
+                .putNumber("carryover_tasks", sprint.carriedOverCount())
+                .put("developer_availability",
+                        sprint.capacityPlanned() ? availability(sprint) : null)
                 .put("completion_rate", project.recentCompletionRate())
                 .put("dev_experience_level", project.devExperienceLevel())
+                // The measured average, when the team has profiles to average. Sent
+                // alongside the band rather than instead of it: the service falls back
+                // to the band's midpoint when this is absent, and a project whose
+                // members have never filled in a profile still gets an answer.
+                .put("avg_experience_years", averageExperienceYears(sprint.projectId()))
                 .put("domain", project.domain())
 
                 // ---- Retained for the mock client and the stored feature record ---
@@ -245,6 +262,34 @@ public class EstimationService {
      * rather than zero matters: the model reads a supplied zero as a team with
      * nobody on it, and an absent value as "assume a typical team".</p>
      */
+
+    /**
+     * Mean years of experience across the project's team, or null when nobody has
+     * recorded any.
+     *
+     * <p>Null rather than zero, and rather than a band midpoint computed here: the
+     * model service already falls back to the midpoint of {@code dev_experience_level}
+     * and records that it did so. Sending a number we invented would take that
+     * distinction away from it — the provenance would say the value was supplied when
+     * it was really assumed.</p>
+     *
+     * <p>Developers without a recorded figure are skipped rather than counted as zero.
+     * A team of four where one profile is filled in should read as that person's
+     * experience, not as a quarter of it.</p>
+     */
+    private BigDecimal averageExperienceYears(UUID projectId) {
+        List<BigDecimal> years = developers.candidatesFor(projectId).stream()
+                .map(DeveloperFeatureSource.DeveloperFeatures::yearsExperience)
+                .filter(java.util.Objects::nonNull)
+                .filter(value -> value.signum() > 0)
+                .toList();
+        if (years.isEmpty()) {
+            return null;
+        }
+        return years.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(years.size()), 1, RoundingMode.HALF_UP);
+    }
+
     private BigDecimal teamSizeFor(SprintFeatureSource.SprintFeatures sprint) {
         if (sprint.teamSize() != null && sprint.teamSize() > 0) {
             return BigDecimal.valueOf(sprint.teamSize());
