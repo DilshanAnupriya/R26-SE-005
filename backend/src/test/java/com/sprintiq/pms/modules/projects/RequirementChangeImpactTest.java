@@ -8,6 +8,8 @@ import com.sprintiq.pms.modules.projects.domain.RequirementChangeType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
 
@@ -67,6 +69,34 @@ class RequirementChangeImpactTest {
             assertThat(infer(RequirementChangeType.PRIORITY_CHANGED,
                     story(Priority.HIGH, null, null, 5),
                     story(Priority.HIGH, null, null, 5))).isNull();
+        }
+
+        /**
+         * Every single-step move, not just the extremes.
+         *
+         * <p>The two cases above are a two-band jump each, which the weight comparison
+         * gets right for the same reason it gets a one-band jump right — and that is
+         * exactly the kind of reasoning worth pinning rather than trusting. A neighbour
+         * move is the common case on a real board: nobody escalates MEDIUM straight to
+         * CRITICAL half as often as they nudge it to HIGH.</p>
+         */
+        @ParameterizedTest(name = "{0} to {1} reads as {2}")
+        @CsvSource({
+                "LOWEST,   LOW,      INCREASE",
+                "LOW,      MEDIUM,   INCREASE",
+                "MEDIUM,   HIGH,     INCREASE",
+                "HIGH,     CRITICAL, INCREASE",
+                "CRITICAL, HIGH,     DECREASE",
+                "HIGH,     MEDIUM,   DECREASE",
+                "MEDIUM,   LOW,      DECREASE",
+                "LOW,      LOWEST,   DECREASE",
+                "HIGH,     LOW,      DECREASE",
+        })
+        void everyNeighbouringMove(Priority before, Priority after,
+                                   ChangeImpactDirection expected) {
+            assertThat(infer(RequirementChangeType.PRIORITY_CHANGED,
+                    story(before, null, null, 5),
+                    story(after, null, null, 5))).isEqualTo(expected);
         }
     }
 

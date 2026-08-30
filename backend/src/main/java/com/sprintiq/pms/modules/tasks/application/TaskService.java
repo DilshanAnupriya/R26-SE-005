@@ -205,12 +205,27 @@ public class TaskService {
                 }
                 com.sprintiq.pms.modules.backlog.domain.StoryStatus newStatus = switch (request.status()) {
                     case IN_PROGRESS -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_PROGRESS;
+                    case IN_REVIEW -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_REVIEW;
                     case DONE -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.DONE;
                     case CANCELLED -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.CANCELLED;
+                    case BLOCKED -> story.getStatus();
                     default -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.BACKLOG;
                 };
-                story.setStatus(newStatus);
+                if (request.status() == TaskStatus.BLOCKED) {
+                    story.setBlocked(true);
+                } else if (story.isBlocked()) {
+                    story.setBlocked(false);
+                    story.setBlockedReason(null);
+                }
+                com.sprintiq.pms.modules.backlog.domain.StoryStatus previous = story.getStatus();
+                story.transitionTo(newStatus);
                 story = storyRepository.save(story);
+
+                if (previous != newStatus) {
+                    activityService.recordChange(target(story), ActivityAction.STATUS_CHANGED, "status",
+                            previous, newStatus,
+                            "%s moved from %s to %s".formatted(story.getItemKey(), previous, newStatus));
+                }
 
                 int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
                 var assignee = story.getAssigneeId() == null ? null
@@ -219,48 +234,7 @@ public class TaskService {
                 realtime.projectEvent(story.getProjectId(), "task.status_changed",
                         java.util.Map.of("taskId", String.valueOf(story.getId()), "status", request.status().name()));
 
-                return new TaskResponse(
-                        story.getId(),
-                        story.getProjectId(),
-                        story.getId(),
-                        null,
-                        story.getSprintId(),
-                        story.getWorkflowStateId(),
-                        story.getItemKey(),
-                        story.getTitle(),
-                        story.getDescription(),
-                        TaskType.TASK,
-                        request.status(),
-                        story.getPriority(),
-                        com.sprintiq.pms.common.domain.Severity.MINOR,
-                        story.getAssigneeId(),
-                        assignee != null ? assignee.fullName() : null,
-                        assignee != null ? assignee.avatarUrl() : null,
-                        com.sprintiq.pms.modules.tasks.domain.AssignmentSource.MANUAL,
-                        null,
-                        story.getReporterId(),
-                        estimateMins > 0 ? estimateMins : null,
-                        0,
-                        null,
-                        false,
-                        java.math.BigDecimal.valueOf(3.0),
-                        List.of(),
-                        null,
-                        story.getRank(),
-                        story.isBlocked(),
-                        story.getBlockedReason(),
-                        (short) 0,
-                        0,
-                        null,
-                        null,
-                        story.getCreatedAt(),
-                        story.getUpdatedAt(),
-                    0L,
-                    null,
-                    0L,
-                    0L,
-                    null
-                );
+                return toStoryTaskResponse(story, assignee, estimateMins);
             }
         }
 
@@ -501,10 +475,14 @@ public class TaskService {
                                             int estimateMins) {
         TaskStatus status = switch (story.getStatus()) {
             case IN_PROGRESS -> TaskStatus.IN_PROGRESS;
+            case IN_REVIEW -> TaskStatus.IN_REVIEW;
             case DONE -> TaskStatus.DONE;
             case CANCELLED -> TaskStatus.CANCELLED;
             default -> TaskStatus.TODO;
         };
+        if (story.isBlocked()) {
+            status = TaskStatus.BLOCKED;
+        }
 
         return new TaskResponse(
                 story.getId(),

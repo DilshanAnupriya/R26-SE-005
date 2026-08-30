@@ -128,6 +128,9 @@ export function useCompleteSprint(projectId: string) {
     onError: (error) => {
       toast.error(error instanceof ApiError ? error.message : "Could not close the sprint.");
     },
+    onSettled: (_data, _error, input) => {
+      invalidate(input.sprintId);
+    },
   });
 }
 

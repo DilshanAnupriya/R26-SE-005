@@ -60,13 +60,15 @@ export function useMoveTask(projectId: string) {
           .find((task) => task.id === input.taskId);
         if (!moving) return board;
 
+        const newStatus = statusForColumn(input.state) as any;
+
         return {
           ...board,
           columns: board.columns.map((column) => {
             const without = column.tasks.filter((task) => task.id !== input.taskId);
             const isTarget = column.state.id === input.state.id;
             const tasks = isTarget
-              ? [...without, { ...moving, workflowStateId: input.state.id }]
+              ? [...without, { ...moving, workflowStateId: input.state.id, status: newStatus }]
               : without;
             // itemCount drives the WIP badge, so it has to move with the card —
             // otherwise a drag that breaks a limit shows the old count until refetch.

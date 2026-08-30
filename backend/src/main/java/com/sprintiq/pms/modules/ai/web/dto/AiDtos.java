@@ -57,6 +57,22 @@ public final class AiDtos {
                                      BigDecimal confidence,
                                      BigDecimal lowerBound,
                                      BigDecimal upperBound,
+                                     /**
+                                      * The model's own number, before it was snapped to the
+                                      * nearest Fibonacci point.
+                                      *
+                                      * <p>Story points are reported on a scale of 1, 2, 3, 5, 8,
+                                      * 13, so everything the model puts between 6.5 and 10.5
+                                      * comes back as an 8. Two stories the model rated 6.8 and
+                                      * 9.9 — a difference of nearly half again — are
+                                      * indistinguishable once snapped, and a planner rightly
+                                      * concludes the model always says 8.</p>
+                                      *
+                                      * <p>Carried so the panel can show which 8s sit in the
+                                      * middle of their band and which are one small nudge from
+                                      * being a 5 or a 13. Null for models that do not snap.</p>
+                                      */
+                                     BigDecimal rawValue,
                                      List<PredictionDriverResponse> drivers,
                                      String explanation,
                                      PredictionStatus status,
@@ -71,10 +87,29 @@ public final class AiDtos {
                     prediction.getMode(), prediction.getEntityType(), prediction.getEntityId(),
                     prediction.getPredictedValue(), prediction.getPredictedLabel(),
                     prediction.getConfidence(), prediction.getLowerBound(), prediction.getUpperBound(),
+                    rawValueOf(prediction),
                     prediction.getDrivers().stream().map(PredictionDriverResponse::from).toList(),
                     prediction.getExplanation(), prediction.getStatus(),
                     prediction.getStatus() == PredictionStatus.DEGRADED,
                     prediction.isCacheHit(), prediction.getLatencyMs(), prediction.getCreatedAt());
+        }
+
+        /**
+         * Digs the pre-snap number out of the stored model response.
+         *
+         * <p>Read from {@code rawResponse} rather than given a column of its own: it is
+         * presentation detail for one model, it is already persisted with everything else
+         * the model said, and a migration to surface a number we are choosing to display
+         * differently would be the wrong trade.</p>
+         */
+        private static BigDecimal rawValueOf(AiPrediction prediction) {
+            Map<String, Object> response = prediction.getRawResponse();
+            if (response == null || !(response.get("raw") instanceof Map<?, ?> raw)) {
+                return null;
+            }
+            return raw.get("point") instanceof Number point
+                    ? BigDecimal.valueOf(point.doubleValue())
+                    : null;
         }
     }
 
@@ -251,6 +286,11 @@ public final class AiDtos {
                                               Instant doneAt) {
     }
 
+    @Schema(name = "AbsorbRiskChangeRequest",
+            description = "Whether the sprint has been re-planned around one logged "
+                    + "requirement change. The credit is the server's to decide.")
+    public record AbsorbRiskChangeRequest(boolean absorbed) {}
+
     @Schema(name = "ToggleRiskStepRequest")
     public record ToggleRiskStepRequest(@NotNull RiskType riskType,
                                         @NotBlank String stepKey,
@@ -306,7 +346,12 @@ public final class AiDtos {
             String sourceKey = adjustment.getSourceKey();
             return new RiskAdjustmentResponse(adjustment.getId(), adjustment.getSprintId(),
                     adjustment.getRiskType(), adjustment.getDelta(), adjustment.getReason(),
-                    adjustment.getCreatedAt(), sourceKey, codeOf(sourceKey), sourceKey != null,
+                    adjustment.getCreatedAt(), sourceKey, codeOf(sourceKey),
+                    // Keyed *and* foldable by the next scoring. A logged requirement change
+                    // carries a key too, so the key alone stopped being the test the moment
+                    // the register started using one — and a change nobody can un-log is
+                    // exactly what this field must not describe as self-clearing.
+                    sourceKey != null && !adjustment.isSurvivesScoring(),
                     adjustment.isSurvivesScoring());
         }
 
