@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { BrandMark } from "@/components/design/brand";
 
 /**
  * Auth pages sit on a centred card against a quiet, gradient-washed field.
@@ -21,9 +21,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         href="/"
         className="mb-8 flex items-center gap-2 font-semibold tracking-tight transition-opacity hover:opacity-80"
       >
-        <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Sparkles className="size-4" />
-        </span>
+        <BrandMark size={28} />
         SprintIQ
       </Link>
 

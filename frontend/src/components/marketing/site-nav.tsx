@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Menu, Sparkles, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/design/brand";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -35,9 +36,7 @@ export function SiteNav() {
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Sparkles className="size-3.5" />
-          </span>
+          <BrandMark size={24} />
           SprintIQ
         </Link>
 

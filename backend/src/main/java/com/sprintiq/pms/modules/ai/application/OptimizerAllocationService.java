@@ -33,6 +33,9 @@ public class OptimizerAllocationService {
     @Autowired(required = false)
     private OptimizerRankingService rankingService;
 
+    @Autowired(required = false)
+    private com.sprintiq.pms.modules.notifications.application.NotificationService notificationService;
+
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
@@ -233,6 +236,22 @@ public class OptimizerAllocationService {
                                 taskType
                         );
                     } catch (Exception memberEx) {}
+
+                    if (notificationService != null) {
+                        try {
+                            notificationService.notify(new com.sprintiq.pms.modules.notifications.application.NotificationService.Notify(
+                                    assigneeUid,
+                                    com.sprintiq.pms.modules.notifications.domain.NotificationType.ASSIGNED,
+                                    "%s was allocated to you by AI Optimizer".formatted(itemKey),
+                                    storyTitle != null ? storyTitle : taskType,
+                                    com.sprintiq.pms.common.domain.EntityType.STORY,
+                                    null,
+                                    "/projects"
+                            ));
+                        } catch (Exception notifEx) {
+                            System.err.println("Note: AI allocation notification: " + notifEx.getMessage());
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
