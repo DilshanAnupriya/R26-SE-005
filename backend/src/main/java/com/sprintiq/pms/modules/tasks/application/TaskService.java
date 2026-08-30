@@ -150,6 +150,14 @@ public class TaskService {
         task = taskRepository.save(task);
 
         activityService.recordCreated(target(task), "%s created".formatted(task.getItemKey()));
+
+        if (request.assigneeId() != null) {
+            notifications.notify(new NotificationService.Notify(request.assigneeId(),
+                    NotificationType.ASSIGNED, "%s was assigned to you".formatted(task.getItemKey()),
+                    task.getTitle(), EntityType.TASK, task.getId(),
+                    "/projects/%s/tasks/%s".formatted(task.getProjectId(), task.getId())));
+        }
+
         return toResponse(task);
     }
 
