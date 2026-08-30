@@ -105,7 +105,6 @@ const HELP_TEXT: Record<string, string> = {
   "Workload pressure": "The highest individual developer load: open estimated hours divided by that developer's effective capacity.",
   "Budget variance": "Forecast amount minus sprint budget. A positive value means the forecast is over budget.",
   "Prediction interval": "A heuristic likely range based on held-out model error; it is not a probability confidence interval.",
-  Confidence: "Calibrated model probability when available. Sprint cost models leave this blank rather than presenting the heuristic range as confidence.",
   "Cost drivers": "Initial forecasts show exact formula components. Mid-sprint forecasts add signed local Shapley influences that reconcile to the final amount.",
   "Latest stored forecast": "Most recently saved forecast for this sprint, loaded from forecast history.",
   "Team cost and workload": "Developer rates, availability, effective capacity, allocation, skills, and assigned workload used by sprint planning.",
@@ -927,7 +926,6 @@ function CostExplanationPanel({
   const budgetVariance = budget != null ? forecast.forecastAmount - budget : null;
   const drivers = "drivers" in forecast ? forecast.drivers : [];
   const explanation = "explanation" in forecast ? forecast.explanation : null;
-  const confidence = "confidence" in forecast ? forecast.confidence : null;
   const variancePct = "varianceVsBudgetPct" in forecast ? forecast.varianceVsBudgetPct : null;
   const errorMarginAmount = "errorMarginAmount" in forecast ? forecast.errorMarginAmount : null;
   const topDrivers = drivers
@@ -983,11 +981,6 @@ function CostExplanationPanel({
             ? `${money(forecast.lowerBound, currency)} - ${money(forecast.upperBound, currency)}`
             : "-"}
           detail={errorMarginAmount == null ? "No margin stored" : `± ${money(errorMarginAmount, currency)}`}
-        />
-        <ExplanationMetric
-          label="Confidence"
-          value={confidence == null ? "-" : `${number(confidence * 100)}%`}
-          detail={confidence == null ? "No calibrated probability available" : "Model confidence"}
         />
       </div>
 
