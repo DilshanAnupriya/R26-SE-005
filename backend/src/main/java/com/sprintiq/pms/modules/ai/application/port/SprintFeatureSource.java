@@ -54,7 +54,24 @@ public interface SprintFeatureSource {
                           long unestimatedCount,
                           long contributorCount,
                           BigDecimal rollingVelocity,
-                          List<BigDecimal> historicalVelocities) {
+                          List<BigDecimal> historicalVelocities,
+                          /**
+                           * Stories whose work began before this sprint opened.
+                           *
+                           * <p>The velocity model reads carry-over directly, and left
+                           * unsent it substituted a dataset median of 6 — inventing
+                           * spillover for a team that had none.</p>
+                           */
+                          long carriedOverCount,
+                          /**
+                           * Whether a capacity plan was ever entered for this sprint.
+                           *
+                           * <p>{@code absenceDays} is zero both when nobody was away and
+                           * when nobody filled the form in. Without this flag a model is
+                           * told the team was fully available in both cases, and the
+                           * flattering reading wins by accident.</p>
+                           */
+                          boolean capacityPlanned) {
 
         /** How far through the sprint we are, 0..1. Zero for sprints that have not started. */
         public BigDecimal elapsedFraction() {

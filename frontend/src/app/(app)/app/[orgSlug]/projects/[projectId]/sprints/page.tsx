@@ -432,18 +432,34 @@ function SprintDetail({
       </section>
 
       {capacity.data ? (
-        <section className="rounded-lg border p-4" aria-labelledby="capacity-heading">
+        <section className="rounded-lg border border-line p-4" aria-labelledby="capacity-heading">
           <h3 id="capacity-heading" className="text-sm font-medium">
             Capacity
           </h3>
-          <div className="mt-2 grid gap-3 sm:grid-cols-3">
-            <Stat label="Effective hours" value={capacity.data.totalEffectiveHours ?? "—"} />
-            <Stat label="Capacity points" value={capacity.data.capacityPoints ?? "—"} />
-            <Stat
-              label="Utilisation"
-              value={capacity.data.utilisationPct != null ? `${capacity.data.utilisationPct}%` : "—"}
-            />
-          </div>
+          {/* An empty member list is not a team with nothing to do — it is a form
+              nobody filled in. The two look identical in every number below (zero
+              absence, 100% availability), so the difference has to be said out loud
+              or the flattering reading wins by default. */}
+          {capacity.data.members.length === 0 ? (
+            <p className="mt-2 text-xs leading-relaxed text-ink-2">
+              No capacity plan has been entered for this sprint. Availability and leave
+              days are unknown rather than zero, so the velocity model falls back to the
+              average of its training data for both and reports that it did.
+            </p>
+          ) : (
+            <div className="mt-2 grid gap-3 sm:grid-cols-3">
+              <Stat label="Effective hours" value={capacity.data.totalEffectiveHours ?? "—"} />
+              <Stat label="Capacity points" value={capacity.data.capacityPoints ?? "—"} />
+              <Stat
+                label="Utilisation"
+                value={
+                  capacity.data.utilisationPct != null
+                    ? `${capacity.data.utilisationPct}%`
+                    : "—"
+                }
+              />
+            </div>
+          )}
         </section>
       ) : null}
 
