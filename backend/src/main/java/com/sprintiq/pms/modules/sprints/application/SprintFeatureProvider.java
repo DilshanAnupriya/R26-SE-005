@@ -38,6 +38,7 @@ public class SprintFeatureProvider implements SprintFeatureSource {
     private static final int HISTORY_WINDOW = 6;
 
     private final SprintRepository sprintRepository;
+    private final com.sprintiq.pms.modules.sprints.domain.SprintCapacityRepository capacityRepository;
     private final SprintBacklogService sprintBacklog;
     private final SprintMetricsService metricsService;
 
@@ -79,7 +80,9 @@ public class SprintFeatureProvider implements SprintFeatureSource {
                 snapshot.storyCount(), snapshot.completedCount(), snapshot.blockedCount(),
                 snapshot.defectCount(), snapshot.reopenedCount(), snapshot.unestimatedCount(),
                 snapshot.contributorCount(),
-                metricsService.rollingVelocity(sprint.getProjectId()), chronological);
+                metricsService.rollingVelocity(sprint.getProjectId()), chronological,
+                sprintBacklog.carriedOverIn(sprintId, startInstant(sprint)),
+                capacityRepository.existsBySprintId(sprintId));
     }
 
     @Override
@@ -89,6 +92,20 @@ public class SprintFeatureProvider implements SprintFeatureSource {
                 .limit(limit)
                 .map(Sprint::getId)
                 .toList();
+    }
+
+
+    /**
+     * The sprint's start as an instant, for comparing against story start times.
+     *
+     * <p>Midnight in the system zone rather than UTC: a sprint starting "on the 3rd"
+     * means the team's third, and a story begun at 9am local on the 3rd is not
+     * carried-over work from the 2nd.</p>
+     */
+    private java.time.Instant startInstant(Sprint sprint) {
+        return sprint.getStartDate() == null
+                ? null
+                : sprint.getStartDate().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant();
     }
 
     // ------------------------------------------------------------------ internals

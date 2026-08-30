@@ -47,17 +47,22 @@ def d(off): return (MONDAY + timedelta(days=off)).isoformat()
 # Four people with different rates and seniorities. The cost model reads a blended
 # hourly rate and a seniority mix; a team of identical clones makes every allocation
 # suggestion arbitrary and every cost forecast a multiplication.
+# Years are a real model input, not decoration: the velocity model reads
+# avg_experience_years, and without a figure on each profile it falls back to the
+# midpoint of the project's experience band. A spread that is not just the band's
+# midpoint four times over is what makes the average worth computing.
 TEAM = [
-    ("maya.reeves@acme.test",  "Maya Reeves",  "SENIOR", 95, 40, 1.0),
-    ("tom.okafor@acme.test",   "Tom Okafor",   "MID",    70, 40, 0.9),
-    ("ines.duarte@acme.test",  "Ines Duarte",  "SENIOR", 92, 32, 0.8),
-    ("kabir.shah@acme.test",   "Kabir Shah",   "JUNIOR", 45, 40, 1.0),
+    #  email, name, seniority, years, rate, weekly hours, availability
+    ("maya.reeves@acme.test",  "Maya Reeves",  "SENIOR", 9.0, 95, 40, 1.0),
+    ("tom.okafor@acme.test",   "Tom Okafor",   "MID",    4.5, 70, 40, 0.9),
+    ("ines.duarte@acme.test",  "Ines Duarte",  "SENIOR", 7.5, 92, 32, 0.8),
+    ("kabir.shah@acme.test",   "Kabir Shah",   "JUNIOR", 1.0, 45, 40, 1.0),
 ]
 
 
 def ensure_team():
     people = []
-    for email, name, seniority, rate, capacity, availability in TEAM:
+    for email, name, seniority, years, rate, capacity, availability in TEAM:
         invite = call("POST", "/organizations/current/invitations",
                       {"email": email, "roleId": MEMBER_ROLE}, quiet=True)
         if invite and invite.get("inviteToken"):
@@ -71,7 +76,7 @@ def ensure_team():
             continue
         uid = match["id"]
         call("PUT", f"/users/{uid}/developer-profile", {
-            "seniority": seniority, "hourlyRate": rate,
+            "seniority": seniority, "yearsExperience": years, "hourlyRate": rate,
             "weeklyCapacityHours": capacity, "availabilityRate": availability}, quiet=True)
         people.append((uid, name))
     return people

@@ -167,6 +167,23 @@ public interface StoryRepository extends JpaRepository<Story, UUID> {
             """)
     long countBlocked(@Param("projectId") UUID projectId);
 
+    /**
+     * Work in this sprint that was already under way before it started.
+     *
+     * <p>The velocity model's {@code carryover_tasks}. Measured by start time rather
+     * than by reading sprint-move history: a story whose work began before this sprint
+     * opened is carried-over work whatever route it took to get here, and the audit
+     * trail would answer a narrower question — how it moved, not whether it is a
+     * continuation.</p>
+     */
+    @Query("""
+            SELECT COUNT(s) FROM Story s
+            WHERE s.sprintId = :sprintId AND s.deletedAt IS NULL
+              AND s.startedAt IS NOT NULL AND s.startedAt < :sprintStart
+            """)
+    long countCarriedOver(@Param("sprintId") UUID sprintId,
+                          @Param("sprintStart") java.time.Instant sprintStart);
+
     @Query("""
             SELECT COALESCE(SUM(s.storyPoints), 0) FROM Story s
             WHERE s.sprintId = :sprintId AND s.deletedAt IS NULL
