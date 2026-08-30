@@ -97,7 +97,12 @@ export function LogStoryChangeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      {/*
+        Wider than the default, because this form is now two columns of paired controls
+        rather than one tall stack — and the criteria list needs room for a sentence per
+        row without wrapping every one of them.
+      */}
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Log a change</DialogTitle>
           <DialogDescription>
@@ -219,26 +224,52 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    /*
+      Bounded rather than allowed to run off the screen. The dialog is centred on the
+      viewport, so an over-tall form clipped at both ends with no way to reach either —
+      the submit button included.
+    */
+    <form onSubmit={submit} className="max-h-[72dvh] space-y-3 overflow-y-auto pr-1">
       {/*
         The story first, and stated rather than chosen. The dialog is opened from a
         row, so a picker here could only ever disagree with the row that opened it.
       */}
+      {/*
+        One line at this width. The key, the title and the facts that matter read across
+        rather than stacking, which is a row of dialog height back.
+      */}
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg border border-line bg-surface-2 px-3 py-2">
+        <span className="font-mono text-2xs text-ink-3">{loaded.itemKey}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{loaded.title}</span>
+        <span className="text-xs text-ink-3">
+          {priorityLabel(loaded.priority)} priority
+          {loaded.storyPoints != null ? ` · ${loaded.storyPoints} points` : " · unestimated"}
+          {loaded.sprintId ? "" : " · not in a sprint"}
+        </span>
+      </div>
+
+      {/*
+        Two selects, one row. They belong together at this width: the left one names what
+        is being logged, and moving the right one is what sets it.
+      */}
+      <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-1.5">
-        <Label>User story</Label>
-        <div className="rounded-lg border border-line bg-surface-2 px-3 py-2">
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xs text-ink-3">{loaded.itemKey}</span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">
-              {loaded.title}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-ink-3">
-            {priorityLabel(loaded.priority)} priority
-            {loaded.storyPoints != null ? ` · ${loaded.storyPoints} points` : " · unestimated"}
-            {loaded.sprintId ? "" : " · not in a sprint"}
-          </p>
-        </div>
+        <Label htmlFor="story-change-type">What changed?</Label>
+        <Select
+          value={changeType}
+          onValueChange={(value) => chooseType(value as RequirementChangeType)}
+        >
+          <SelectTrigger id="story-change-type" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REQUIREMENT_CHANGE_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {TYPE_LABEL[type]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/*
@@ -289,6 +320,7 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
             changeType="PRIORITY_CHANGED"
           />
         ) : null}
+      </div>
       </div>
 
       {/*
@@ -346,37 +378,7 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
         </p>
       ) : null}
 
-      <div className="space-y-1.5">
-        <Label htmlFor="story-change-type">What changed?</Label>
-        <Select
-          value={changeType}
-          onValueChange={(value) => chooseType(value as RequirementChangeType)}
-        >
-          <SelectTrigger id="story-change-type" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {REQUIREMENT_CHANGE_TYPES.map((type) => (
-              <SelectItem key={type} value={type}>
-                {TYPE_LABEL[type]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="story-change-note">Detail</Label>
-        <Textarea
-          id="story-change-note"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          rows={2}
-          placeholder="Why this moved, and who asked"
-        />
-      </div>
-
-      {/* The change itself, under the detail — this is what actually edits the story. */}
+      {/* What actually edits the story, for whichever type is selected. */}
       <ChangeEditor
         changeType={changeType}
         story={loaded}
@@ -388,14 +390,28 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
         onStoryPoints={setStoryPoints}
       />
 
-      <div className="space-y-1.5">
-        <Label htmlFor="story-change-requester">Requested by</Label>
-        <Input
-          id="story-change-requester"
-          value={requestedByName}
-          onChange={(event) => setRequestedByName(event.target.value)}
-          placeholder="e.g. Product owner, compliance, the customer"
-        />
+      {/* The two free-text fields, paired — neither needs the full width. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="story-change-note">Detail</Label>
+          <Textarea
+            id="story-change-note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            rows={2}
+            placeholder="Why this moved, and who asked"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="story-change-requester">Requested by</Label>
+          <Input
+            id="story-change-requester"
+            value={requestedByName}
+            onChange={(event) => setRequestedByName(event.target.value)}
+            placeholder="e.g. Product owner, compliance"
+          />
+        </div>
       </div>
 
       {loaded.sprintId ? (

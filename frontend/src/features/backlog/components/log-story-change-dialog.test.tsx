@@ -61,12 +61,32 @@ describe("Log a change", () => {
     open();
 
     const dialog = await screen.findByRole("dialog");
-    const labels = within(dialog).getAllByText(/User story|What changed\?/);
-    // The story is the first thing on the form. Opened from a row, it is a statement
-    // about which row — anything that let it be chosen could disagree with the row.
-    expect(labels[0]).toHaveTextContent("User story");
-    expect(within(dialog).getByText("MBA-14")).toBeInTheDocument();
+    const key = within(dialog).getByText("MBA-14");
     expect(within(dialog).getByText("Export the settlement report")).toBeInTheDocument();
+
+    // The story is the first thing on the form. Opened from a row, it is a statement
+    // about which row — anything that let it be chosen could disagree with the row. So
+    // it has to precede the first control, not merely be somewhere on the form.
+    const firstControl = within(dialog).getByText("What changed?");
+    expect(
+      key.compareDocumentPosition(firstControl) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("lays the paired controls out in two columns, inside a bounded form", async () => {
+    open();
+
+    const dialog = await screen.findByRole("dialog");
+    // Structural rather than visual, but it is the part that regresses silently: a
+    // reflow that drops the grid puts the form back to one tall stack, and nothing
+    // else in this file would notice.
+    expect(dialog.className).toContain("sm:max-w-3xl");
+
+    const form = dialog.querySelector("form");
+    // The dialog is centred on the viewport, so an unbounded form clips at both ends
+    // and takes the submit button with it.
+    expect(form?.className).toContain("overflow-y-auto");
+    expect(form?.querySelectorAll(":scope > .grid.sm\\:grid-cols-2")).toHaveLength(2);
   });
 
   it("sends only the field the change type owns", async () => {
