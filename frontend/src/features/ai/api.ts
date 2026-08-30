@@ -11,11 +11,13 @@ import {
   costValidationSchema,
   feedbackSchema,
   riskAdjustmentSchema,
+  riskAdvisorSchema,
   riskAssessmentSchema,
   sprintRiskSchema,
   storyPointEstimateSchema,
   velocityPredictionSchema,
   type FeedbackAction,
+  type RiskQuestionTurn,
 } from "@/lib/api/ai-schemas";
 
 /** Calls to the AI layer. Every one returns the same envelope shape. */
@@ -111,6 +113,24 @@ export const aiApi = {
       method: "POST",
       body,
       schema: feedbackSchema,
+    }),
+
+  /**
+   * A question about one sprint's risk.
+   *
+   * <p>The sprint's figures are assembled server-side on every call, so the client
+   * sends only the question and the thread. Nothing about the sprint travels from
+   * here, and nothing the client says can change what the model is told about it.</p>
+   */
+  askRiskAdvisor: (
+    api: ApiClient,
+    sprintId: string,
+    body: { question: string; history: RiskQuestionTurn[] },
+  ) =>
+    api.request(`/ai/risk/sprint/${sprintId}/ask`, {
+      method: "POST",
+      body,
+      schema: riskAdvisorSchema,
     }),
 
   projectInsights: (api: ApiClient, projectId: string) =>

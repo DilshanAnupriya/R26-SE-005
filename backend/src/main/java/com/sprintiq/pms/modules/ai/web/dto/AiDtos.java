@@ -3,6 +3,10 @@ package com.sprintiq.pms.modules.ai.web.dto;
 import com.sprintiq.pms.common.domain.EntityType;
 import com.sprintiq.pms.modules.ai.domain.*;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
@@ -416,6 +420,40 @@ public final class AiDtos {
                                      RiskSeverity highestSeverity,
                                      /** The three weighted into one figure. Null when none scored. */
                                      OverallRiskResponse overall) {}
+
+    @Schema(name = "RiskQuestionRequest",
+            description = "A question about a sprint's risk, with the conversation so far")
+    public record RiskQuestionRequest(
+            @Schema(description = "What the user is asking about this sprint's risk",
+                    example = "Why is the over-budget risk so high?")
+            @NotBlank @Size(max = 2000) String question,
+            /**
+             * Earlier turns, oldest first. Optional: the sprint's figures are re-sent on
+             * every question, so an empty history costs nothing but the thread.
+             *
+             * <p>Capped here as well as in the service. The service decides how much it
+             * is willing to replay; this decides how much it is willing to receive, and
+             * a request body is not the place to discover the difference.</p>
+             */
+            @Valid @Size(max = 40) List<RiskQuestionTurn> history) {
+
+        public List<RiskQuestionTurn> history() {
+            return history == null ? List.of() : history;
+        }
+    }
+
+    @Schema(name = "RiskQuestionTurn", description = "One earlier turn of the conversation")
+    public record RiskQuestionTurn(
+            /**
+             * {@code user} or {@code assistant}, and nothing else.
+             *
+             * <p>Rejected at the edge rather than filtered later. A client that could put
+             * {@code system} here would be writing the advisor's instructions, and every
+             * rule the prompt sets — do not invent figures, do not rescore the sprint —
+             * would be one request away from being switched off.</p>
+             */
+            @Pattern(regexp = "user|assistant") String role,
+            @NotBlank @Size(max = 8000) String content) {}
 
     @Schema(name = "RiskAdvisorResponse",
             description = "A narrative advisory over a sprint's risk, or why there is none")
