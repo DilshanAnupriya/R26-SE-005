@@ -56,20 +56,31 @@ export function RiskCard({
   onAcknowledge?: (assessmentId: string) => void;
   acknowledging?: boolean;
 }) {
-  const pct = Math.round(assessment.riskScore * 100);
+  // The adjusted score, not the model's own. `latest` folds the board's ledger into
+  // every assessment it returns, and reading `riskScore` here showed the figure from
+  // whenever Assess was last pressed — so this card and the risk analysis page
+  // disagreed about the same sprint. Same precedence the analysis page uses.
+  const displayed = assessment.adjustedScore ?? assessment.riskScore;
+  const severity = assessment.adjustedSeverity ?? assessment.severity;
+  const delta = assessment.adjustmentDelta ?? 0;
+  const pct = Math.round(displayed * 100);
   const acknowledged = Boolean(assessment.acknowledgedAt);
-  const Icon = assessment.atRisk ? AlertTriangle : ShieldCheck;
+  // `atRisk` is the model's own binary call on its own score, so the board pushing a
+  // sprint past the threshold has to be honoured here too — the alternative is a green
+  // all-clear beside a red percentage.
+  const atRisk = assessment.atRisk || displayed >= 0.5;
+  const Icon = atRisk ? AlertTriangle : ShieldCheck;
 
   return (
     <article
-      className={cn("rounded-lg border p-3", assessment.atRisk && "border-amber-500/40")}
+      className={cn("rounded-lg border p-3", atRisk && "border-amber-500/40")}
       aria-labelledby={`risk-${assessment.id}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 id={`risk-${assessment.id}`} className="flex items-center gap-1.5 text-sm font-medium">
             <Icon
-              className={cn("size-4", assessment.atRisk ? "text-amber-600" : "text-emerald-600")}
+              className={cn("size-4", atRisk ? "text-amber-600" : "text-emerald-600")}
               aria-hidden
             />
             <span title={RISK_BASIS[assessment.riskType]}>
@@ -78,8 +89,8 @@ export function RiskCard({
           </h3>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-2xl font-semibold tabular-nums">{pct}%</span>
-            <Badge className={cn("border-0", SEVERITY_TONE[assessment.severity])}>
-              {assessment.severity}
+            <Badge className={cn("border-0", SEVERITY_TONE[severity])}>
+              {severity}
             </Badge>
             {acknowledged ? (
               <Badge variant="outline" className="gap-1">
@@ -88,6 +99,23 @@ export function RiskCard({
               </Badge>
             ) : null}
           </div>
+          {delta !== 0 ? (
+            // The model's own figure stays visible beneath the adjusted one. A
+            // dashboard that cannot be reconciled with the prediction record gets
+            // distrusted — same line the risk analysis page carries.
+            <p className="mt-1 text-xs text-muted-foreground">
+              Model said {Math.round(assessment.riskScore * 100)}%
+              <span
+                className={cn(
+                  "ml-1 font-semibold",
+                  delta > 0 ? "text-destructive" : "text-emerald-600",
+                )}
+              >
+                {delta > 0 ? "+" : ""}
+                {delta} from the board
+              </span>
+            </p>
+          ) : null}
         </div>
       </div>
 
