@@ -21,11 +21,14 @@ import {
   Scale,
   X,
   RotateCcw,
+  ShieldAlert,
 } from "lucide-react";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
 import { getTokenStore } from "@/lib/api/token-store";
 import { getActiveOrganization } from "@/lib/api/org-context";
+import { useSession } from "@/components/session-provider";
+import { cn } from "@/lib/utils";
 
 async function authFetch(url: string, options: RequestInit = {}) {
   const tokenStore = getTokenStore();
@@ -209,12 +212,14 @@ function AIExplanationModal({
   onClose,
   onApprove,
   isApproved,
+  canManageAllocations = true,
 }: {
   rec: DeveloperRec;
   taskTitle: string;
   onClose: () => void;
   onApprove: () => void;
   isApproved: boolean;
+  canManageAllocations?: boolean;
 }) {
   const explanation = generateExplanation(rec, taskTitle);
 
@@ -344,7 +349,7 @@ function AIExplanationModal({
           >
             Close
           </button>
-          {!isApproved && rec.status !== "ALLOCATED" && (
+          {!isApproved && rec.status !== "ALLOCATED" && canManageAllocations && (
             <button
               onClick={() => {
                 onApprove();
@@ -487,6 +492,7 @@ function DevCard({
   onViewWorkload,
   onViewExplanation,
   approving,
+  canManageAllocations = true,
 }: {
   rec: DeveloperRec;
   taskTitle: string;
@@ -498,6 +504,7 @@ function DevCard({
   onViewWorkload: (id: number, devId: string) => void;
   onViewExplanation: (rec: DeveloperRec) => void;
   approving: boolean;
+  canManageAllocations?: boolean;
 }) {
   const isThisApproved = rec.status === "ALLOCATED";
   const isDeclined = rec.status === "DECLINED";
@@ -604,7 +611,7 @@ function DevCard({
 
       {/* Action buttons */}
       <AnimatePresence>
-        {selected && isRecommended && !isApproved && (
+        {selected && isRecommended && !isApproved && canManageAllocations && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -644,6 +651,7 @@ function DevCard({
 
 function TaskRow({
   group,
+  canManageAllocations = true,
   onApprove,
   onDecline,
   onUnassignTask,
@@ -651,6 +659,7 @@ function TaskRow({
   onViewExplanation,
 }: {
   group: TaskGroup;
+  canManageAllocations?: boolean;
   onApprove: (allocationId: number, developerId: number) => Promise<void>;
   onDecline: (allocationId: number) => Promise<void>;
   onUnassignTask: (taskRawId: number) => Promise<void>;
@@ -755,7 +764,7 @@ function TaskRow({
             {isApproved ? "Approved" : "Pending"}
           </div>
 
-          {isApproved && (
+          {isApproved && canManageAllocations && (
             <button
               onClick={handleUnassign}
               disabled={unassigning}
@@ -801,13 +810,14 @@ function TaskRow({
                     rec={rec}
                     taskTitle={group.title}
                     selected={selectedAllocId === rec.id}
-                    onSelect={() => setSelectedAllocId(rec.id === selectedAllocId ? null : rec.id)}
                     isApproved={isApproved}
+                    approving={approving}
+                    canManageAllocations={canManageAllocations}
+                    onSelect={() => setSelectedAllocId(rec.id === selectedAllocId ? null : rec.id)}
                     onApprove={() => handleApprove(rec)}
                     onDecline={() => handleDecline(rec)}
                     onViewWorkload={onViewWorkload}
                     onViewExplanation={(r) => onViewExplanation(r, group.title)}
-                    approving={approving}
                   />
                 ))}
               </div>
@@ -960,6 +970,14 @@ export default function AIAllocationView() {
     }
   };
 
+  const { user, hasPermission } = useSession();
+  const roleCode = user?.activeRole?.toUpperCase() || "MEMBER";
+  const canManageAllocations = 
+    roleCode === "OWNER" || 
+    roleCode === "ADMIN" || 
+    roleCode === "MANAGER" || 
+    hasPermission("sprint:manage");
+
   const pendingCount = taskGroups.filter((g) => g.overallStatus !== "Approved").length;
   const approvedCount = taskGroups.filter((g) => g.overallStatus === "Approved").length;
 
@@ -995,14 +1013,20 @@ export default function AIAllocationView() {
 
           <button
             onClick={generateRecommendations}
-            disabled={generating || !selectedSprintId}
-            className="px-3.5 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg text-xs font-semibold transition-colors border border-border flex items-center gap-1.5 disabled:opacity-50 shadow-sm cursor-pointer"
+            disabled={generating || !selectedSprintId || !canManageAllocations}
+            className={cn(
+              "px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors border flex items-center gap-1.5 shadow-sm",
+              canManageAllocations
+                ? "bg-muted hover:bg-muted/80 text-foreground border-border cursor-pointer"
+                : "bg-muted/30 text-muted-foreground border-border/40 opacity-60 cursor-not-allowed"
+            )}
+            title={canManageAllocations ? "Run AI resource ranking for sprint" : "Sprint re-ranking restricted to Managers & Admins"}
           >
             {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             <span>Re-Rank Sprint</span>
           </button>
 
-          {pendingCount > 0 && (
+          {canManageAllocations && pendingCount > 0 && (
             <button
               onClick={handleApproveAll}
               disabled={approvingAll || !selectedSprintId}
@@ -1013,7 +1037,7 @@ export default function AIAllocationView() {
             </button>
           )}
 
-          {approvedCount > 0 && (
+          {canManageAllocations && approvedCount > 0 && (
             <button
               onClick={handleUnassignAll}
               disabled={unassigningAll || !selectedSprintId}
@@ -1042,6 +1066,7 @@ export default function AIAllocationView() {
             <TaskRow
               key={group.taskId}
               group={group}
+              canManageAllocations={canManageAllocations}
               onApprove={handleApprove}
               onDecline={handleDecline}
               onUnassignTask={handleUnassignTask}
@@ -1069,6 +1094,7 @@ export default function AIAllocationView() {
           onClose={() => setExplanationRec(null)}
           onApprove={() => handleApprove(explanationRec.rec.id, explanationRec.rec.developerId)}
           isApproved={explanationRec.rec.status === "ALLOCATED"}
+          canManageAllocations={canManageAllocations}
         />
       )}
     </div>
