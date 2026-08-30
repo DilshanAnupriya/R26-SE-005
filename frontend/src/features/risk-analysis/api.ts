@@ -126,6 +126,28 @@ export const riskApi = {
       schema: z.array(riskRemediationStepSchema),
     }),
 
+  /**
+   * Claims, or withdraws the claim, that the sprint has been re-planned around one
+   * logged requirement change.
+   *
+   * <p>Names the ledger entry and nothing else, for the same reason {@link toggleStep}
+   * does: the credit is the server’s to decide. Returns the whole ledger, because
+   * the claim lands in it as a row of its own beside the charge it answers.</p>
+   */
+  absorbChange: (
+    api: ApiClient,
+    sprintId: string,
+    body: { adjustmentId: string; absorbed: boolean },
+  ) =>
+    api.request(
+      `/ai/risk/sprint/${sprintId}/adjustments/${body.adjustmentId}/absorb`,
+      {
+        method: "POST",
+        body: { absorbed: body.absorbed },
+        schema: z.array(riskAdjustmentSchema),
+      },
+    ),
+
   compare: (api: ApiClient, sprintIds: string[]) =>
     api.request("/ai/risk/compare", {
       schema: z.array(sprintRiskComparisonSchema),

@@ -11,7 +11,7 @@ import type {
 } from "@/lib/api/ai-schemas";
 import { RISK_MODELS, WEIGHT_LABEL } from "../risk-models";
 import { asPercent, RiskGauge, SeverityBadge } from "./risk-gauge";
-import { RiskExplanations, type StepToggle } from "./risk-explanations";
+import { RiskExplanations, type AbsorbToggle, type StepToggle } from "./risk-explanations";
 
 function formatWhen(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -41,6 +41,8 @@ export function SprintRiskOverview({
   assessing,
   onToggleStep,
   togglingStepKey,
+  onAbsorb,
+  absorbingId,
 }: {
   risk?: SprintRisk;
   adjustments?: RiskAdjustment[];
@@ -50,6 +52,8 @@ export function SprintRiskOverview({
   assessing?: boolean;
   onToggleStep?: StepToggle;
   togglingStepKey?: string | null;
+  onAbsorb?: AbsorbToggle;
+  absorbingId?: string | null;
 }) {
   const anyScored = RISK_MODELS.some((model) => risk?.[model.key] != null);
 
@@ -103,10 +107,13 @@ export function SprintRiskOverview({
 
       <RiskExplanations
         risk={risk}
+        adjustments={adjustments}
         steps={steps}
         loading={loading}
         onToggleStep={onToggleStep}
         togglingStepKey={togglingStepKey}
+        onAbsorb={onAbsorb}
+        absorbingId={absorbingId}
       />
 
       <AdjustmentLedger adjustments={adjustments ?? []} />

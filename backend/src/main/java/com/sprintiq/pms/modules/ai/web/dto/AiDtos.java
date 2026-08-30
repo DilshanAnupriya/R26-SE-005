@@ -286,6 +286,11 @@ public final class AiDtos {
                                               Instant doneAt) {
     }
 
+    @Schema(name = "AbsorbRiskChangeRequest",
+            description = "Whether the sprint has been re-planned around one logged "
+                    + "requirement change. The credit is the server's to decide.")
+    public record AbsorbRiskChangeRequest(boolean absorbed) {}
+
     @Schema(name = "ToggleRiskStepRequest")
     public record ToggleRiskStepRequest(@NotNull RiskType riskType,
                                         @NotBlank String stepKey,
@@ -341,7 +346,12 @@ public final class AiDtos {
             String sourceKey = adjustment.getSourceKey();
             return new RiskAdjustmentResponse(adjustment.getId(), adjustment.getSprintId(),
                     adjustment.getRiskType(), adjustment.getDelta(), adjustment.getReason(),
-                    adjustment.getCreatedAt(), sourceKey, codeOf(sourceKey), sourceKey != null,
+                    adjustment.getCreatedAt(), sourceKey, codeOf(sourceKey),
+                    // Keyed *and* foldable by the next scoring. A logged requirement change
+                    // carries a key too, so the key alone stopped being the test the moment
+                    // the register started using one — and a change nobody can un-log is
+                    // exactly what this field must not describe as self-clearing.
+                    sourceKey != null && !adjustment.isSurvivesScoring(),
                     adjustment.isSurvivesScoring());
         }
 
