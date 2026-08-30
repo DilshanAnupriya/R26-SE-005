@@ -70,6 +70,11 @@ const PRIORITY_WEIGHT: Record<Priority, number> = {
   CRITICAL: 5,
 };
 
+/** A priority as somebody would say it: CRITICAL reads as "Critical". */
+function priorityLabel(priority: Priority): string {
+  return priority.charAt(0) + priority.slice(1).toLowerCase();
+}
+
 export function LogStoryChangeDialog({
   storyId,
   open,
@@ -118,6 +123,15 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
   const apply = useApplyRequirementChange(story.id);
 
   const [changeType, setChangeType] = useState<RequirementChangeType>("SCOPE_ADDED");
+  /**
+   * The type the author last chose for themselves.
+   *
+   * <p>Moving the priority switches the type to PRIORITY_CHANGED, because that is what
+   * the edit has become. Setting it back has to undo that too, or the form is stranded on
+   * a change type nobody picked, describing a field that no longer moved.</p>
+   */
+  const [typeBeforePriority, setTypeBeforePriority] =
+    useState<RequirementChangeType | null>(null);
   // Starting where the story already is, so what gets submitted is a diff the user made
   // rather than a blank they retyped.
   const [priority, setPriority] = useState<Priority>(story.priority);
@@ -131,6 +145,35 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
   const [attachToSprint, setAttachToSprint] = useState(true);
 
   const loaded = story;
+
+  /** The dropdown's own choice, which supersedes anything the priority field switched to. */
+  function chooseType(next: RequirementChangeType) {
+    setTypeBeforePriority(null);
+    setChangeType(next);
+  }
+
+  /**
+   * Moving the priority is a priority change, so the form says so.
+   *
+   * <p>The server writes only the field the chosen type owns, so a priority edited while
+   * the type still reads "Description updated" would be dropped on the floor and the
+   * sprint charged for something else entirely. Switching the type is what makes this
+   * control mean what it looks like it means.</p>
+   */
+  function choosePriority(next: Priority) {
+    setPriority(next);
+    if (next !== story.priority) {
+      if (changeType !== "PRIORITY_CHANGED") {
+        setTypeBeforePriority(changeType);
+        setChangeType("PRIORITY_CHANGED");
+      }
+      return;
+    }
+    if (typeBeforePriority !== null) {
+      setChangeType(typeBeforePriority);
+      setTypeBeforePriority(null);
+    }
+  }
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -167,18 +210,68 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
             </span>
           </div>
           <p className="mt-0.5 text-xs text-ink-3">
-            {loaded.priority.charAt(0) + loaded.priority.slice(1).toLowerCase()} priority
+            {priorityLabel(loaded.priority)} priority
             {loaded.storyPoints != null ? ` · ${loaded.storyPoints} points` : " · unestimated"}
             {loaded.sprintId ? "" : " · not in a sprint"}
           </p>
         </div>
       </div>
 
+      {/*
+        Priority is a permanent field rather than one the change-type dropdown reveals.
+        It is the property people actually open this dialog to move, and a control you
+        have to go looking for is one that gets changed on the board instead — which is
+        the drift between the backlog and the register this dialog exists to close.
+      */}
+      <div
+        className={cn(
+          "space-y-1.5 rounded-lg border p-3 transition-colors",
+          changeType === "PRIORITY_CHANGED"
+            ? "border-accent bg-accent-soft/40"
+            : "border-line bg-surface-2/50",
+        )}
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <Label htmlFor="story-change-priority">Priority</Label>
+          <span className="text-2xs text-ink-3">
+            {priority === loaded.priority ? "Unchanged" : `Was ${priorityLabel(loaded.priority)}`}
+          </span>
+        </div>
+        <Select value={priority} onValueChange={(value) => choosePriority(value as Priority)}>
+          <SelectTrigger id="story-change-priority" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PRIORITIES.map((value) => (
+              <SelectItem key={value} value={value}>
+                {priorityLabel(value)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/*
+          Only once it has actually moved. A permanent field carrying a permanent
+          "nothing has moved yet" would train people to stop reading the one line here
+          that matters when it does.
+        */}
+        {priority !== loaded.priority ? (
+          <DirectionPreview
+            field="priority"
+            story={loaded}
+            priority={priority}
+            description={description}
+            acceptanceCriteria={acceptanceCriteria}
+            storyPoints={storyPoints}
+            changeType="PRIORITY_CHANGED"
+          />
+        ) : null}
+      </div>
+
       <div className="space-y-1.5">
         <Label htmlFor="story-change-type">What changed?</Label>
         <Select
           value={changeType}
-          onValueChange={(value) => setChangeType(value as RequirementChangeType)}
+          onValueChange={(value) => chooseType(value as RequirementChangeType)}
         >
           <SelectTrigger id="story-change-type" className="w-full">
             <SelectValue />
@@ -209,7 +302,6 @@ function ChangeForm({ story, onDone }: { story: Story; onDone: () => void }) {
         changeType={changeType}
         story={loaded}
         priority={priority}
-        onPriority={setPriority}
         description={description}
         onDescription={setDescription}
         acceptanceCriteria={acceptanceCriteria}
@@ -281,7 +373,6 @@ function ChangeEditor({
   changeType,
   story,
   priority,
-  onPriority,
   description,
   onDescription,
   acceptanceCriteria,
@@ -292,7 +383,6 @@ function ChangeEditor({
   changeType: RequirementChangeType;
   story: Story;
   priority: Priority;
-  onPriority: (value: Priority) => void;
   description: string;
   onDescription: (value: string) => void;
   acceptanceCriteria: string;
@@ -311,21 +401,19 @@ function ChangeEditor({
     );
   }
 
+  if (field === "priority") {
+    // The control is a permanent field further up the form. Two selects bound to one
+    // value would let the form disagree with itself about what is being logged.
+    return (
+      <p className="rounded-lg border border-dashed border-line px-3 py-2 text-xs leading-relaxed text-ink-3">
+        Set the new priority in the <span className="font-medium text-ink-2">Priority</span>{" "}
+        field above. The direction appears beside it as soon as it moves.
+      </p>
+    );
+  }
+
   const editor =
-    field === "priority" ? (
-      <Select value={priority} onValueChange={(value) => onPriority(value as Priority)}>
-        <SelectTrigger id="story-change-field" className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {PRIORITIES.map((value) => (
-            <SelectItem key={value} value={value}>
-              {value.charAt(0) + value.slice(1).toLowerCase()}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    ) : field === "storyPoints" ? (
+    field === "storyPoints" ? (
       <Input
         id="story-change-field"
         type="number"
@@ -371,7 +459,6 @@ function ChangeEditor({
 }
 
 const FIELD_LABEL: Record<string, string> = {
-  priority: "New priority",
   description: "Description",
   acceptanceCriteria: "Acceptance criteria",
   storyPoints: "New estimate",
