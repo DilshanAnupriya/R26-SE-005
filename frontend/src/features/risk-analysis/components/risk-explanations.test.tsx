@@ -70,7 +70,9 @@ const RISK = {
   overall: null,
 } as unknown as SprintRisk;
 
-function open(adjustments: RiskAdjustment[], onAbsorb?: ReturnType<typeof vi.fn>) {
+type Absorb = (input: { adjustmentId: string; absorbed: boolean }) => void;
+
+function open(adjustments: RiskAdjustment[], onAbsorb?: Absorb) {
   render(
     <RiskExplanations
       risk={RISK}
@@ -182,6 +184,26 @@ describe("Why each risk is on this sprint · logged changes", () => {
     expect(
       within(panel).queryByText("Logged changes the model cannot see"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows an acceptance-criteria change the same way, with its own tick", () => {
+    // Criteria are edited through the same dialog and land in the same register, so the
+    // row an added criterion produces has to reach this panel like any other logged
+    // change — reason, charge, and something the team can answer it with.
+    const panel = open([
+      adjustment({
+        delta: 5,
+        reason: "Acceptance criteria expanded: rework and misalignment risk",
+      }),
+    ]);
+
+    expect(
+      within(panel).getByText("Acceptance criteria expanded: rework and misalignment risk"),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText("+5 pts")).toBeInTheDocument();
+    expect(within(panel).getByRole("checkbox")).not.toBeChecked();
+    // 5 x 0.625 = 3.125, rounded down to 3 by the server's whole-point rule.
+    expect(within(panel).getByText(/worth 3 of its 5 points/i)).toBeInTheDocument();
   });
 
   it("says nothing at all when no change has been logged", () => {
