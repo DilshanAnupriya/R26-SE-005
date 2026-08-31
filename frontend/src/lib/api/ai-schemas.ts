@@ -439,6 +439,31 @@ export const estimationCoverageSchema = z.object({
   aiAcceptanceRate: z.coerce.number(),
 });
 
+/**
+ * The advisor's answer, or the honest reason there isn't one.
+ *
+ * <p>`available: false` is not an error. The advisor is the one model that calls an
+ * external provider, so it is off until a key is configured, and a sprint that has
+ * never been assessed has nothing to discuss. Both come back as a reason to show
+ * rather than a failed request.</p>
+ */
+export const riskAdvisorSchema = z.object({
+  available: z.boolean(),
+  /** Markdown. Null when unavailable. */
+  report: z.string().nullish(),
+  /** Which model wrote it, for the record. */
+  model: z.string().nullish(),
+  reason: z.string().nullish(),
+});
+export type RiskAdvisor = z.infer<typeof riskAdvisorSchema>;
+
+/** One turn of an advisor conversation. The server accepts these two roles only. */
+export const riskQuestionTurnSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+});
+export type RiskQuestionTurn = z.infer<typeof riskQuestionTurnSchema>;
+
 export const aiInsightsSchema = z.object({
   scopeId: z.uuid(),
   scopeType: z.string(),

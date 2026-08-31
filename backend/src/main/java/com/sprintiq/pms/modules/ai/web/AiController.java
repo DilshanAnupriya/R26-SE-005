@@ -201,6 +201,23 @@ public class AiController {
         return advisor.advise(risk.latest(sprintId), risk.adjustments(sprintId));
     }
 
+    @Operation(summary = "Ask a question about a sprint's risk",
+            description = "Answers from this sprint's stored figures, which are rebuilt and "
+                    + "re-sent to the provider on every question — so the answer reflects the "
+                    + "board as it stands, not what the model was told earlier in the thread. "
+                    + "Same external provider and same API key as the advisory, and unavailable "
+                    + "for the same reasons in the same words.")
+    @PreAuthorize("@perm.has('ai:predict')")
+    @PostMapping("/risk/sprint/{sprintId}/ask")
+    public RiskAdvisorResponse ask(@PathVariable UUID sprintId,
+                                   @Valid @RequestBody RiskQuestionRequest request) {
+        List<RiskAdvisorService.Turn> history = request.history().stream()
+                .map(turn -> new RiskAdvisorService.Turn(turn.role(), turn.content()))
+                .toList();
+        return advisor.ask(risk.latest(sprintId), risk.adjustments(sprintId),
+                request.question(), history);
+    }
+
     @Operation(summary = "Compare the risk profile of several sprints",
             description = "Two to five sprints side by side. A sprint that was never assessed "
                     + "comes back with null scores rather than being dropped — that it was never "

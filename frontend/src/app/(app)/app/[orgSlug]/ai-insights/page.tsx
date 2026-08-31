@@ -5,6 +5,7 @@ import { Gauge, Info, MessageSquare, Sparkles } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { CostWidget } from "@/features/ai/components/cost-widget";
+import { RiskAdvisorChat } from "@/features/ai/components/risk-advisor-chat";
 import { RiskCard } from "@/features/ai/components/risk-card";
 import { VelocityPanel } from "@/features/ai/components/velocity-panel";
 import { useProjectInsights } from "@/features/ai/hooks";
@@ -132,6 +133,8 @@ export default function AiInsightsPage({ params }: { params: Promise<{ orgSlug: 
               </article>
             ) : null}
           </div>
+
+          {insights.data.risk ? <RiskAdvisorChat risk={insights.data.risk} /> : null}
 
           {insights.data.estimationCoverage ? (
             <section className="rounded-lg border p-4" aria-labelledby="coverage-heading">

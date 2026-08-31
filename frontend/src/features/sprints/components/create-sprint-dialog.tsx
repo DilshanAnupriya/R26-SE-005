@@ -44,8 +44,16 @@ export function CreateSprintDialog({
   // The project's own cadence, not a hardcoded fortnight — a team on one-week
   // sprints should not have to correct this every time.
   const [endDate, setEndDate] = useState(isoInDays(defaultSprintDays));
+  const [budgetAmount, setBudgetAmount] = useState("");
 
-  const valid = name.trim() !== "" && startDate !== "" && endDate !== "" && endDate >= startDate;
+  const parsedBudget = budgetAmount.trim() === "" ? undefined : Number(budgetAmount);
+  const budgetInvalid = parsedBudget !== undefined
+    && (!Number.isFinite(parsedBudget) || parsedBudget < 0);
+  const valid = name.trim() !== ""
+    && startDate !== ""
+    && endDate !== ""
+    && endDate >= startDate
+    && !budgetInvalid;
   const backwards = startDate !== "" && endDate !== "" && endDate < startDate;
 
   function submit(event: React.FormEvent) {
@@ -58,11 +66,13 @@ export function CreateSprintDialog({
         goal: goal.trim() || undefined,
         startDate,
         endDate,
+        budgetAmount: parsedBudget,
       },
       {
         onSuccess: () => {
           setName("");
           setGoal("");
+          setBudgetAmount("");
           onOpenChange(false);
         },
       },
@@ -123,6 +133,27 @@ export function CreateSprintDialog({
                 aria-invalid={backwards}
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="sprint-budget">Sprint budget (optional)</Label>
+            <Input
+              id="sprint-budget"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              value={budgetAmount}
+              onChange={(event) => setBudgetAmount(event.target.value)}
+              placeholder="e.g. 7200"
+              aria-invalid={budgetInvalid}
+            />
+            <p className="text-2xs text-ink-3">
+              Leave blank to use the project budget in cost forecasts.
+            </p>
+            {budgetInvalid ? (
+              <p className="text-2xs text-red">Budget must be zero or greater.</p>
+            ) : null}
           </div>
 
           {backwards ? (

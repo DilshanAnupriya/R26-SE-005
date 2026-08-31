@@ -1,0 +1,24 @@
+CONTINUOUS-LEARNING PROTOTYPE: INITIAL CANDIDATE
+==============================================================
+Scope          : offline only; no production model is modified
+Data sources   : simulated_demo
+Completed      : 120 sprints
+Training       : 96 earlier sprints
+Holdout        : 24 later unseen sprints
+Cross-validation: 5-fold TimeSeriesSplit
+Selected model : gradient_boosting
+
+CANDIDATE HOLDOUT METRICS
+  MAE : 311.48 minutes (5.19 hours)
+  RMSE: 415.20 minutes (6.92 hours)
+  MAPE: 6.29%
+  R2  : 0.9502
+
+SAME-DATA BASELINE METRICS
+  MAE : 662.09 minutes (11.03 hours)
+  RMSE: 820.38 minutes (13.67 hours)
+  MAPE: 13.29%
+  R2  : 0.8054
+
+Next step: run evaluate_candidate.py. This script never deploys a model.
+Evidence saved to: /Users/vidurahewaduwa/Documents/GitHub/R26-SE-005-dIL'/ai-service/experiments/continuous_cost_learning/runs/initial

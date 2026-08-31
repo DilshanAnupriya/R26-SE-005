@@ -1,0 +1,25 @@
+MID-SPRINT COST MODEL TRAINING RUN
+==============================================
+Clean rows    : 3067
+Training rows : 2454
+Holdout rows  : 613
+Split mode    : time
+CV folds      : 5
+Random seed   : 42
+Selected model: gradient_boosting
+
+ML MODEL HOLDOUT METRICS
+  MAE : 33492.86 minutes (558.21 hours)
+  RMSE: 102944.44 minutes (1715.74 hours)
+  MAPE: 28.63%
+  R2  : 0.8720
+
+SIMPLE BASELINE HOLDOUT METRICS
+  MAE : 54920.89 minutes (915.35 hours)
+  RMSE: 166595.54 minutes (2776.59 hours)
+  MAPE: 49.85%
+  R2  : 0.6648
+
+DEPLOYMENT DECISION: ml_remaining_effort
+Reason: the ML model has lower MAE, RMSE, and MAPE and higher R2.
+Evidence saved to: /Users/vidurahewaduwa/Documents/GitHub/R26-SE-005-dIL'/ai-service/models/SprintCost-mid_model/training_run

@@ -2,10 +2,11 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, CalendarDays, Play, Square, Bot, Sparkles, Check, Trash2, ListTodo } from "lucide-react";
+import { ArrowLeft, Plus, CalendarDays, Play, Square, Bot, Check, Trash2, ListTodo, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CreateSprintDialog } from "@/features/sprints/components/create-sprint-dialog";
+import { EditSprintBudgetDialog } from "@/features/sprints/components/edit-sprint-budget-dialog";
 import {
   Dialog,
   DialogContent,
@@ -183,6 +184,7 @@ function SprintDetail({
   const predictVelocity = usePredictVelocity();
 
   const [closing, setClosing] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [strategy, setStrategy] = useState<"BACKLOG" | "NEXT_SPRINT">("BACKLOG");
   const [summary, setSummary] = useState("");
@@ -222,6 +224,13 @@ function SprintDetail({
             </Link>
           </Button>
 
+          {sprint.status === "PLANNED" || sprint.status === "ACTIVE" ? (
+            <Button size="sm" variant="outline" onClick={() => setEditingBudget(true)}>
+              <Pencil className="size-3.5" aria-hidden />
+              Edit budget
+            </Button>
+          ) : null}
+
           {sprint.status === "PLANNED" ? (
             <Button size="sm" disabled={start.isPending} onClick={() => start.mutate(sprint.id)}>
               <Play className="size-3.5" aria-hidden />
@@ -237,6 +246,13 @@ function SprintDetail({
           ) : null}
         </div>
       </header>
+
+      <EditSprintBudgetDialog
+        projectId={projectId}
+        sprint={sprint}
+        open={editingBudget}
+        onOpenChange={setEditingBudget}
+      />
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Stat label="Committed" value={sprint.committedPoints} />
