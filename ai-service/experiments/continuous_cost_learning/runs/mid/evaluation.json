@@ -1,0 +1,60 @@
+{
+  "generated_at_utc": "2026-08-31T03:13:50.401041+00:00",
+  "prototype_scope": "offline_only_no_production_integration",
+  "stage": "mid",
+  "target": "remaining_effort_minutes",
+  "snapshot_store": "/Users/vidurahewaduwa/Documents/GitHub/R26-SE-005-dIL'/ai-service/experiments/continuous_cost_learning/data/sample_sprint_snapshots.csv",
+  "data_sources": [
+    "simulated_demo"
+  ],
+  "completed_sprints": 120,
+  "training_sprints": 96,
+  "holdout_sprints": 24,
+  "split_method": "time_ordered_80_20",
+  "cv_method": "TimeSeriesSplit(5)",
+  "random_state": 42,
+  "features": [
+    "planned_effort_minutes",
+    "planned_story_points",
+    "team_size",
+    "historical_velocity_avg",
+    "developer_availability_rate",
+    "absence_days_total",
+    "concurrent_assignments",
+    "skill_match_ratio",
+    "avg_seniority_level",
+    "elapsed_fraction",
+    "completed_story_points",
+    "logged_effort_minutes",
+    "overtime_hours_total"
+  ],
+  "selected_candidate": "gradient_boosting",
+  "cross_validation_metrics": {
+    "gradient_boosting": {
+      "mae": 424.0365282370184,
+      "rmse": 580.3441932681258,
+      "mape": 18.357548025220872,
+      "r2": 0.687715049206958
+    },
+    "random_forest": {
+      "mae": 477.98830068940487,
+      "rmse": 622.8927870492258,
+      "mape": 21.773333043003586,
+      "r2": 0.6400486501459961
+    }
+  },
+  "candidate_holdout_metrics": {
+    "mae": 415.24161300060797,
+    "rmse": 551.5124497721431,
+    "mape": 15.899367712884157,
+    "r2": 0.776547365136888
+  },
+  "baseline_holdout_metrics": {
+    "mae": 662.08875,
+    "rmse": 820.3846559973152,
+    "mape": 27.784672195063358,
+    "r2": 0.5055642134620186
+  },
+  "candidate_beats_baseline": true,
+  "deployment_status": "not_evaluated_run_evaluate_candidate.py"
+}
