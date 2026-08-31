@@ -87,6 +87,22 @@ export function useCreateSprint(projectId: string) {
   });
 }
 
+export function useUpdateSprintBudget(projectId: string) {
+  const { api } = useSession();
+  const invalidate = useSprintInvalidation(projectId);
+  return useMutation({
+    mutationFn: (input: { sprintId: string; budgetAmount: number }) =>
+      sprintsApi.update(api, input.sprintId, { budgetAmount: input.budgetAmount }),
+    onSuccess: (sprint) => {
+      invalidate(sprint.id);
+      toast.success(`${sprint.name} budget updated.`);
+    },
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : "Could not update the sprint budget.");
+    },
+  });
+}
+
 export function useStartSprint(projectId: string) {
   const { api } = useSession();
   const invalidate = useSprintInvalidation(projectId);
