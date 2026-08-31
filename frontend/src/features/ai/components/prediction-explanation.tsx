@@ -151,42 +151,63 @@ export function PredictionMeta({ prediction }: { prediction: PredictionEnvelope 
 /** The Fibonacci ladder story points are reported on. */
 const FIB = [1, 2, 3, 5, 8, 13, 21];
 
+/** Two decimals, without the trailing zeros that make 8.00 look like a measurement. */
+function trim(value: number): string {
+  return String(Number(value.toFixed(2)));
+}
+
 /**
- * Where inside its Fibonacci band the model's own number actually fell.
+ * The model's own number, and where inside its Fibonacci band it fell.
  *
- * <p>Story points snap to the nearest Fibonacci value, so a continuous output of 6.8,
- * 8.5 or 9.9 all arrives as 8. That is right for planning and it hides something a
+ * <p>Story points snap to the nearest Fibonacci value, so a continuous output of 6.67,
+ * 8.5 or 9.93 all arrives as 8. That is right for planning and it hides something a
  * planner would want: two stories both shown as 8 can be half a size apart.</p>
  *
- * <p>The wording matters here and an earlier version got it wrong. A raw 6.8 snapped to
- * 8 is <em>not</em> "close to 5" — it is nearer 8 than 5, which is exactly why it
- * snapped to 8. It is a <em>low</em> 8. Saying "close to 5" invites the reader to
- * conclude the model wanted 5 and was overruled, which is the opposite of what
- * happened.</p>
+ * <p>This used to appear only when the raw value sat in the outer third of its band, on
+ * the theory that a number near the middle had nothing to add. That was wrong twice
+ * over. It made the line come and go between one story and the next, so nobody learned
+ * to look for it; and it meant the common case — a reader asking what the model
+ * actually said before the ladder rounded it — was answered for some stories and not
+ * others. The number is now always shown, and the qualification is what varies.</p>
  *
- * <p>Nearest-snapping means the raw value can never be more than halfway to a
- * neighbour, so this only fires in the outer third of a band — past that the number
- * would have snapped the other way.</p>
+ * <p>The wording of that qualification matters and an earlier version got it wrong. A
+ * raw 6.67 snapped to 8 is <em>not</em> "close to 5" — it is nearer 8 than 5, which is
+ * exactly why it snapped to 8. It is a <em>low</em> 8. Saying "close to 5" invites the
+ * reader to conclude the model wanted 5 and was overruled, which is the opposite of
+ * what happened.</p>
  */
 export function SnapLabel({ raw, snapped }: { raw?: number | null; snapped?: number | null }) {
-  if (raw == null || snapped == null) return null;
+  if (raw == null) return null;
 
-  const index = FIB.indexOf(snapped);
-  if (index === -1) return null;
+  const index = snapped == null ? -1 : FIB.indexOf(snapped);
+  // Nothing to say about the rounding when the shown value is not on the ladder, but
+  // the model's number is still worth reading.
+  if (snapped == null || index === -1) {
+    return (
+      <span className="text-xs tabular-nums text-muted-foreground">
+        model said {trim(raw)}
+      </span>
+    );
+  }
 
-  const below = FIB[index - 1];
-  const above = FIB[index + 1];
+  const toward = raw < snapped ? FIB[index - 1] : FIB[index + 1];
+  // Distance to the neighbouring size, as a share of the gap to it. Nearest-snapping
+  // caps this at a half; past a third, the model was nearly as happy with that
+  // neighbour and the estimate deserves to be read as a low or a high one.
+  const share =
+    toward == null ? 0 : Math.abs(raw - snapped) / Math.abs(toward - snapped);
 
-  // Distance to the neighbouring size, as a share of the gap to it. Near 1 means the
-  // model was almost as happy with that neighbour.
-  const toward = raw < snapped ? below : above;
-  if (toward == null) return null;
-  const share = Math.abs(raw - snapped) / Math.abs(toward - snapped);
-  if (share < 0.34) return null;
+  const qualifier =
+    Math.abs(raw - snapped) < 0.05
+      ? null
+      : share >= 0.34
+        ? `a ${raw < snapped ? "low" : "high"} ${snapped}`
+        : `rounded ${raw < snapped ? "up" : "down"} to ${snapped}`;
 
   return (
     <span className="text-xs tabular-nums text-muted-foreground">
-      model said {raw.toFixed(1)} — a {raw < snapped ? "low" : "high"} {snapped}
+      model said {trim(raw)}
+      {qualifier ? ` — ${qualifier}` : null}
     </span>
   );
 }

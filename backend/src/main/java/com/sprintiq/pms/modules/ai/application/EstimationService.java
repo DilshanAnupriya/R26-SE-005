@@ -73,7 +73,7 @@ public class EstimationService {
                 if (estimate.suggestedPoints() != null) succeeded++;
             } catch (RuntimeException ex) {
                 results.add(new StoryPointEstimateResponse(features.storyId(), features.itemKey(),
-                        features.title(), features.currentPoints(), null, null));
+                        features.title(), features.currentPoints(), null, null, null));
             }
         }
         return new BatchEstimateResponse(results, capped.size(), succeeded);
@@ -151,7 +151,57 @@ public class EstimationService {
 
         return new StoryPointEstimateResponse(features.storyId(), features.itemKey(), features.title(),
                 features.currentPoints(), prediction.getPredictedValue(),
-                PredictionEnvelope.from(prediction));
+                PredictionEnvelope.from(prediction), sizingContext(project, prediction));
+    }
+
+    /**
+     * What the model knew about this team, beside what it had to assume.
+     *
+     * <p>Every one of these inputs was already being sent and none of it was ever shown,
+     * so a panel reporting four drivers about the story's own text read as though the
+     * team it is being built by were not part of the estimate at all. It is — team size
+     * alone moves the raw number by about a third of a point across the range this
+     * product allows — it simply never ranks high enough in a per-story SHAP breakdown
+     * to appear among the drivers, because it is the one input that is identical for
+     * every story in the project.</p>
+     *
+     * <p>The values come from the project and the "what was missing" list comes from the
+     * model service's own provenance, not from which of these happen to be null. A tech
+     * stack the model was never trained on is a filled-in field that scores as a blank
+     * one, and only the service knows that.</p>
+     */
+    private SizingContext sizingContext(ProjectContextSource.ProjectContext project,
+                                        AiPrediction prediction) {
+        Map<String, Object> provenance = provenanceOf(prediction);
+        if (provenance == null) {
+            // No response to read: a failed or timed-out call. Reporting the project's
+            // own fields here would describe a scoring that never happened.
+            return null;
+        }
+        return new SizingContext(project.teamSize(), project.devExperienceLevel(),
+                project.domain(), project.techStack(),
+                strings(provenance.get("defaulted_to_training_median")),
+                strings(provenance.get("inferred_from_text")),
+                provenance.get("text_terms_recognised") instanceof Number terms
+                        ? terms.intValue() : null);
+    }
+
+    private Map<String, Object> provenanceOf(AiPrediction prediction) {
+        Map<String, Object> response = prediction.getRawResponse();
+        if (response == null || !(response.get("provenance") instanceof Map<?, ?> provenance)) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> typed = (Map<String, Object>) provenance;
+        return typed;
+    }
+
+    /** A JSON string array out of an untyped jsonb value, or empty rather than null. */
+    private List<String> strings(Object value) {
+        if (!(value instanceof List<?> entries)) {
+            return List.of();
+        }
+        return entries.stream().filter(java.util.Objects::nonNull).map(Object::toString).toList();
     }
 
     /**

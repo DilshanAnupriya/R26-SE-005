@@ -132,13 +132,53 @@ public final class AiDtos {
     @Schema(name = "BatchEstimateRequest")
     public record BatchEstimateRequest(@NotEmpty @Size(max = 50) List<@NotNull UUID> storyIds) {}
 
+    @Schema(name = "SizingContext",
+            description = "The project context the estimate was scored against, and which parts "
+                    + "of it the model had to invent")
+    public record SizingContext(Short teamSize,
+                                String devExperienceLevel,
+                                String domain,
+                                String techStack,
+
+                                /**
+                                 * Model-side names of the inputs that fell back to a training
+                                 * median, straight from the service's own provenance rather than
+                                 * inferred from the nulls above.
+                                 *
+                                 * <p>The two are not the same list, and the difference is the
+                                 * point. A project whose tech stack reads "laravel" has the field
+                                 * filled in, but the model one-hot encodes ten stacks and that is
+                                 * not one of them — so it sets no column and scores the story as
+                                 * though the field were blank. Reading the nulls here would report
+                                 * that project as fully specified; reading the model's own account
+                                 * says what actually happened.</p>
+                                 */
+                                List<String> defaulted,
+
+                                /** Flags the service guessed by keyword-matching the story text. */
+                                List<String> inferredFromText,
+
+                                /**
+                                 * How many of the story's words the model's fixed vocabulary
+                                 * recognised. Zero means the text contributed nothing and the
+                                 * estimate rests on structure alone.
+                                 */
+                                Integer textTermsRecognised) {}
+
     @Schema(name = "StoryPointEstimateResponse")
     public record StoryPointEstimateResponse(UUID storyId,
                                              String itemKey,
                                              String title,
                                              BigDecimal currentPoints,
                                              BigDecimal suggestedPoints,
-                                             PredictionEnvelope prediction) {}
+                                             PredictionEnvelope prediction,
+                                             /**
+                                              * What the model knew about this team, or had to
+                                              * assume. Null when the estimate did not come back
+                                              * from the service — a failed call has no context to
+                                              * report.
+                                              */
+                                             SizingContext context) {}
 
     @Schema(name = "BatchEstimateResponse")
     public record BatchEstimateResponse(List<StoryPointEstimateResponse> estimates,

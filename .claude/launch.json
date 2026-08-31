@@ -4,8 +4,18 @@
     {
       "name": "sprintiq-frontend",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--dir", "frontend", "dev"],
+      "runtimeArgs": [
+        "--dir",
+        "frontend",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "sprintiq-backend",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-dilshan-Documents-GitHub-R26-SE-005/5746db14-5bab-4e63-890a-03a8595eacf3/scratchpad/run-backend.sh",
+      "runtimeArgs": [],
+      "port": 8080
     }
   ]
 }
