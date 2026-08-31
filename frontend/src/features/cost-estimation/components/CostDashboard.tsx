@@ -54,6 +54,7 @@ import type { CostForecast, CostPredictionAccuracy, CostTrendPoint, CostValidati
 import type { Sprint, Task } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
 import { AutoLearnDialog } from "./AutoLearnDialog";
+import { ForecastMethodDialog } from "./ForecastMethodDialog";
 import {
   sprintCostApi,
   type SprintCostMember,
@@ -106,13 +107,16 @@ const HELP_TEXT: Record<string, string> = {
   "Workload pressure": "The highest individual developer load: open estimated hours divided by that developer's effective capacity.",
   "Budget variance": "Forecast final cost minus sprint budget. A positive value means the forecast is over budget.",
   "Prediction interval": "A heuristic likely range based on held-out model error; it is not a probability confidence interval.",
+  "Cost comparison": "Places the forecast beside the original plan, sprint budget, and recorded labor cost using the same visual scale.",
+  "Budget position": "Shows how much of the sprint budget the forecast is expected to use and whether it remains within the limit.",
+  "Planning context": "Human-aware delivery signals that provide context for the forecast. They are not presented as direct monetary contributions.",
+  Availability: "Average developer availability used to represent reduced capacity from planned absence.",
   "Cost drivers": "Initial forecasts show exact formula components. Mid-sprint forecasts add signed local Shapley influences that reconcile to the final amount.",
   "Latest stored forecast": "Most recently saved forecast for this sprint, loaded from forecast history.",
   "Team cost and workload": "Developer rates, availability, effective capacity, allocation, skills, and assigned workload used by sprint planning.",
   "Sprint task costs": "Task-level plan and actual labor view. Actual cost comes from time entries or, when unavailable, task spent minutes.",
   "Prediction history": "Every stored forecast snapshot for the selected sprint, allowing initial and mid-sprint estimates to be compared over time.",
   "Cost record": "Retains incurred labor for a cancelled sprint without including it in model accuracy evaluation.",
-  "Forecast tracking": "Compares the latest model forecast with actual cost plus the estimated cost of remaining open work.",
   "Actual cost so far": "Cost of all labor logged so far, including the overtime multiplier where applicable.",
   "Estimated remaining": "Estimated cost of unfinished task effort using assignee rates or the blended fallback rate.",
   "Projected final cost": "Actual cost so far plus the estimated cost of remaining work. This is live tracking, not final accuracy.",
@@ -627,7 +631,7 @@ export default function CostDashboard() {
                 )}
                 Initial forecast
               </Button>
-              <HelpHint label="Initial forecast" />
+              <ForecastMethodDialog stage="initial" />
             </div>
             <div className="flex items-center gap-1">
               <Button
@@ -642,7 +646,7 @@ export default function CostDashboard() {
                 )}
                 Mid-sprint forecast
               </Button>
-              <HelpHint label="Mid-sprint forecast" />
+              <ForecastMethodDialog stage="mid-sprint" />
             </div>
           </div>
         </div>
@@ -834,14 +838,16 @@ export default function CostDashboard() {
               </div>
             </div>
 
-            <ValidationSummary
-              validation={validationResult}
-              currency={currency}
-              isPending={validationPending}
-              error={validationError}
-              isFallback={usingLocalValidation}
-              onRetry={() => void validation.refetch()}
-            />
+            {selectedSprint.status === "COMPLETED" || selectedSprint.status === "CANCELLED" ? (
+              <ValidationSummary
+                validation={validationResult}
+                currency={currency}
+                isPending={validationPending}
+                error={validationError}
+                isFallback={usingLocalValidation}
+                onRetry={() => void validation.refetch()}
+              />
+            ) : null}
           </TabsContent>
 
           <TabsContent value="team">
@@ -943,8 +949,16 @@ function CostExplanationPanel({
 }) {
   const budgetVariance = budget != null ? forecast.forecastAmount - budget : null;
   const drivers = "drivers" in forecast ? forecast.drivers : [];
-  const variancePct = "varianceVsBudgetPct" in forecast ? forecast.varianceVsBudgetPct : null;
-  const errorMarginAmount = "errorMarginAmount" in forecast ? forecast.errorMarginAmount : null;
+  const budgetUsagePct = budget != null && budget > 0
+    ? (forecast.forecastAmount / budget) * 100
+    : null;
+  const comparisonMaximum = Math.max(
+    1,
+    forecast.forecastAmount,
+    plannedLaborCost ?? 0,
+    actualLaborCost ?? 0,
+    budget ?? 0,
+  );
   const topDrivers = drivers
     .slice()
     .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
@@ -964,41 +978,138 @@ function CostExplanationPanel({
         <Badge variant="outline">{stageLabel(forecast.stage)}</Badge>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <ExplanationMetric label="Forecast final cost" value={money(forecast.forecastAmount, currency)} />
-        <ExplanationMetric label="Planned sprint cost" value={money(plannedLaborCost, currency)} />
-        <ExplanationMetric label={actualCostLabel} value={money(actualLaborCost, currency)} />
-        <ExplanationMetric label="Overtime signal" value={hours(overtimeMinutes)} detail="Logged as overtime" />
-        <ExplanationMetric
-          label="Availability signal"
-          value={availabilityPct == null ? "-" : `${number(availabilityPct)}%`}
-          detail={`${number(totalAbsenceDays)} planned absence days`}
-        />
-        <ExplanationMetric
-          label="Skill coverage"
-          value={skillCoverage == null ? "-" : `${number(skillCoverage)}%`}
-          detail={requiredSkillCount > 0
-            ? `${coveredSkillCount} of ${requiredSkillCount} required skills covered`
-            : "No required skills listed"}
-        />
-        <ExplanationMetric
-          label="Workload pressure"
-          value={maxLoadPct > 0 ? `${number(maxLoadPct)}%` : "-"}
-          detail="Highest developer load"
-        />
-        <ExplanationMetric
-          label="Budget variance"
-          value={budgetVariance == null ? "-" : money(budgetVariance, currency)}
-          detail={variancePct == null ? "Set budget for variance" : `${variancePct}% vs budget`}
-          tone={budgetVariance != null && budgetVariance > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}
-        />
-        <ExplanationMetric
-          label="Prediction interval"
-          value={forecast.lowerBound != null && forecast.upperBound != null
-            ? `${money(forecast.lowerBound, currency)} - ${money(forecast.upperBound, currency)}`
-            : "-"}
-          detail={errorMarginAmount == null ? "No margin stored" : `± ${money(errorMarginAmount, currency)}`}
-        />
+      <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(22rem,1.1fr)]">
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">
+              <LabelWithHelp label="Forecast final cost" />
+            </p>
+            <p className="mt-1 text-3xl font-semibold tabular-nums">
+              {money(forecast.forecastAmount, currency)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Expected total labor cost at sprint completion</p>
+          </div>
+
+          <ForecastRange
+            forecastAmount={forecast.forecastAmount}
+            lowerBound={forecast.lowerBound}
+            upperBound={forecast.upperBound}
+            currency={currency}
+          />
+
+          <div className="border-t pt-4">
+            <h4 className="text-sm font-medium">
+              <LabelWithHelp label="Budget position" />
+            </h4>
+            {budgetVariance == null ? (
+              <p className="mt-2 text-sm text-muted-foreground">Set a sprint budget to see the forecast position.</p>
+            ) : (
+              <div className="mt-2 flex items-start gap-2">
+                {budgetVariance > 0 ? (
+                  <ArrowUp className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
+                ) : (
+                  <ArrowDown className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden />
+                )}
+                <div>
+                  <p className={cn(
+                    "font-semibold tabular-nums",
+                    budgetVariance > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
+                  )}>
+                    {money(Math.abs(budgetVariance), currency)} {budgetVariance > 0 ? "over" : "under"} budget
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {budgetUsagePct == null
+                      ? "Budget usage is unavailable"
+                      : `Forecast uses ${number(budgetUsagePct)}% of the sprint budget`}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+          <h4 className="text-sm font-medium">
+            <LabelWithHelp label="Cost comparison" />
+          </h4>
+          <div className="mt-4 space-y-4">
+            <CostComparisonBar
+              label="Forecast"
+              amount={forecast.forecastAmount}
+              maximum={comparisonMaximum}
+              currency={currency}
+              tone="bg-primary"
+            />
+            <CostComparisonBar
+              label="Original plan"
+              amount={plannedLaborCost}
+              maximum={comparisonMaximum}
+              currency={currency}
+              tone="bg-slate-500 dark:bg-slate-400"
+            />
+            <CostComparisonBar
+              label="Sprint budget"
+              amount={budget}
+              maximum={comparisonMaximum}
+              currency={currency}
+              tone="bg-amber-500"
+            />
+            <CostComparisonBar
+              label={actualCostLabel}
+              amount={actualLaborCost}
+              maximum={comparisonMaximum}
+              currency={currency}
+              tone="bg-emerald-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 border-t pt-4">
+        <h4 className="text-sm font-medium">
+          <LabelWithHelp label="Planning context" />
+        </h4>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Human-aware signals considered alongside the financial forecast.
+        </p>
+        <div className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+          <ContextSignal
+            label="Availability"
+            value={availabilityPct}
+            detail={`${number(totalAbsenceDays)} planned absence days`}
+            tone="bg-emerald-500"
+          />
+          <ContextSignal
+            label="Skill coverage"
+            value={skillCoverage}
+            detail={requiredSkillCount > 0
+              ? `${coveredSkillCount} of ${requiredSkillCount} required skills covered`
+              : "No required skills listed"}
+            tone="bg-teal-500"
+          />
+          <ContextSignal
+            label="Workload pressure"
+            value={maxLoadPct > 0 ? maxLoadPct : null}
+            detail="Highest developer load"
+            tone={(maxLoadPct ?? 0) > 100 ? "bg-destructive" : "bg-amber-500"}
+          />
+          <div>
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="font-medium"><LabelWithHelp label="Overtime signal" /></span>
+              <span className="font-semibold tabular-nums">{hours(overtimeMinutes)}</span>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <span
+                className={cn(
+                  "size-2 shrink-0 rounded-full",
+                  overtimeMinutes > 0 ? "bg-violet-500" : "bg-muted-foreground/30",
+                )}
+                aria-hidden
+              />
+              <span>{overtimeMinutes > 0 ? "Overtime has been recorded" : "No overtime recorded"}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="mt-4 border-t pt-3">
@@ -1030,7 +1141,7 @@ function CostExplanationPanel({
                 : (driver.label ?? driver.feature);
               return (
                 <div key={`${driver.feature}-${driver.label}`} className="rounded-md border bg-background/40 p-3">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="flex items-center gap-1.5 text-sm font-medium">
                         <DirectionIcon
@@ -1077,6 +1188,126 @@ function CostExplanationPanel({
         )}
       </div>
     </section>
+  );
+}
+
+function ForecastRange({
+  forecastAmount,
+  lowerBound,
+  upperBound,
+  currency,
+}: {
+  forecastAmount: number;
+  lowerBound?: number | null;
+  upperBound?: number | null;
+  currency: string;
+}) {
+  const hasRange = lowerBound != null && upperBound != null && upperBound > lowerBound;
+  const markerPosition = hasRange
+    ? Math.max(0, Math.min(100, ((forecastAmount - lowerBound) / (upperBound - lowerBound)) * 100))
+    : 50;
+
+  return (
+    <div className="border-t pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium"><LabelWithHelp label="Prediction interval" /></p>
+        <span className="text-[11px] text-muted-foreground">Estimated range</span>
+      </div>
+      {hasRange ? (
+        <div className="mt-3">
+          <div className="relative h-5" aria-hidden>
+            <div className="absolute inset-x-1 top-2 h-1 rounded-full bg-primary/20" />
+            <div className="absolute left-1 top-1 size-3 rounded-full border-2 border-primary bg-card" />
+            <div className="absolute right-1 top-1 size-3 rounded-full border-2 border-primary bg-card" />
+            <div
+              className="absolute top-0.5 size-4 -translate-x-1/2 rounded-full border-4 border-card bg-primary shadow-sm"
+              style={{ left: `${markerPosition}%` }}
+            />
+          </div>
+          <div className="flex items-start justify-between gap-3 text-[11px] tabular-nums text-muted-foreground">
+            <span>{money(lowerBound, currency)}</span>
+            <span className="font-semibold text-foreground">{money(forecastAmount, currency)}</span>
+            <span>{money(upperBound, currency)}</span>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">No estimated range is stored for this forecast.</p>
+      )}
+    </div>
+  );
+}
+
+function CostComparisonBar({
+  label,
+  amount,
+  maximum,
+  currency,
+  tone,
+}: {
+  label: string;
+  amount?: number | null;
+  maximum: number;
+  currency: string;
+  tone: string;
+}) {
+  const width = amount == null ? 0 : Math.max(0, Math.min(100, (amount / maximum) * 100));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium">{label}</span>
+        <span className="font-semibold tabular-nums">{money(amount, currency)}</span>
+      </div>
+      <div
+        className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted"
+        role="meter"
+        aria-label={`${label} cost`}
+        aria-valuemin={0}
+        aria-valuemax={maximum}
+        aria-valuenow={amount ?? undefined}
+      >
+        <div
+          className={cn("h-full rounded-full transition-[width] duration-300", tone)}
+          style={{ width: `${width}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ContextSignal({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value?: number | null;
+  detail: string;
+  tone: string;
+}) {
+  const bounded = Math.max(0, Math.min(100, value ?? 0));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium"><LabelWithHelp label={label} /></span>
+        <span className="font-semibold tabular-nums">
+          {value == null ? "-" : `${number(value)}%`}
+        </span>
+      </div>
+      <div
+        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"
+        role="meter"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={value == null ? undefined : Math.round(value)}
+      >
+        <div className={cn("h-full rounded-full", tone)} style={{ width: `${bounded}%` }} />
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">{detail}</p>
+    </div>
   );
 }
 
