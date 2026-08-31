@@ -1,0 +1,25 @@
+INITIAL SPRINT COST MODEL TRAINING RUN
+==============================================
+Clean rows    : 3067
+Training rows : 2454
+Holdout rows  : 613
+Split mode    : time
+CV folds      : 5
+Random seed   : 42
+ML candidate  : random_forest_band
+
+ML CANDIDATE HOLDOUT METRICS
+  MAE : 58358.18 minutes (972.64 hours)
+  RMSE: 180192.16 minutes (3003.20 hours)
+  MAPE: 25.65%
+  R2  : 0.9063
+
+PLANNING BASELINE HOLDOUT METRICS
+  MAE : 55116.24 minutes (918.60 hours)
+  RMSE: 167330.98 minutes (2788.85 hours)
+  MAPE: 23.45%
+  R2  : 0.9192
+
+DEPLOYMENT DECISION: planning_baseline
+Reason: the baseline has lower MAE, RMSE, and MAPE and higher R2.
+Evidence saved to: /Users/vidurahewaduwa/Documents/GitHub/R26-SE-005-dIL'/ai-service/models/SprintCost-initial_model/training_run
