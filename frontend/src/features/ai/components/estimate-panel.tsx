@@ -19,6 +19,7 @@ import {
   DriverList,
   PredictionMeta,
 } from "./prediction-explanation";
+import { SizingContextLine } from "./sizing-context";
 
 type FeedbackVerdict = "ACCEPTED" | "OVERRIDDEN" | "DISMISSED";
 
@@ -67,6 +68,11 @@ export function EstimatePanel({
           currentPoints: story.storyPoints ?? null,
           suggestedPoints: story.aiEstimate.points,
           prediction: null,
+          // Only a live run carries it. A stored suggestion records the number, not the
+          // project as it stood when the number was made, and the project's fields may
+          // have been filled in since — so reading them now would caption an old
+          // estimate with context it was never scored against.
+          context: null,
         }
       : null);
 
@@ -256,6 +262,17 @@ export function EstimatePanel({
 
       {prediction?.explanation ? (
         <p className="mt-3 text-xs leading-relaxed text-ink-2">{prediction.explanation}</p>
+      ) : null}
+
+      {/* Before the drivers rather than after them, because this is the frame they sit
+          in. Drivers are a per-story breakdown, so the project-level inputs — team
+          size above all — can never appear there however much they moved the number;
+          a reader scanning that list for their team and not finding it concludes the
+          model never saw it. Answering first is what stops the search. */}
+      {fresh?.context ? (
+        <div className="mt-3">
+          <SizingContextLine context={fresh.context} />
+        </div>
       ) : null}
 
       {prediction ? (

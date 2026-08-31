@@ -45,6 +45,8 @@ export const queryKeys = {
     members: (id: string) => [...queryKeys.projects.all, "members", id] as const,
     workflowStates: (id: string) => [...queryKeys.projects.all, "workflow-states", id] as const,
     board: (id: string) => [...queryKeys.projects.all, "board", id] as const,
+    /** A project's own labels plus the organization-wide ones, as one list. */
+    labels: (id: string) => [...queryKeys.projects.all, "labels", id] as const,
   },
 
   backlog: {
