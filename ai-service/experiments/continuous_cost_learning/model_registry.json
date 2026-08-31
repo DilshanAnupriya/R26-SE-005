@@ -1,0 +1,25 @@
+{
+  "prototype": "SprintIQ offline continuous supervised-learning demonstration",
+  "automatic_deployment_enabled": false,
+  "promotion_policy": {
+    "min_completed_sprints": 30,
+    "min_holdout_sprints": 8,
+    "max_mape": 35.0,
+    "min_r2": 0.7,
+    "require_candidate_to_beat_same_data_baseline": true,
+    "require_real_data_for_deployment_review": true,
+    "require_human_approval": true
+  },
+  "current_production_reference": {
+    "initial": {
+      "method": "planning_baseline",
+      "holdout_mape": 23.4523,
+      "holdout_r2": 0.9192
+    },
+    "mid": {
+      "method": "gradient_boosting",
+      "holdout_mape": 28.6287,
+      "holdout_r2": 0.8720
+    }
+  }
+}

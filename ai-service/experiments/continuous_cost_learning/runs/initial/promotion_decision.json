@@ -1,0 +1,29 @@
+{
+  "evaluated_at_utc": "2026-08-31T03:13:38.851901+00:00",
+  "stage": "initial",
+  "status": "DEMO_ONLY_NOT_DEPLOYABLE",
+  "reason": "Technical checks passed, but simulated data can never approve production deployment.",
+  "checks": {
+    "enough_completed_sprints": true,
+    "enough_holdout_sprints": true,
+    "candidate_mape_below_limit": true,
+    "candidate_r2_above_limit": true,
+    "candidate_beats_baseline_mape": true,
+    "candidate_beats_baseline_rmse": true,
+    "real_data_only": false
+  },
+  "candidate_metrics": {
+    "mae": 311.47990496100306,
+    "rmse": 415.19649169946797,
+    "mape": 6.2851998829647915,
+    "r2": 0.9501567996135091
+  },
+  "baseline_metrics": {
+    "mae": 662.08875,
+    "rmse": 820.3846559973152,
+    "mape": 13.2862267374616,
+    "r2": 0.8054041259684437
+  },
+  "automatic_deployment_performed": false,
+  "production_model_modified": false
+}

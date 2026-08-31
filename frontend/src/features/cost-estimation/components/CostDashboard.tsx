@@ -53,6 +53,7 @@ import { queryKeys } from "@/lib/api/query-keys";
 import type { CostForecast, CostPredictionAccuracy, CostTrendPoint, CostValidation } from "@/lib/api/ai-schemas";
 import type { Sprint, Task } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
+import { AutoLearnDialog } from "./AutoLearnDialog";
 import {
   sprintCostApi,
   type SprintCostMember,
@@ -515,6 +516,7 @@ export default function CostDashboard() {
   const latestHistory = history.data?.at(-1) ?? null;
   const sprintBudget = selectedSprint?.budgetAmount ?? selectedProject?.budgetAmount ?? null;
   const pendingStage = forecast.isPending ? forecast.variables?.stage : null;
+  const completedSprintCycles = sprintList.filter((sprint) => sprint.status === "COMPLETED").length;
   const maxLoadPct = teamRows.reduce(
     (max, row) => Math.max(max, row.loadPct ?? 0),
     0,
@@ -553,6 +555,10 @@ export default function CostDashboard() {
             </p>
           </div>
         </div>
+        <AutoLearnDialog
+          completedSprints={completedSprintCycles}
+          projectName={selectedProject?.name}
+        />
       </header>
 
       <section className="rounded-lg border bg-card p-4 shadow-card" aria-label="Sprint cost scope">
