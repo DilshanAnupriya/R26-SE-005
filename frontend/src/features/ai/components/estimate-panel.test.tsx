@@ -41,12 +41,18 @@ const story = (overrides: Partial<Story> = {}) =>
   }) as Story;
 
 /** A suggestion as the estimate mutation returns it. */
-const suggestionFor = (storyId: string, points: number, predictionId: string) => ({
+const suggestionFor = (
+  storyId: string,
+  points: number,
+  predictionId: string,
+  extra: { rawValue?: number; context?: unknown } = {},
+) => ({
   storyId,
   itemKey: "PAY-5",
   title: "SCIM user provisioning",
   currentPoints: points,
   suggestedPoints: points,
+  context: extra.context ?? null,
   prediction: {
     predictionId,
     modelCode: "M1_STORY_POINTS",
@@ -55,10 +61,22 @@ const suggestionFor = (storyId: string, points: number, predictionId: string) =>
     lowerBound: 2,
     upperBound: points,
     confidence: 0.6,
+    rawValue: extra.rawValue ?? null,
     drivers: [],
     explanation: `Estimated ${points} points.`,
     degraded: false,
   },
+});
+
+/** The context block as the service reports it, with nothing missing by default. */
+const contextOf = (defaulted: string[] = []) => ({
+  teamSize: 6,
+  devExperienceLevel: "mid",
+  domain: "ecommerce",
+  techStack: "react",
+  defaulted,
+  inferredFromText: [],
+  textTermsRecognised: 12,
 });
 
 describe("EstimatePanel", () => {
@@ -165,5 +183,99 @@ describe("EstimatePanel", () => {
     expect(submitFeedback).toHaveBeenCalledWith(
       expect.objectContaining({ action: "OVERRIDDEN", finalValue: 8 }),
     );
+  });
+
+  // ------------------------------------------------------- the pre-snap number
+
+  it("shows the model's own number even when it sits mid-band", () => {
+    // This used to appear only in the outer third of a Fibonacci band, so the line
+    // came and went between one story and the next and nobody learned to look for
+    // it. 8.4 is well inside the band and still not what the model said.
+    estimateData = suggestionFor(STORY_B, 8, PREDICTION_A, { rawValue: 8.4 });
+
+    render(<EstimatePanel story={story()} />);
+
+    expect(screen.getByText(/model said 8\.4/)).toBeInTheDocument();
+    expect(screen.getByText(/rounded down to 8/)).toBeInTheDocument();
+  });
+
+  it("calls a raw 6.67 a low 8 rather than reporting it as a 5", () => {
+    // The number is nearer 8 than 5, which is why it snapped to 8. Describing it as
+    // "close to 5" would invite the reader to conclude the model wanted 5 and was
+    // overruled, which is the opposite of what happened.
+    estimateData = suggestionFor(STORY_B, 8, PREDICTION_A, { rawValue: 6.67 });
+
+    render(<EstimatePanel story={story()} />);
+
+    expect(screen.getByText(/model said 6\.67 — a low 8/)).toBeInTheDocument();
+  });
+
+  // ------------------------------------------------------ the project's context
+
+  it("names the team context the estimate was scored against", () => {
+    // The complaint this answers: four drivers, all about the story's own words, and
+    // no sign that the model knew anything about the team. It does — team size just
+    // cannot rank in a per-story breakdown, because it is identical for every story.
+    estimateData = suggestionFor(STORY_B, 8, PREDICTION_A, { context: contextOf() });
+
+    render(<EstimatePanel story={story()} />);
+
+    expect(screen.getByText("team of 6")).toBeInTheDocument();
+    expect(screen.getByText("Mostly mid-level")).toBeInTheDocument();
+    expect(screen.getByText("E-commerce")).toBeInTheDocument();
+    expect(screen.getByText("React")).toBeInTheDocument();
+  });
+
+  it("says which inputs the model had to invent, and where to fix them", () => {
+    estimateData = suggestionFor(STORY_B, 8, PREDICTION_A, {
+      context: contextOf(["team_size", "tech_stack"]),
+    });
+
+    render(<EstimatePanel story={story()} />);
+
+    expect(screen.getByText("team size: typical")).toBeInTheDocument();
+    expect(screen.getByText("tech stack: typical")).toBeInTheDocument();
+    expect(screen.getByText(/team size and tech stack/)).toBeInTheDocument();
+    expect(screen.getByText(/Estimation context/)).toBeInTheDocument();
+  });
+
+  it("reports a defaulted input the project appears to have filled in", () => {
+    // The case worth catching: the model one-hot encodes ten tech stacks, so a
+    // project set to anything else has a populated field that scores as an empty
+    // one. Reading the nulls would call this project fully specified.
+    estimateData = suggestionFor(STORY_B, 8, PREDICTION_A, {
+      context: { ...contextOf(["tech_stack"]), techStack: "laravel" },
+    });
+
+    render(<EstimatePanel story={story()} />);
+
+    expect(screen.getByText("tech stack: typical")).toBeInTheDocument();
+    expect(screen.queryByText("laravel")).not.toBeInTheDocument();
+  });
+
+  it("keeps measured inputs out of the fix-this warning", () => {
+    // Velocity is computed from closed sprints, so telling somebody to go and supply
+    // it points at a form that does not exist.
+    estimateData = suggestionFor(STORY_B, 8, PREDICTION_A, {
+      context: contextOf(["team_velocity_avg"]),
+    });
+
+    render(<EstimatePanel story={story()} />);
+
+    expect(screen.getByText(/no reading for team velocity/)).toBeInTheDocument();
+    expect(screen.queryByText(/Estimation context/)).not.toBeInTheDocument();
+  });
+
+  it("shows no context for a suggestion restored from the story", () => {
+    // A stored suggestion records the number, not the project as it stood when the
+    // number was made. Captioning it with the project's current fields would claim
+    // it was scored against context it may never have seen.
+    render(
+      <EstimatePanel
+        story={story({ aiEstimate: { points: 8, confidence: 0.6 } } as Partial<Story>)}
+      />,
+    );
+
+    expect(screen.queryByText(/Sized against/)).not.toBeInTheDocument();
   });
 });

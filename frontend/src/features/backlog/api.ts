@@ -89,6 +89,10 @@ export const backlogApi = {
       storyPoints?: number | null;
       assigneeId?: string | null;
       sprintId?: string | null;
+      // Labels are the other half of that component signal — num_components is the sum
+      // of criteria, child tasks and labels, and a story created without any hands the
+      // model the same value every other unlabelled story has.
+      labelIds?: string[];
     },
   ) => api.request("/stories", { method: "POST", body, schema: storySchema }),
 
