@@ -52,7 +52,14 @@ import static com.sprintiq.pms.common.domain.EntityType.EPIC;
  * with its workflow state — and then the first bug report is about the fixture.</p>
  *
  * <p>Off by default and refused entirely in production. Turn it on with
- * {@code SPRINTIQ_SEED_ENABLED=true} or {@code --sprintiq.seed.enabled=true}.</p>
+ * {@code SEED_ENABLED=true} or {@code --app.seed.enabled=true}; the dev profile sets it.</p>
+ *
+ * <p>The property is {@code app.seed.enabled}, matching {@code application.yml} and the
+ * {@code app.*} prefix everything else in this codebase is bound under. It read
+ * {@code sprintiq.seed.enabled} until this was noticed — a key nothing sets, so the
+ * condition never held and this class had never run once. Nothing failed and no warning
+ * was logged; the seeder was simply absent, which is why a bug in {@link #story} below
+ * survived in plain sight.</p>
  *
  * <p>Dates are relative to the day it runs, so the demo is never stale: the active
  * sprint is always mid-flight, one initiative is always behind pace, and the burndown
@@ -61,7 +68,7 @@ import static com.sprintiq.pms.common.domain.EntityType.EPIC;
 @Slf4j
 @Component
 @Profile("!prod")
-@ConditionalOnProperty(name = "sprintiq.seed.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class DemoDataSeeder implements ApplicationRunner {
 
@@ -84,6 +91,8 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final GoalService goalService;
     private final RoadmapService roadmapService;
     private final DocumentService documentService;
+    /** The closed sprints every trend chart needs before it says anything. */
+    private final SprintHistoryFactory sprintHistory;
 
     /** Monday of the current week — every other date is relative to it. */
     private final LocalDate monday = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
@@ -165,8 +174,16 @@ public class DemoDataSeeder implements ApplicationRunner {
         story(payroll.id(), currency, "FX rate provider integration", 13, rui, monday.plusDays(35));
         story(payroll.id(), currency, "Per-country payout rules", 8, null, null);
 
-        // A completed sprint, so velocity and burndown have a history rather than a
-        // single point — a chart with one reading tells you nothing about a trend.
+        // Ten closed sprints behind the hand-written ones, so the velocity chart, its
+        // consistency figure, the cycle- and lead-time distributions and the velocity
+        // model's rolling window all have something to read. One completed sprint draws
+        // every one of those views as a single point, which is the state this demo was
+        // in and the reason none of them were worth opening.
+        history(payroll.id(), 24 - 10 - 1, monday.minusDays(21), 24,
+                List.of(nadia, rui), owner);
+
+        // A completed sprint written by hand, because the seeded ten are deliberately
+        // uniform and a demo needs one sprint whose story titles mean something.
         SprintResponse past = sprint(payroll.id(), "Sprint 23", monday.minusDays(21), monday.minusDays(7));
         sprintService.addItems(past.id(), new AddSprintItemsRequest(List.of(google, entra)));
         sprintService.start(past.id());
@@ -189,12 +206,20 @@ public class DemoDataSeeder implements ApplicationRunner {
                 "Payroll v2 GA", "First enterprise cohort", monday.plusDays(42), null));
 
         // ---- CRM: the one that is behind -----------------------------------------
+        // History here as well, not only on Payroll: the reports page has a project
+        // picker, and a demo where switching project empties every chart teaches the
+        // reader that the charts are broken rather than that the project is new.
+        history(crm.id(), 1, monday.minusDays(14), 18, List.of(amara, nadia), nadia);
+
         UUID leadScoring = epic(crm.id(), "Lead scoring engine", monday.minusDays(42), monday.plusDays(14));
         story(crm.id(), leadScoring, "Scoring model service", 13, amara, null);
         story(crm.id(), leadScoring, "Signal ingestion", 8, amara, monday.plusDays(7));
         complete(story(crm.id(), leadScoring, "Score display on the contact card", 3, nadia, null));
 
         // ---- Mobile: barely started, and deliberately undated in places ----------
+        // Left without history on purpose. Something in the demo has to show what a
+        // new project looks like, and the empty states are as much a part of the
+        // product as the charts.
         UUID shell = epic(mobile.id(), "App shell and navigation", null, null);
         complete(story(mobile.id(), shell, "Tab navigation", 5, rui, null));
         story(mobile.id(), shell, "Deep linking", 5, rui, monday.plusDays(28));
@@ -370,18 +395,83 @@ public class DemoDataSeeder implements ApplicationRunner {
                 null, start, target)).id();
     }
 
+    /**
+     * One backlog item.
+     *
+     * <p>The arguments are named rather than counted. {@code CreateStoryRequest} has
+     * seventeen positional components and this call previously passed the assignee one
+     * slot late, into {@code sprintId} — both are {@code UUID}, so nothing complained,
+     * and the seeder would have died on a foreign key the first time it ran. It never
+     * ran, so it never did.</p>
+     */
     private UUID story(UUID projectId, UUID epicId, String title, int points, UUID assignee,
                        LocalDate dueDate) {
-        StoryResponse story = storyService.create(new CreateStoryRequest(projectId, epicId, null,
-                title, null, null, null, null, null, BigDecimal.valueOf(points), null, null,
-                assignee, dueDate, null, null, null));
-        return story.id();
+        CreateStoryRequest request = new CreateStoryRequest(
+                projectId,                      // projectId
+                epicId,                         // epicId
+                null,                           // requirementId
+                title,                          // title
+                null,                           // description
+                null,                           // acceptanceCriteria
+                null,                           // type
+                null,                           // priority
+                null,                           // severity
+                BigDecimal.valueOf(points),     // storyPoints
+                null,                           // businessValue
+                assignee,                       // assigneeId
+                null,                           // sprintId
+                dueDate,                        // dueDate
+                null,                           // readyChecklist
+                null,                           // doneChecklist
+                null);                          // labelIds
+        return storyService.create(request).id();
     }
 
     /** Through the transition endpoint, so the board column moves with the status. */
     private void complete(UUID storyId) {
         storyService.changeStatus(storyId, new UpdateStoryStatusRequest(StoryStatus.DONE, null));
     }
+
+    /**
+     * Ten closed sprints ending just before {@code endsBefore}.
+     *
+     * <p>Ten rather than the six {@code VELOCITY_WINDOW} averages: the window is what
+     * the rolling figure uses, not what the chart can show, and a reader scrolling back
+     * past it should find the trend continues rather than stops.</p>
+     */
+    private void history(UUID projectId, int firstSequenceNo, LocalDate endsBefore,
+                         int baseVelocity, List<UUID> assignees, UUID lead) {
+        List<UUID> team = new ArrayList<>(assignees);
+        team.add(lead);
+        sprintHistory.build(projectId, new SprintHistoryFactory.Spec(
+                10, 14, baseVelocity, "Sprint ", firstSequenceNo, endsBefore, team, HISTORY_TITLES));
+    }
+
+    /**
+     * Titles for the seeded backlog.
+     *
+     * <p>Real delivery work rather than placeholders, because the estimation model
+     * scores story text against a fixed 150-term vocabulary. "Story 1" matches none of
+     * it, so every seeded story would return the same suggestion with the same "the
+     * model did not recognise any of this story's wording" caveat — which makes the AI
+     * panels look broken in the one place they are meant to be demonstrated.</p>
+     */
+    private static final List<String> HISTORY_TITLES = List.of(
+            "Password reset flow",
+            "Export invoices to CSV",
+            "Search across the customer list",
+            "Rate limiting on the public API",
+            "Audit log for permission changes",
+            "Bulk import from a spreadsheet",
+            "Webhook delivery retries",
+            "Two-factor authentication",
+            "Pagination on the reports endpoint",
+            "Email notification preferences",
+            "Archive and restore a record",
+            "Session timeout warning",
+            "Currency formatting per locale",
+            "Attachment upload to object storage",
+            "Dashboard loading performance");
 
     private SprintResponse sprint(UUID projectId, String name, LocalDate start, LocalDate end) {
         return sprintService.create(new CreateSprintRequest(projectId, name,
