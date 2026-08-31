@@ -1,0 +1,84 @@
+{
+  "generated_at_utc": "2026-08-31T02:54:36.445680+00:00",
+  "stage": "initial",
+  "target": "final_effort_minutes",
+  "target_definition": "Final observed effort minutes predicted from planning-time fields.",
+  "data_path": "/Users/vidurahewaduwa/Documents/GitHub/RP-R26-SE-005-Component-4-Backend/Human-aware-sprint-codest-predict/Dataset/final_agile_dataset.csv",
+  "split_mode": "time",
+  "random_state": 42,
+  "cv_folds": 5,
+  "cleaning_report": {
+    "input_rows": 3602,
+    "clean_rows": 3067,
+    "removed_rows": 535,
+    "effort_upper_limit": 5602500.079999977,
+    "planned_points_upper_limit": 443.167499999999
+  },
+  "train_rows": 2454,
+  "holdout_rows": 613,
+  "selected_ml_candidate": "random_forest_band",
+  "cross_validation_metrics": {
+    "random_forest": {
+      "cv_rmse_mean": 227401.19644932222,
+      "cv_mae_mean": 90871.66172770482,
+      "cv_r2_mean": 0.8682720138574116,
+      "cv_mape_mean": 24.196113609122794
+    },
+    "random_forest_band": {
+      "cv_rmse_mean": 256119.2486942869,
+      "cv_mae_mean": 92982.96241438662,
+      "cv_r2_mean": 0.8325933283621844,
+      "cv_mape_mean": 23.53148035364149
+    },
+    "random_forest_band_alt": {
+      "cv_rmse_mean": 266249.6377873217,
+      "cv_mae_mean": 94752.88901314218,
+      "cv_r2_mean": 0.810826610327986,
+      "cv_mape_mean": 24.077865253522795
+    },
+    "extra_trees": {
+      "cv_rmse_mean": 241461.23280822803,
+      "cv_mae_mean": 92822.7954873575,
+      "cv_r2_mean": 0.8435010070623645,
+      "cv_mape_mean": 24.68037284392191
+    },
+    "extra_trees_band": {
+      "cv_rmse_mean": 273211.3854001156,
+      "cv_mae_mean": 97127.49796133129,
+      "cv_r2_mean": 0.7908368467206136,
+      "cv_mape_mean": 25.08049528819742
+    },
+    "gradient_boosting": {
+      "cv_rmse_mean": 234166.97628581585,
+      "cv_mae_mean": 91784.05110456097,
+      "cv_r2_mean": 0.8594266792545122,
+      "cv_mape_mean": 24.108604416600848
+    },
+    "extra_trees_planning_band": {
+      "cv_rmse_mean": 410515.73671009653,
+      "cv_mae_mean": 137595.06160372664,
+      "cv_r2_mean": 0.5383289989812088,
+      "cv_mape_mean": 44.51846645663983
+    }
+  },
+  "ml_holdout_metrics": {
+    "mae": 58358.1793749242,
+    "rmse": 180192.1579910716,
+    "r2": 0.9063099278899583,
+    "mape": 25.65004630796293
+  },
+  "baseline_holdout_metrics": {
+    "mae": 55116.24353587676,
+    "rmse": 167330.98114999046,
+    "r2": 0.9192068547426684,
+    "mape": 23.45231279878348
+  },
+  "deployment_method": "planning_baseline",
+  "deployment_metrics": {
+    "mae": 55116.24353587676,
+    "rmse": 167330.98114999046,
+    "r2": 0.9192068547426684,
+    "mape": 23.45231279878348
+  },
+  "decision": "Deploy the planning baseline because it beats the initial ML candidate."
+}

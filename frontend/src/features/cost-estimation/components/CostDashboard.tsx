@@ -53,6 +53,7 @@ import { queryKeys } from "@/lib/api/query-keys";
 import type { CostForecast, CostPredictionAccuracy, CostTrendPoint, CostValidation } from "@/lib/api/ai-schemas";
 import type { Sprint, Task } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
+import { AutoLearnDialog } from "./AutoLearnDialog";
 import {
   sprintCostApi,
   type SprintCostMember,
@@ -85,8 +86,9 @@ const HELP_TEXT: Record<string, string> = {
   "Story points": "Total points committed to the sprint, with completed and remaining points shown underneath.",
   "Team capacity": "Sum of effective developer hours after allocation and planned absence adjustments.",
   "Average rate": "Blended hourly rate calculated from delivery members who have an hourly rate in their developer profile.",
-  "Planned labor": "Sum of each task's estimated minutes multiplied by its assignee's hourly rate; the blended rate is used when needed.",
-  "Actual labor": "Cost of logged time using developer rates. Overtime entries are priced at 1.5 times the normal rate.",
+  "Planned sprint cost": "The original task-estimate baseline: estimated minutes multiplied by assignee rates, with the blended rate used when needed.",
+  "Cost incurred so far": "Labor cost recorded to date from logged time. Overtime entries are priced at 1.5 times the normal rate.",
+  "Final recorded cost": "The completed sprint's recorded labor cost from logged time and developer rates, including overtime.",
   "Sprint budget": "The spending limit stored for the sprint, or the project budget when the sprint has no separate value.",
   "Forecast result": "The selected initial or mid-sprint model's predicted final labor cost, including its estimated range.",
   "Planning signals": "Live sprint inputs that provide context for the forecast and help explain delivery pressure.",
@@ -98,12 +100,11 @@ const HELP_TEXT: Record<string, string> = {
   "Sprint number": "The sprint's sequence number, used to give the model delivery-history context.",
   Tasks: "Number of tasks currently assigned to the selected sprint.",
   "Cost explanation": "Shows the financial and human-aware signals supplied with the forecast so the result can be reviewed rather than treated as a black box.",
-  "Forecast amount": "The model's predicted total labor cost for the selected forecast stage.",
-  "Actual labor so far": "Labor cost already incurred from time entries grouped by developer and priced at individual rates.",
+  "Forecast final cost": "The predicted total labor cost when the sprint finishes; it is not the original plan or the amount already recorded.",
   "Overtime signal": "Total logged overtime hours. Overtime contributes at 1.5 times the normal hourly rate.",
   "Availability signal": "Average developer availability used to represent reduced capacity from planned absence.",
   "Workload pressure": "The highest individual developer load: open estimated hours divided by that developer's effective capacity.",
-  "Budget variance": "Forecast amount minus sprint budget. A positive value means the forecast is over budget.",
+  "Budget variance": "Forecast final cost minus sprint budget. A positive value means the forecast is over budget.",
   "Prediction interval": "A heuristic likely range based on held-out model error; it is not a probability confidence interval.",
   "Cost drivers": "Initial forecasts show exact formula components. Mid-sprint forecasts add signed local Shapley influences that reconcile to the final amount.",
   "Latest stored forecast": "Most recently saved forecast for this sprint, loaded from forecast history.",
@@ -500,6 +501,9 @@ export default function CostDashboard() {
   const remainingPoints = selectedSprint
     ? Math.max(0, selectedSprint.committedPoints - selectedSprint.completedPoints)
     : null;
+  const actualCostLabel = selectedSprint?.status === "COMPLETED"
+    ? "Final recorded cost"
+    : "Cost incurred so far";
   const completionRate = selectedSprint
     ? selectedSprint.committedPoints > 0
       ? (selectedSprint.completedPoints / selectedSprint.committedPoints) * 100
@@ -512,6 +516,7 @@ export default function CostDashboard() {
   const latestHistory = history.data?.at(-1) ?? null;
   const sprintBudget = selectedSprint?.budgetAmount ?? selectedProject?.budgetAmount ?? null;
   const pendingStage = forecast.isPending ? forecast.variables?.stage : null;
+  const completedSprintCycles = sprintList.filter((sprint) => sprint.status === "COMPLETED").length;
   const maxLoadPct = teamRows.reduce(
     (max, row) => Math.max(max, row.loadPct ?? 0),
     0,
@@ -550,6 +555,10 @@ export default function CostDashboard() {
             </p>
           </div>
         </div>
+        <AutoLearnDialog
+          completedSprints={completedSprintCycles}
+          projectName={selectedProject?.name}
+        />
       </header>
 
       <section className="rounded-lg border bg-card p-4 shadow-card" aria-label="Sprint cost scope">
@@ -673,6 +682,11 @@ export default function CostDashboard() {
               <p className="text-xs text-muted-foreground">
                 {dateLabel(selectedSprint.startDate)} to {dateLabel(selectedSprint.endDate)}
               </p>
+              {selectedSprint.status === "COMPLETED" && remainingPoints != null && remainingPoints > 0 ? (
+                <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                  Sprint closed at {number(selectedSprint.completedPoints)} of {number(selectedSprint.committedPoints)} points. {number(remainingPoints)} points moved to the next sprint.
+                </p>
+              ) : null}
             </div>
             <TabsList className="max-w-full overflow-x-auto" variant="line">
               <TabsTrigger value="overview"><Gauge data-icon="inline-start" /> Overview</TabsTrigger>
@@ -700,12 +714,12 @@ export default function CostDashboard() {
                 hint={`${teamRows.length} delivery member${teamRows.length === 1 ? "" : "s"}`}
               />
               <MetricCard
-                label="Planned labor"
+                label="Planned sprint cost"
                 value={money(plannedLaborCost, currency)}
                 hint={`${hours(plannedEffortMinutes)} estimated effort`}
               />
               <MetricCard
-                label="Actual labor"
+                label={actualCostLabel}
                 value={money(actualLaborCost, currency)}
                 hint={`${hours(loggedEffortMinutes)} logged · ${hours(overtimeMinutes)} overtime`}
               />
@@ -745,6 +759,7 @@ export default function CostDashboard() {
                       maxLoadPct={maxLoadPct}
                       budget={sprintBudget}
                       currency={currency}
+                      actualCostLabel={actualCostLabel}
                     />
                   </div>
                 ) : latestHistory ? (
@@ -763,6 +778,7 @@ export default function CostDashboard() {
                       maxLoadPct={maxLoadPct}
                       budget={sprintBudget}
                       currency={currency}
+                      actualCostLabel={actualCostLabel}
                     />
                   </div>
                 ) : (
@@ -909,6 +925,7 @@ function CostExplanationPanel({
   maxLoadPct,
   budget,
   currency,
+  actualCostLabel,
 }: {
   forecast: CostForecast | CostTrendPoint;
   plannedLaborCost?: number | null;
@@ -922,10 +939,10 @@ function CostExplanationPanel({
   maxLoadPct: number;
   budget?: number | null;
   currency: string;
+  actualCostLabel: string;
 }) {
   const budgetVariance = budget != null ? forecast.forecastAmount - budget : null;
   const drivers = "drivers" in forecast ? forecast.drivers : [];
-  const explanation = "explanation" in forecast ? forecast.explanation : null;
   const variancePct = "varianceVsBudgetPct" in forecast ? forecast.varianceVsBudgetPct : null;
   const errorMarginAmount = "errorMarginAmount" in forecast ? forecast.errorMarginAmount : null;
   const topDrivers = drivers
@@ -948,9 +965,9 @@ function CostExplanationPanel({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <ExplanationMetric label="Forecast amount" value={money(forecast.forecastAmount, currency)} />
-        <ExplanationMetric label="Planned labor" value={money(plannedLaborCost, currency)} />
-        <ExplanationMetric label="Actual labor so far" value={money(actualLaborCost, currency)} />
+        <ExplanationMetric label="Forecast final cost" value={money(forecast.forecastAmount, currency)} />
+        <ExplanationMetric label="Planned sprint cost" value={money(plannedLaborCost, currency)} />
+        <ExplanationMetric label={actualCostLabel} value={money(actualLaborCost, currency)} />
         <ExplanationMetric label="Overtime signal" value={hours(overtimeMinutes)} detail="Logged as overtime" />
         <ExplanationMetric
           label="Availability signal"
@@ -984,12 +1001,6 @@ function CostExplanationPanel({
         />
       </div>
 
-      {explanation ? (
-        <p className="mt-4 rounded-md bg-muted/50 p-3 text-sm leading-relaxed text-muted-foreground">
-          {explanation}
-        </p>
-      ) : null}
-
       <div className="mt-4 border-t pt-3">
         <h4 className="text-sm font-medium">
           <LabelWithHelp label="Cost drivers" />
@@ -1014,6 +1025,9 @@ function CostExplanationPanel({
                 : isComponent
                   ? "Cost component"
                   : "Model influence";
+              const driverLabel = driver.feature === "actual_cost_so_far"
+                ? actualCostLabel
+                : (driver.label ?? driver.feature);
               return (
                 <div key={`${driver.feature}-${driver.label}`} className="rounded-md border bg-background/40 p-3">
                   <div className="flex items-start justify-between gap-3">
@@ -1030,7 +1044,7 @@ function CostExplanationPanel({
                           )}
                           aria-hidden
                         />
-                        <span>{driver.label ?? driver.feature}</span>
+                        <span>{driverLabel}</span>
                       </p>
                       <p className="mt-0.5 text-[10px] font-medium uppercase text-muted-foreground">
                         {driverType}

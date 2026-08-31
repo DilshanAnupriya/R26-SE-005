@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useSession } from "@/components/session-provider";
 import { ApiError } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
-import type { FeedbackAction } from "@/lib/api/ai-schemas";
+import type { FeedbackAction, RiskQuestionTurn } from "@/lib/api/ai-schemas";
 import { aiApi } from "./api";
 
 /**
@@ -203,6 +203,30 @@ export function useRankCandidates() {
     onError: (error) => {
       toast.error(
         error instanceof ApiError ? error.message : "Could not rank candidates. Assign manually.",
+      );
+    },
+  });
+}
+
+/**
+ * Ask the advisor about one sprint's risk.
+ *
+ * <p>A mutation, like every other model call here: asking costs latency and money, so
+ * it happens when a person presses send. As a query it would refetch on window focus
+ * and quietly re-bill for an answer already on screen.</p>
+ *
+ * <p>No cache invalidation — an answer changes nothing on the server. The advisor
+ * reads the risk figures; it never writes them.</p>
+ */
+export function useAskRiskAdvisor(sprintId: string | undefined) {
+  const { api } = useSession();
+
+  return useMutation({
+    mutationFn: (input: { question: string; history: RiskQuestionTurn[] }) =>
+      aiApi.askRiskAdvisor(api, sprintId!, input),
+    onError: (error) => {
+      toast.error(
+        error instanceof ApiError ? error.message : "The advisor could not be reached.",
       );
     },
   });

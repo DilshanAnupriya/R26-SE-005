@@ -68,6 +68,14 @@ export const sprintsApi = {
     },
   ) => api.request("/sprints", { method: "POST", body, schema: sprintSchema }),
 
+  update: (
+    api: ApiClient,
+    sprintId: string,
+    body: {
+      budgetAmount?: number;
+    },
+  ) => api.request(`/sprints/${sprintId}`, { method: "PATCH", body, schema: sprintSchema }),
+
   /** Freezes the commitment. Everything added afterwards is recorded as scope creep. */
   start: (api: ApiClient, sprintId: string) =>
     api.request(`/sprints/${sprintId}/start`, { method: "POST", schema: sprintSchema }),

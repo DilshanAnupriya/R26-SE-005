@@ -1,0 +1,78 @@
+{
+  "generated_at_utc": "2026-08-31T02:55:11.734434+00:00",
+  "stage": "mid",
+  "target": "remaining_effort_minutes",
+  "target_definition": "Remaining effort minutes after a partial sprint snapshot.",
+  "data_path": "/Users/vidurahewaduwa/Documents/GitHub/RP-R26-SE-005-Component-4-Backend/Human-aware-sprint-codest-predict/Dataset/final_agile_dataset.csv",
+  "split_mode": "time",
+  "random_state": 42,
+  "cv_folds": 5,
+  "cleaning_report": {
+    "input_rows": 3602,
+    "clean_rows": 3067,
+    "removed_rows": 535,
+    "effort_upper_limit": 5602500.079999977,
+    "planned_points_upper_limit": 443.167499999999
+  },
+  "train_rows": 2454,
+  "holdout_rows": 613,
+  "selected_ml_model": "gradient_boosting",
+  "cross_validation_metrics": {
+    "random_forest": {
+      "cv_rmse_mean": 131064.71879412801,
+      "cv_mae_mean": 48946.66889586387,
+      "cv_r2_mean": 0.8388393916555227,
+      "cv_mape_mean": 28.372156120307615
+    },
+    "random_forest_band": {
+      "cv_rmse_mean": 155991.08668259348,
+      "cv_mae_mean": 56965.564059610515,
+      "cv_r2_mean": 0.7801423171752324,
+      "cv_mape_mean": 32.52638935911496
+    },
+    "random_forest_band_alt": {
+      "cv_rmse_mean": 162981.77875416208,
+      "cv_mae_mean": 58259.55253566134,
+      "cv_r2_mean": 0.7487650093866952,
+      "cv_mape_mean": 32.95971146432072
+    },
+    "extra_trees": {
+      "cv_rmse_mean": 134842.22735147574,
+      "cv_mae_mean": 49746.81488225599,
+      "cv_r2_mean": 0.8280623086786827,
+      "cv_mape_mean": 28.6055489521121
+    },
+    "extra_trees_band": {
+      "cv_rmse_mean": 145588.5408669018,
+      "cv_mae_mean": 52756.06472716865,
+      "cv_r2_mean": 0.8045060157879547,
+      "cv_mape_mean": 29.074740599536124
+    },
+    "gradient_boosting": {
+      "cv_rmse_mean": 129474.72744276398,
+      "cv_mae_mean": 48858.63565437108,
+      "cv_r2_mean": 0.8402239945389361,
+      "cv_mape_mean": 28.2553903323278
+    }
+  },
+  "ml_holdout_metrics": {
+    "mae": 33492.86194056806,
+    "rmse": 102944.43644991265,
+    "r2": 0.8720206854957456,
+    "mape": 28.62868843269224
+  },
+  "baseline_holdout_metrics": {
+    "mae": 54920.89113599869,
+    "rmse": 166595.54178827582,
+    "r2": 0.6648333728093734,
+    "mape": 49.85272915141063
+  },
+  "deployment_method": "ml_remaining_effort",
+  "deployment_metrics": {
+    "mae": 33492.86194056806,
+    "rmse": 102944.43644991265,
+    "r2": 0.8720206854957456,
+    "mape": 28.62868843269224
+  },
+  "decision": "Deploy Gradient Boosting because it beats the simple baseline."
+}
