@@ -67,6 +67,31 @@ export type PredictionEnvelope = z.infer<typeof predictionEnvelopeSchema>;
 
 // ------------------------------------------------------------------ M1 · sizing
 
+/**
+ * The project context an estimate was scored against.
+ *
+ * <p>All four of these were being sent to the model and none of them were ever shown,
+ * so a panel listing four drivers about the story's own words read as though the team
+ * doing the work were not part of the estimate. It is — it just never ranks high enough
+ * in a per-story breakdown to surface as a driver, because it is the one input that is
+ * identical for every story in the project.</p>
+ */
+export const sizingContextSchema = z.object({
+  teamSize: z.coerce.number().nullish(),
+  devExperienceLevel: z.string().nullish(),
+  domain: z.string().nullish(),
+  techStack: z.string().nullish(),
+  /**
+   * Model-side names of the inputs that fell back to a training median. Not derivable
+   * from the four fields above: a tech stack the model was never trained on is a
+   * filled-in field that scores as a blank one, and only the model service knows it.
+   */
+  defaulted: z.array(z.string()).default([]),
+  inferredFromText: z.array(z.string()).default([]),
+  textTermsRecognised: z.number().int().nullish(),
+});
+export type SizingContext = z.infer<typeof sizingContextSchema>;
+
 export const storyPointEstimateSchema = z.object({
   storyId: z.uuid(),
   itemKey: z.string().nullish(),
@@ -74,6 +99,7 @@ export const storyPointEstimateSchema = z.object({
   currentPoints: z.coerce.number().nullish(),
   suggestedPoints: z.coerce.number().nullish(),
   prediction: predictionEnvelopeSchema.nullish(),
+  context: sizingContextSchema.nullish(),
 });
 export type StoryPointEstimate = z.infer<typeof storyPointEstimateSchema>;
 

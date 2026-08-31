@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AcceptanceCriteriaList, parseCriteria } from "./acceptance-criteria-list";
+import { LabelPicker } from "./label-picker";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -67,6 +68,7 @@ export function CreateStoryDialog({
   const [epicId, setEpicId] = useState<string>(NO_EPIC);
   const [assigneeId, setAssigneeId] = useState<string>(UNASSIGNED);
   const [sprintId, setSprintId] = useState<string>(defaultSprintId || NO_SPRINT);
+  const [labelIds, setLabelIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (defaultSprintId) {
@@ -87,6 +89,7 @@ export function CreateStoryDialog({
     setEpicId(NO_EPIC);
     setAssigneeId(UNASSIGNED);
     setSprintId(defaultSprintId || NO_SPRINT);
+    setLabelIds([]);
   }
 
   function submit(event: React.FormEvent) {
@@ -103,6 +106,10 @@ export function CreateStoryDialog({
         epicId: epicId === NO_EPIC ? undefined : epicId,
         assigneeId: assigneeId === UNASSIGNED ? undefined : assigneeId,
         sprintId: sprintId === NO_SPRINT ? undefined : sprintId,
+        // Sent on creation rather than applied afterwards, so the first estimate run
+        // against this story already counts them. A story sized before its labels are
+        // attached is sized with one fewer component than it has.
+        labelIds: labelIds.length > 0 ? labelIds : undefined,
       },
       {
         onSuccess: (story) => {
@@ -294,6 +301,16 @@ export function CreateStoryDialog({
               sprint&rsquo;s requirement-change risk hears about it.
             </p>
           </div>
+
+          {/* Directly under the criteria because the model reads them as one quantity:
+              num_components is criteria plus child tasks plus labels. Putting labels
+              anywhere else in this form would hide that they are the same signal. */}
+          <LabelPicker
+            projectId={projectId}
+            selected={labelIds}
+            onChange={setLabelIds}
+            disabled={create.isPending}
+          />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

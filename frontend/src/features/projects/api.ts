@@ -1,9 +1,11 @@
 import type { ApiClient } from "@/lib/api/client";
 import { pageResponseSchema } from "@/lib/api/schemas";
 import {
+  labelSchema,
   projectOverviewSchema,
   projectSchema,
   workflowStateSchema,
+  type Label,
   type Project,
 } from "@/lib/api/delivery-schemas";
 import { z } from "zod";
@@ -132,4 +134,25 @@ export const projectsApi = {
 
   remove: (api: ApiClient, projectId: string) =>
     api.request(`/projects/${projectId}`, { method: "DELETE" }),
+};
+
+/**
+ * Labels, which the estimator reads as well as the eye.
+ *
+ * <p>They were reachable only through the API: the backend has listed, created and
+ * applied them since the backlog module landed, and nothing in the product ever offered
+ * to set one. That is a cosmetic gap everywhere except here — a story's label count is
+ * one of the three things {@code num_components} is summed from, and that is the
+ * strongest structural driver the story-point model has. A backlog with no labels hands
+ * every story the same value for it.</p>
+ */
+export const labelsApi = {
+  /** A project's own labels and the organization-wide ones, already merged server-side. */
+  listForProject: (api: ApiClient, projectId: string) =>
+    api.request(`/projects/${projectId}/labels`, { schema: z.array(labelSchema) }),
+
+  create: (
+    api: ApiClient,
+    body: { name: string; color?: string | null; projectId?: string | null },
+  ) => api.request("/labels", { method: "POST", body, schema: labelSchema }) as Promise<Label>,
 };
