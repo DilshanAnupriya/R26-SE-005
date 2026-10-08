@@ -8,6 +8,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   LogOut,
+  MessagesSquare,
   Moon,
   Settings,
   ShieldAlert,
@@ -31,6 +32,7 @@ import { useSession } from "@/components/session-provider";
 const NAVIGATION = [
   { href: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "projects", label: "Projects", icon: FolderKanban },
+  { href: "copilot", label: "Copilot", icon: MessagesSquare },
   { href: "ai-insights", label: "AI insights", icon: Sparkles },
   { href: "reports", label: "Reports", icon: BarChart3 },
   { href: "risk", label: "Risk analysis", icon: ShieldAlert },
