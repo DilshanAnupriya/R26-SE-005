@@ -108,6 +108,14 @@ export const queryKeys = {
       [...queryKeys.ai.all, "predictions", filters] as const,
   },
 
+  /** Conversations are per user, so the keys need no user id: the cache is per session. */
+  copilot: {
+    all: ["copilot"] as const,
+    status: () => [...queryKeys.copilot.all, "status"] as const,
+    conversations: () => [...queryKeys.copilot.all, "conversations"] as const,
+    conversation: (id: string) => [...queryKeys.copilot.all, "conversation", id] as const,
+  },
+
   requirementChanges: {
     all: ["requirement-changes"] as const,
     types: () => [...queryKeys.requirementChanges.all, "types"] as const,
