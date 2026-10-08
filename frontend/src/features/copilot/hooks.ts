@@ -70,38 +70,41 @@ export function useDeleteConversation() {
  * One turn. The question appears in the thread straight away, before the answer —
  * a turn can take a while when the model calls several tools, and a message that
  * vanishes from the box without appearing anywhere reads as lost.
+ *
+ * <p>The conversation is a mutation variable rather than a hook argument so the very
+ * first message can create a conversation and send to it in one gesture.</p>
  */
-export function useSendMessage(conversationId: string) {
+export function useSendMessage() {
   const { api } = useSession();
   const queryClient = useQueryClient();
-  const key = queryKeys.copilot.conversation(conversationId);
 
   return useMutation({
-    mutationFn: (content: string) => copilotApi.send(api, conversationId, content),
-    onMutate: async (content) => {
+    mutationFn: ({ conversationId, content }: { conversationId: string; content: string }) =>
+      copilotApi.send(api, conversationId, content),
+    onMutate: async ({ conversationId, content }) => {
+      const key = queryKeys.copilot.conversation(conversationId);
       await queryClient.cancelQueries({ queryKey: key });
+      const question = {
+        id: `pending-${Date.now()}`,
+        role: "USER" as const,
+        content,
+        toolSteps: [],
+        proposals: [],
+      };
+      // A conversation created a moment ago has nothing cached yet; seed it so the
+      // question shows while the first answer is being written.
       queryClient.setQueryData<ConversationDetail>(key, (current) =>
         current
-          ? {
-              ...current,
-              messages: [
-                ...current.messages,
-                {
-                  id: `pending-${Date.now()}`,
-                  role: "USER",
-                  content,
-                  toolSteps: [],
-                  proposals: [],
-                },
-              ],
-            }
-          : current,
+          ? { ...current, messages: [...current.messages, question] }
+          : { id: conversationId, title: content.slice(0, 80), messages: [question] },
       );
     },
     // Refetched either way: on failure the server has still saved the question, and
     // the thread should show exactly what it holds.
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: key });
+    onSettled: (_data, _error, { conversationId }) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.copilot.conversation(conversationId),
+      });
       void queryClient.invalidateQueries({ queryKey: queryKeys.copilot.conversations() });
     },
   });
