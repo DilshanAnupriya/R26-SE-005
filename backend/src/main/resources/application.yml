@@ -134,6 +134,11 @@ app:
       model: ${ADVISOR_MODEL:gemini-2.0-flash}
       max-tokens: ${ADVISOR_MAX_TOKENS:2048}
       timeout-ms: ${ADVISOR_TIMEOUT_MS:60000}
+    copilot:
+      # Uses the advisor's provider and key above. These bound one answer's cost.
+      max-tool-rounds: ${COPILOT_MAX_TOOL_ROUNDS:6}
+      max-tokens: ${COPILOT_MAX_TOKENS:2048}
+      history-turns: ${COPILOT_HISTORY_TURNS:20}
     max-batch-size: 50
   seed:
     enabled: ${SEED_ENABLED:false}

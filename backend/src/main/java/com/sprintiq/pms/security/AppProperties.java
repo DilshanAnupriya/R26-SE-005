@@ -81,7 +81,22 @@ public class AppProperties {
         private Duration cacheTtl = Duration.ofHours(6);
         private int maxBatchSize = 50;
         private Advisor advisor = new Advisor();
+        private Copilot copilot = new Copilot();
         private CostRisk costRisk = new CostRisk();
+    }
+
+    /**
+     * The Copilot assistant. It talks to the same provider as the advisor — one key,
+     * one decision about sending data off the machine — so only its loop limits live
+     * here.
+     */
+    @Getter @Setter
+    public static class Copilot {
+        /** Tool rounds per answer before the model is made to answer with what it has. */
+        private int maxToolRounds = 6;
+        private int maxTokens = 2048;
+        /** Prior user/assistant turns replayed with each new message. */
+        private int historyTurns = 20;
     }
 
     /**
