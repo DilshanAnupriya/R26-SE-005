@@ -240,3 +240,39 @@ Stated plainly so the gap is visible rather than discovered:
 Every prediction returns a value, uncertainty bounds, ranked contributing drivers and a
 plain-language explanation, and every panel offers **Accept / Override / Compare** with the
 outcome written to `ai_feedback` and the audit trail.
+
+## Copilot — the LLM over all four models
+
+`/app/<org>/copilot` is a conversational assistant built on a hosted LLM (Gemini by
+default; any OpenAI-compatible endpoint with tool calling works). It does not replace
+the four models — it *uses* them. Each question runs a short tool-calling loop in the
+backend's `copilot` module:
+
+| Tool | What it reads |
+|---|---|
+| `list_projects`, `get_project_overview` | Projects, health signals, active sprint |
+| `list_sprints`, `get_sprint_summary`, `search_work_items` | Sprints, stories, tasks |
+| `estimate_story_points`, `forecast_velocity` | **M1** |
+| `get_sprint_risk` | **M2**, with the board findings adjusting it |
+| `rank_developers_for_task` | **M3** |
+| `forecast_sprint_cost` | **M4** |
+| `propose_accept_estimate`, `propose_assign_task`, `propose_move_story_to_sprint` | Nothing — they create a proposal |
+
+**It sees only what you can see.** Every tool calls the same application service the
+controllers do, inside your tenant context, and declares the controller's permission;
+tools you lack are never offered to the model.
+
+**It cannot change anything by itself.** The `propose_*` tools create a card whose
+summary is written by the server from the real records — never by the model. Nothing
+happens until you press Confirm, which re-checks ownership, expiry (24h) and
+permission, then applies the change through the owning module (accepting an estimate
+goes through the existing Accept flow, so it lands in `ai_feedback` like any other).
+An instruction smuggled into a task title can, at worst, produce a card nobody clicks.
+
+**Enable it** with the same key as the risk advisor — `ADVISOR_API_KEY` (and optionally
+`ADVISOR_MODEL` / `ADVISOR_BASE_URL`). The Copilot sends the figures its tools return
+to that provider, which is why it is off without a key. Loop limits live under
+`app.ai.copilot` (`max-tool-rounds`, `max-tokens`, `history-turns`).
+
+Conversations are saved per user (`copilot_conversations`, `copilot_messages`,
+`copilot_proposals`, migration `V31`) and are private to the person who started them.
