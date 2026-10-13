@@ -1,6 +1,31 @@
+import { networkInterfaces } from "node:os";
 import type { NextConfig } from "next";
 
+/**
+ * This machine's own IPv4 addresses, e.g. the `192.168.x.x` that `next dev` prints as
+ * its "Network" URL.
+ *
+ * <p>Next 16's dev server refuses its JS chunks and HMR socket to any origin other than
+ * localhost, so opening the app on the LAN address renders a page that never hydrates —
+ * every button, including Sign in, silently does nothing. Read at startup rather than
+ * hardcoded because DHCP moves the address. `DEV_ALLOWED_ORIGINS` (comma-separated
+ * hostnames) covers anything else, such as a tunnel. Dev-only: `next start` ignores it.</p>
+ */
+function devOrigins(): string[] {
+  const own = Object.values(networkInterfaces())
+    .flat()
+    .filter((addr) => addr?.family === "IPv4" && !addr.internal)
+    .map((addr) => addr!.address);
+  const extra = (process.env.DEV_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((host) => host.trim())
+    .filter(Boolean);
+  return [...own, ...extra];
+}
+
 const nextConfig: NextConfig = {
+  allowedDevOrigins: devOrigins(),
+
   images: {
     remotePatterns: [
       {

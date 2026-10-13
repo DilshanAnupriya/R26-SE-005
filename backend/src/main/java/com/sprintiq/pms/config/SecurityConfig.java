@@ -101,7 +101,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(properties.getCors().getAllowedOrigins());
+        // Patterns rather than exact origins so dev can allow the LAN address; an exact
+        // origin is still a valid pattern, and unlike "*" these work with credentials.
+        configuration.setAllowedOriginPatterns(properties.getCors().getAllowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id",
                 "X-Organization-Id", "Accept"));

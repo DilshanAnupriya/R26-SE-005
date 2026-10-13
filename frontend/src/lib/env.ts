@@ -27,7 +27,30 @@ if (!parsedPublic.success) {
   );
 }
 
-export const env = parsedPublic.data;
+/**
+ * Points a `localhost` backend URL at whatever host the page was actually opened on.
+ *
+ * <p>The dev `.env` says `localhost:8080`, which is only right on the machine running
+ * the stack. Open the app from a phone or another laptop at `192.168.x.x:3000` and
+ * `localhost` is that device, so every API call after sign-in fails. Only a loopback
+ * host is rewritten; a real configured hostname is left exactly as written.</p>
+ */
+function onPageHost(url: string): string {
+  if (typeof window === "undefined") return url;
+  const parsed = new URL(url);
+  const loopback = ["localhost", "127.0.0.1", "[::1]"];
+  if (!loopback.includes(parsed.hostname) || loopback.includes(window.location.hostname)) {
+    return url;
+  }
+  parsed.hostname = window.location.hostname;
+  // URL.toString() appends a trailing slash to a bare origin; keep the input's shape.
+  return url.endsWith("/") ? parsed.toString() : parsed.toString().replace(/\/$/, "");
+}
+
+export const env = {
+  NEXT_PUBLIC_API_URL: onPageHost(parsedPublic.data.NEXT_PUBLIC_API_URL),
+  NEXT_PUBLIC_WS_URL: onPageHost(parsedPublic.data.NEXT_PUBLIC_WS_URL),
+};
 
 /**
  * Server-only configuration. Route handlers reach the backend over the container

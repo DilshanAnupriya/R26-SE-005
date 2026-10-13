@@ -23,6 +23,7 @@ public class AppProperties {
 
     @Getter @Setter
     public static class Cors {
+        /** Exact origins or Spring origin patterns ({@code http://192.168.*:3000}). */
         private List<String> allowedOrigins = List.of("http://localhost:3000");
     }
 
