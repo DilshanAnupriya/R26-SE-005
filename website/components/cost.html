@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en" class="no-js" data-light="day">
+<head>
+<!-- head:start -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07090e">
+<meta name="author" content="R26-SE-005 · SLIIT Faculty of Computing">
+<link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/core.css">
+<link rel="stylesheet" href="../assets/css/components.css">
+<script>
+  (function () {
+    var d = document.documentElement, t = null;
+    d.classList.remove("no-js"); d.classList.add("js");
+    try { t = localStorage.getItem("siq-theme"); } catch (e) {}
+    if (t !== "night") t = "day";
+    d.setAttribute("data-theme", t);
+    d.setAttribute("data-light", t);
+  })();
+</script>
+<!-- head:end -->
+<title>M4 Cost · SprintIQ research · R26-SE-005</title>
+<meta name="description" content="M4 of SprintIQ: sprint cost forecasting at planning and mid-sprint, explained with exact Shapley values.">
+</head>
+<body data-page="components cost">
+<!-- header:start -->
+<a class="skip" href="#main">Skip to content</a>
+<div class="grain" aria-hidden="true"></div>
+<header class="nav" data-nav-bar>
+  <div class="nav__inner wrap">
+    <a class="brand" href="../index.html" aria-label="SprintIQ research, home">
+      <svg class="brand__mark" viewBox="0 -2 36 34" aria-hidden="true">
+        <defs>
+          <linearGradient id="sg-h" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/>
+          </linearGradient>
+        </defs>
+        <path d="M23.5 8.6C21.6 6.6 19 5.6 16 5.6c-4.4 0-7.4 2.4-7.4 5.7 0 3.5 3 4.7 7.4 5.5 4.6.8 7.6 2.3 7.6 5.8 0 3.4-3.1 5.8-7.6 5.8-3.2 0-5.9-1.1-7.8-3.1" fill="none" stroke="url(#sg-h)" stroke-width="4.2" stroke-linecap="round"/>
+        <g fill="none" stroke="#19e6c1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M24.3 6h3.2v3.2" opacity=".5"/><path d="M26.9 3.4h3.2v3.2" opacity=".75"/><path d="M29.5.8h3.2V4"/>
+        </g>
+      </svg>
+      <span class="brand__name">SprintIQ</span>
+      <span class="brand__id">R26-SE-005</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Main">
+      <ul>
+        <li><a class="nav__link" href="../index.html" data-nav="home">Home</a></li>
+        <li><a class="nav__link" href="../domain.html" data-nav="domain">Domain</a></li>
+        <li class="has-menu">
+          <a class="nav__link" href="../index.html#chapters" data-nav="components" aria-current="page" aria-haspopup="true">
+            Components
+            <svg class="nav__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="menu" role="group" aria-label="Research components">
+            <ul>
+              <li><a href="../components/estimation.html" data-nav="estimation"><span class="chip chip--model chip--m1">M1</span><span class="menu__title">Effort &amp; sprint estimation</span><span class="menu__sub">How big is it, and how much can we do?</span></a></li>
+              <li><a href="../components/allocation.html" data-nav="allocation"><span class="chip chip--model chip--m3">M3</span><span class="menu__title">Skill-aware resource allocation</span><span class="menu__sub">Who should take it?</span></a></li>
+              <li><a href="../components/cost.html" data-nav="cost" aria-current="page"><span class="chip chip--model chip--m4">M4</span><span class="menu__title">Sprint cost forecasting</span><span class="menu__sub">What will it cost?</span></a></li>
+              <li><a href="../components/risk.html" data-nav="risk"><span class="chip chip--model chip--m2">M2</span><span class="menu__title">Sprint risk prediction</span><span class="menu__sub">What could go wrong?</span></a></li>
+              <li><a href="../components/copilot.html" data-nav="copilot"><span class="chip chip--model chip--cp">AI</span><span class="menu__title">SprintIQ Copilot</span><span class="menu__sub">Ask across all four models</span></a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="has-menu">
+          <a class="nav__link" href="../milestones.html" data-nav="milestones" aria-haspopup="true">
+            Milestones
+            <svg class="nav__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="menu menu--milestones" role="group" aria-label="Assessments">
+            <ul>
+              <li><a href="../milestones.html#taf"><span class="menu__title">Topic assessment</span><span class="menu__date">TAF</span></a></li>
+              <li><a href="../milestones.html#charter"><span class="menu__title">Project charter</span><span class="menu__date">Charter</span></a></li>
+              <li><a href="../milestones.html#proposal"><span class="menu__title">Project proposal</span><span class="menu__date">PP0</span></a></li>
+              <li><a href="../milestones.html#pp1"><span class="menu__title">Progress presentation 1</span><span class="menu__date">PP1</span></a></li>
+              <li><a href="../milestones.html#pp2"><span class="menu__title">Progress presentation 2</span><span class="menu__date">PP2</span></a></li>
+              <li><a href="../milestones.html#website"><span class="menu__title">Research website</span><span class="menu__date">Web</span></a></li>
+              <li><a href="../milestones.html#paper"><span class="menu__title">Research paper</span><span class="menu__date">Paper</span></a></li>
+              <li><a href="../milestones.html#final-report"><span class="menu__title">Final report</span><span class="menu__date">Thesis</span></a></li>
+              <li><a href="../milestones.html#final"><span class="menu__title">Final presentation &amp; viva</span><span class="menu__date">Viva</span></a></li>
+            </ul>
+            <div class="menu__foot"><a class="link-arrow" href="../milestones.html">All milestones</a></div>
+          </div>
+        </li>
+        <li><a class="nav__link" href="../documents.html" data-nav="documents">Documents</a></li>
+        <li><a class="nav__link" href="../presentations.html" data-nav="presentations">Presentations</a></li>
+        <li><a class="nav__link" href="../about.html" data-nav="about">About us</a></li>
+      </ul>
+    </nav>
+
+    <div class="nav__actions">
+      <button class="icon-btn theme-toggle" type="button" data-theme-toggle aria-label="Switch to night mode">
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <a class="btn btn--primary btn--sm nav__contact" href="../contact.html" data-nav="contact">Contact us</a>
+
+      <details class="mnav" data-mnav>
+        <summary aria-label="Open menu"><span class="mnav__bars" aria-hidden="true"></span>Menu</summary>
+        <div class="mnav__sheet" data-lenis-prevent>
+          <nav aria-label="Mobile">
+            <div class="mnav__group">
+              <span class="label">Research</span>
+              <ul class="mnav__list">
+                <li><a href="../index.html" data-nav="home">Home</a></li>
+                <li><a href="../domain.html" data-nav="domain">Domain</a></li>
+                <li><a href="../milestones.html" data-nav="milestones">Milestones</a></li>
+                <li><a href="../documents.html" data-nav="documents">Documents</a></li>
+                <li><a href="../presentations.html" data-nav="presentations">Presentations</a></li>
+                <li><a href="../about.html" data-nav="about">About us</a></li>
+                <li><a href="../contact.html" data-nav="contact">Contact us</a></li>
+              </ul>
+            </div>
+            <div class="mnav__group">
+              <span class="label">Components, in sprint order</span>
+              <ul class="mnav__list">
+                <li><a href="../components/estimation.html" data-nav="estimation">Estimation <span class="mono">M1</span></a></li>
+                <li><a href="../components/allocation.html" data-nav="allocation">Allocation <span class="mono">M3</span></a></li>
+                <li><a href="../components/cost.html" data-nav="cost" aria-current="page">Cost <span class="mono">M4</span></a></li>
+                <li><a href="../components/risk.html" data-nav="risk">Risk <span class="mono">M2</span></a></li>
+                <li><a href="../components/copilot.html" data-nav="copilot">Copilot <span class="mono">AI</span></a></li>
+              </ul>
+            </div>
+          </nav>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+<!-- header:end -->
+
+<main id="main">
+  <section class="page-hero">
+    <div class="wrap page-hero__grid">
+      <div class="page-hero__copy">
+        <p class="crumbs"><a href="../index.html#chapters">Components</a><span aria-hidden="true">/</span><span>M4 · Cost</span></p>
+        <span class="eyebrow">M4 · Day 05 · Mid-sprint</span>
+        <h1 class="q-settle">What will it cost?</h1>
+        <p class="lead">A planning forecast, then a mid-sprint re-forecast that knows what has already been spent, with the drivers behind every number.</p>
+        <dl class="page-hero__meta">
+          <div><dt>Component</dt><dd>Sprint cost forecasting</dd></div>
+          <div><dt>Researcher</dt><dd>Hewaduwa H.G.V · IT22186706</dd></div>
+        </dl>
+      </div>
+      <figure class="page-hero__art" data-reveal="scale">
+        <img src="../assets/img/illus/gate-m4.svg" width="600" height="480" alt="Illustration: a dial of 55 ticks around a track. Indigo ticks show the cost spent so far, a dashed grey arc marks the initial forecast, and a brighter violet arc ending in an aqua dot marks the mid-sprint re-forecast, slightly further along.">
+      </figure>
+    </div>
+    <div class="wrap"><nav class="on-this-page" aria-label="On this page"><a href="#problem">Problem</a><a href="#gap">Research gap</a><a href="#objectives">Objectives</a><a href="#method">Method</a><a href="#results">Results</a><a href="#product">In the product</a><a href="#limits">Limitations</a></nav></div>
+  </section>
+
+  <div class="wrap section section--flush">
+    <div class="article">
+      <div class="article__body">
+        <section id="problem" aria-labelledby="problem-h">
+          <span class="eyebrow">01 · Problem</span>
+          <h2 id="problem-h">Costed once, discovered at the end</h2>
+          <div class="prose"><p>Sprint cost is usually estimated once, at planning, from a spreadsheet or an expert's judgement. By the time an overrun is visible, the sprint is over.</p><p>When the number does move, nobody can say which factor moved it, so there is nothing to act on.</p></div>
+        </section>
+        <section id="gap" aria-labelledby="gap-h">
+          <span class="eyebrow">02 · Research gap</span>
+          <h2 id="gap-h">Forecasts that never update</h2>
+          <div class="prose"><ul><li>Parametric models estimate cost up front and aren't revised as work happens <a class="cite" href="../domain.html#ref-11">[11]</a>.</li><li>Earned value management tracks spend against plan but extrapolates rather than learning what remains <a class="cite" href="../domain.html#ref-13">[13]</a>.</li><li>Forecasts are rarely explained factor by factor.</li><li>ML is often assumed to beat simple formulas without testing it at each stage.</li></ul></div>
+        </section>
+        <section id="objectives" aria-labelledby="objectives-h">
+          <span class="eyebrow">03 · Objectives</span>
+          <h2 id="objectives-h">What M4 set out to do</h2>
+          <div class="prose"><p><strong>Main objective.</strong> Forecast sprint cost at planning and re-forecast it mid-sprint from the cost already incurred, explaining every forecast.</p>
+          <ul><li>Compare a formula and an ML model at planning, and ship whichever wins.</li><li>Predict remaining effort mid-sprint and add the actual cost already incurred.</li><li>Explain each forecast with exact Shapley values over nine factors.</li><li>Show the forecast and its trend inside the sprint view.</li></ul></div>
+        </section>
+        <section id="method" aria-labelledby="method-h">
+          <span class="eyebrow">04 · Method</span>
+          <h2 id="method-h">A hybrid, by evidence</h2>
+          <div class="prose"><p>At planning, the sum of task estimates multiplied by the blended rate was compared with an ML candidate on a time-ordered holdout. The formula won (MAPE 23.45% vs 25.65%), so it ships.</p><p>Mid-sprint, a gradient-boosting model predicts the remaining effort from progress so far, and the forecast adds the actual cost already incurred. Drivers are computed as exact Shapley values over nine factors, all 512 coalitions.</p></div>
+          <div class="pipeline" data-pipeline style="--n: 6;">
+            <ol class="pipeline__rail" role="list"><li><button class="pipeline__stage" type="button" aria-expanded="true" aria-controls="m4-1"><span class="pipeline__dot">01</span>Plan</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="m4-2"><span class="pipeline__dot">02</span>Planning</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="m4-3"><span class="pipeline__dot">03</span>Progress</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="m4-4"><span class="pipeline__dot">04</span>Remaining</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="m4-5"><span class="pipeline__dot">05</span>Explain</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="m4-6"><span class="pipeline__dot">06</span>Forecast</button></li></ol>
+            <span class="pipeline__token" aria-hidden="true"></span>
+            <div class="pipeline__detail"><div class="pipeline__panel is-active" id="m4-1"><h4>Sprint plan</h4><p>Task estimates, team members and their rates at planning time.</p></div><div class="pipeline__panel" id="m4-2"><h4>Formula forecast</h4><p>Sum of task estimates × blended rate. Chosen because it beat the ML candidate.</p></div><div class="pipeline__panel" id="m4-3"><h4>Mid-sprint signals</h4><p>Work completed, effort logged and actual cost incurred by day five.</p></div><div class="pipeline__panel" id="m4-4"><h4>Gradient boosting</h4><p>Predicts the effort still to come; the actual cost so far is added to it.</p></div><div class="pipeline__panel" id="m4-5"><h4>Exact Shapley drivers</h4><p>Nine factors, all 512 coalitions, so each driver's share is exact.</p></div><div class="pipeline__panel" id="m4-6"><h4>Forecast with drivers</h4><p>The re-forecast, its change since planning, and what moved it.</p></div></div>
+          </div>
+        </section>
+        <section id="results" aria-labelledby="results-h">
+          <span class="eyebrow">05 · Results</span>
+          <h2 id="results-h">A forecast that learns from what was spent</h2>
+          <div class="env-grid">
+            <article class="env">
+              <header class="env__head"><span class="chip chip--model chip--m4">M4</span><span class="label">Mid-sprint forecast</span><span class="env__src label">Time holdout</span></header>
+              <p class="env__value"><span data-count="28.63" data-decimals="2">28.63</span><span class="env__unit">% MAPE</span></p>
+              <p class="env__caption">Error of the cost forecast made mid-sprint. Lower is better.</p>
+              <div class="env__bars" role="img" aria-label="SprintIQ model: 28.63%; Remaining-estimate method: 49.85% baseline"><div class="env__bar"><div class="env__track"><span class="env__fill" style="--v: 0.521;"></span></div><span>28.63%</span></div><div class="env__bar env__bar--ghost"><div class="env__track"><span class="env__fill" style="--v: 0.906;"></span></div><span>49.85% baseline</span></div></div>
+              <p class="env__delta">↓ 42.6% error vs the remaining-estimate method</p>
+              <details class="env__why"><summary>Why this matters</summary><p>Halfway through a sprint, adding the cost already incurred to a learned forecast of the remaining effort is far more accurate than trusting the original remaining estimates.</p></details>
+            </article>
+            <article class="env">
+              <header class="env__head"><span class="chip chip--model chip--m4">M4</span><span class="label">Planning forecast</span><span class="env__src label">Time holdout</span></header>
+              <p class="env__value"><span data-count="23.45" data-decimals="2">23.45</span><span class="env__unit">% MAPE</span></p>
+              <p class="env__caption">Error of the cost forecast made at planning. Lower is better.</p>
+              <div class="env__bars" role="img" aria-label="Formula (shipped): 23.45%; ML candidate: 25.65% ML"><div class="env__bar"><div class="env__track"><span class="env__fill" style="--v: 0.426;"></span></div><span>23.45%</span></div><div class="env__bar env__bar--ghost"><div class="env__track"><span class="env__fill" style="--v: 0.466;"></span></div><span>25.65% ML</span></div></div>
+              <p class="env__delta">Formula kept: it beat the ML candidate</p>
+              <details class="env__why"><summary>Why this matters</summary><p>At planning there is little signal beyond the estimates themselves. The ML model didn't beat the simple formula on the time holdout, so the formula ships. Choosing by evidence is part of the method.</p></details>
+            </article>
+          </div>
+          <div style="margin-top: var(--sp-34);">
+            <figure class="chart">
+              <p class="chart__title">Cost forecast error</p><p class="chart__sub">Mean absolute percentage error · lower is better</p>
+              <div class="chart__rows"><div class="chart__row"><span class="chart__name">Planning · ML candidate</span><div class="chart__bar"><span class="chart__fill" style="--v: 0.427; --i: 0;"></span><span class="chart__val" style="--v: 0.427;">25.65%</span></div></div><div class="chart__row is-ours"><span class="chart__name">Planning · formula (shipped)</span><div class="chart__bar"><span class="chart__fill" style="--v: 0.391; --i: 1;"></span><span class="chart__val" style="--v: 0.391;">23.45%</span></div></div><div class="chart__row"><span class="chart__name">Mid-sprint · remaining estimate</span><div class="chart__bar"><span class="chart__fill" style="--v: 0.831; --i: 2;"></span><span class="chart__val" style="--v: 0.831;">49.85%</span></div></div><div class="chart__row is-ours"><span class="chart__name">Mid-sprint · SprintIQ model</span><div class="chart__bar"><span class="chart__fill" style="--v: 0.477; --i: 3;"></span><span class="chart__val" style="--v: 0.477;">28.63%</span></div></div></div>
+              <figcaption>Planning and mid-sprint forecasts compared on a time-ordered holdout.</figcaption>
+            </figure>
+          </div>
+          <div class="cards-2" style="margin-top: var(--sp-34);">
+            <article class="card icard"><span class="chip chip--model chip--m4">Drivers</span><h3>Exact Shapley values</h3><p>Every forecast is explained over nine cost factors, evaluating all 512 coalitions exactly rather than sampling them <a class="cite" href="../domain.html#ref-14">[14]</a>.</p></article>
+            <article class="card icard"><span class="chip chip--model chip--m4">Hybrid</span><h3>Chosen by evidence</h3><p>Planning uses the formula; mid-sprint uses the model. Each stage ships whichever method won on held-out data.</p></article>
+          </div>
+          <p class="data-note">Time-ordered holdout. Training data is synthetic; validation on real project cost data is ongoing.</p>
+        </section>
+        <section id="product" aria-labelledby="product-h">
+          <span class="eyebrow">06 · In the product</span>
+          <h2 id="product-h">Where it shows up in SprintIQ</h2>
+          <div class="prose"><p>The cost forecast widget sits on every sprint, with the cost trend and the drivers behind each change.</p></div>
+          <div class="cards-2" style="margin-top: var(--sp-21);"><figure class="shot">
+              <div class="shot__chrome" aria-hidden="true"><span></span><span></span><span></span></div>
+              <div class="shot__body"><p class="shot__label"><span class="label">Screenshot · cost forecast</span>The cost forecast widget at planning and mid-sprint.</p></div>
+            </figure><figure class="shot">
+              <div class="shot__chrome" aria-hidden="true"><span></span><span></span><span></span></div>
+              <div class="shot__body"><p class="shot__label"><span class="label">Screenshot · cost drivers</span>The cost trend with its Shapley drivers.</p></div>
+            </figure></div>
+        </section>
+        <section id="limits" aria-labelledby="limits-h">
+          <span class="eyebrow">07 · Limitations</span>
+          <h2 id="limits-h">What we can't claim yet</h2>
+          <div class="prose"><ul><li>Training data is synthetic; real cost data may differ in rates and overheads.</li><li>At planning the ML model did not beat the formula, so planning-time accuracy is the formula's.</li><li>MAPE of 28.63% mid-sprint is a large improvement, but still a wide margin for budgeting.</li></ul></div>
+        </section>
+        <nav class="pager" aria-label="Other components"><a class="card card--link pager__prev" href="allocation.html"><span class="label">Previous · M3</span><strong>Allocation</strong></a><a class="card card--link pager__next" href="risk.html"><span class="label">Next · M2</span><strong>Risk</strong></a></nav>
+      </div>
+      <aside class="article__aside" aria-label="At a glance">
+        <div class="card card--pad">
+          <span class="label">At a glance</span>
+          <dl class="glance"><div><dt>Planning</dt><dd>Estimates × blended rate</dd></div><div><dt>Mid-sprint</dt><dd>Gradient boosting + actual cost</dd></div><div><dt>Explains with</dt><dd>Exact Shapley · 9 factors</dd></div><div><dt>Headline</dt><dd>MAPE 28.63% vs 49.85%</dd></div></dl>
+        </div>
+        <div class="card card--pad person-card">
+            <span class="label">Researcher</span>
+            <div class="person-mini" style="margin-top: var(--sp-13);"><span class="avatar" aria-hidden="true">H</span><p><strong>Hewaduwa H.G.V</strong>IT22186706 · <a class="text-link" href="mailto:it22186706@my.sliit.lk">it22186706@my.sliit.lk</a></p></div>
+          </div>
+        <div class="card card--pad">
+          <span class="label">Papers and downloads</span>
+          <ul class="dl-list" role="list"><li><span>Proposal report</span><span class="chip chip--pending">Pending</span></li><li><span>Final thesis</span><span class="chip chip--pending">Pending</span></li></ul>
+          <a class="link-arrow" href="../documents.html" style="margin-top: var(--sp-13);">All documents</a>
+        </div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<!-- footer:start -->
+<footer class="footer" data-footer>
+  <div class="wrap">
+    <div class="footer__top">
+      <div class="footer__brand">
+        <a class="brand" href="../index.html" aria-label="SprintIQ research, home">
+          <svg class="brand__mark" viewBox="0 -2 36 34" aria-hidden="true">
+            <defs>
+              <linearGradient id="sg-f" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/>
+              </linearGradient>
+            </defs>
+            <path d="M23.5 8.6C21.6 6.6 19 5.6 16 5.6c-4.4 0-7.4 2.4-7.4 5.7 0 3.5 3 4.7 7.4 5.5 4.6.8 7.6 2.3 7.6 5.8 0 3.4-3.1 5.8-7.6 5.8-3.2 0-5.9-1.1-7.8-3.1" fill="none" stroke="url(#sg-f)" stroke-width="4.2" stroke-linecap="round"/>
+            <g fill="none" stroke="#19e6c1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M24.3 6h3.2v3.2" opacity=".5"/><path d="M26.9 3.4h3.2v3.2" opacity=".75"/><path d="M29.5.8h3.2V4"/>
+            </g>
+          </svg>
+          <span class="brand__name">SprintIQ</span>
+        </a>
+        <p>An AI-driven Agile project management framework for enhancing productivity and project success in Sri Lanka's software industry.</p>
+        <p class="footer__people">
+          <strong>R26-SE-005</strong> · BSc (Hons) in IT, Software Engineering<br>
+          Faculty of Computing, Sri Lanka Institute of Information Technology<br>
+          Supervisor <strong>Mrs. Karthiga Vivek</strong> · Co-supervisor <strong>Ms. Kaushalya Rajapakse</strong><br>
+          External supervisor <strong>Mr. Suresh Fernando</strong>
+        </p>
+      </div>
+      <div class="footer__col">
+        <h2>Research</h2>
+        <ul>
+          <li><a href="../domain.html">Domain</a></li>
+          <li><a href="../domain.html#gap">Research gap</a></li>
+          <li><a href="../domain.html#methodology">Methodology</a></li>
+          <li><a href="../milestones.html">Milestones</a></li>
+          <li><a href="../documents.html">Documents</a></li>
+          <li><a href="../presentations.html">Presentations</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h2>Components</h2>
+        <ul>
+          <li><a href="../components/estimation.html">M1 · Estimation</a></li>
+          <li><a href="../components/allocation.html">M3 · Allocation</a></li>
+          <li><a href="../components/cost.html">M4 · Cost</a></li>
+          <li><a href="../components/risk.html">M2 · Risk</a></li>
+          <li><a href="../components/copilot.html">Copilot</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h2>Group</h2>
+        <ul>
+          <li><a href="../about.html">About us</a></li>
+          <li><a href="../contact.html">Contact us</a></li>
+          <li><a href="../contact.html#template">E-mail template</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__ship">
+      <span class="footer__shipped">SHIPPED <span class="chevrons" aria-hidden="true"><span>›</span><span>›</span><span>›</span></span> R26-SE-005</span>
+      <span>© <span data-year>2026</span> SprintIQ research group · SLIIT · For academic purposes</span>
+      <a href="#main">Back to top ↑</a>
+    </div>
+  </div>
+</footer>
+<!-- footer:end -->
+<script src="../assets/js/site.js" defer></script>
+</body>
+</html>
