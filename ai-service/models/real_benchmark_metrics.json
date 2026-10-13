@@ -1,0 +1,68 @@
+[
+  {
+    "Model": "Dummy (Majority-Class Prior)",
+    "ROC-AUC": 0.5,
+    "PR-AUC (Minority Failure)": 0.9333,
+    "Brier Score (Calibration)": 0.0631,
+    "Balanced Accuracy": 0.5,
+    "F1 Macro": 0.4828,
+    "F1 Minority (Failure)": 0.0,
+    "Recall Minority": 0.0,
+    "Precision Minority": 0.0
+  },
+  {
+    "Model": "Logistic Regression (L2)",
+    "ROC-AUC": 0.529,
+    "PR-AUC (Minority Failure)": 0.9383,
+    "Brier Score (Calibration)": 0.1683,
+    "Balanced Accuracy": 0.5142,
+    "F1 Macro": 0.4935,
+    "F1 Minority (Failure)": 0.1116,
+    "Recall Minority": 0.2059,
+    "Precision Minority": 0.0765
+  },
+  {
+    "Model": "Random Forest",
+    "ROC-AUC": 0.5131,
+    "PR-AUC (Minority Failure)": 0.9357,
+    "Brier Score (Calibration)": 0.1544,
+    "Balanced Accuracy": 0.4848,
+    "F1 Macro": 0.4836,
+    "F1 Minority (Failure)": 0.0315,
+    "Recall Minority": 0.0294,
+    "Precision Minority": 0.0339
+  },
+  {
+    "Model": "LightGBM",
+    "ROC-AUC": 0.4875,
+    "PR-AUC (Minority Failure)": 0.93,
+    "Brier Score (Calibration)": 0.1836,
+    "Balanced Accuracy": 0.5063,
+    "F1 Macro": 0.4706,
+    "F1 Minority (Failure)": 0.1104,
+    "Recall Minority": 0.2647,
+    "Precision Minority": 0.0698
+  },
+  {
+    "Model": "XGBoost",
+    "ROC-AUC": 0.5226,
+    "PR-AUC (Minority Failure)": 0.9357,
+    "Brier Score (Calibration)": 0.1982,
+    "Balanced Accuracy": 0.5268,
+    "F1 Macro": 0.4694,
+    "F1 Minority (Failure)": 0.1271,
+    "Recall Minority": 0.3382,
+    "Precision Minority": 0.0782
+  },
+  {
+    "Model": "Stacking Ensemble (Proposed)",
+    "ROC-AUC": 0.4738,
+    "PR-AUC (Minority Failure)": 0.9285,
+    "Brier Score (Calibration)": 0.2546,
+    "Balanced Accuracy": 0.4606,
+    "F1 Macro": 0.3603,
+    "F1 Minority (Failure)": 0.102,
+    "Recall Minority": 0.4559,
+    "Precision Minority": 0.0574
+  }
+]
