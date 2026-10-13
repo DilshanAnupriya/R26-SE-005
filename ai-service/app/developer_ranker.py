@@ -51,85 +51,189 @@ def rank_developers_for_task(
         if old_name in dev_df.columns:
             dev_df = dev_df.rename(columns={old_name: new_name})
 
+    is_empirical = "dev_domain_familiarity" in feature_columns or "has_story_points" in feature_columns
+
     candidates = []
 
-    # =========================================
-    # BUILD CANDIDATE ROWS WITH CALCULATED FEATURES
-    # =========================================
-    for _, dev in dev_df.iterrows():
+    if is_empirical:
+        # =========================================
+        # EMPIRICAL FEATURE PIPELINE (Real Agile Model)
+        # =========================================
+        story_points = float(task_profile.get("storyPoints", task_profile.get("story_points", 3.0)))
+        has_story_points = 1 if story_points > 0 else 0
 
-        # ✅ STEP 1: Calculate skill_match_score
-        # This MUST match the training data calculation
-        frontend_match = max(0, 1 - (abs(dev["skill_frontend"] - task_profile.get("reqFrontend", task_profile.get("req_frontend", 0))) / 5))
-        backend_match = max(0, 1 - (abs(dev["skill_backend"] - task_profile.get("reqBackend", task_profile.get("req_backend", 0))) / 5))
-        db_match = max(0, 1 - (abs(dev["skill_db"] - task_profile.get("reqDb", task_profile.get("req_db", 0))) / 5))
-
-        # Weight by task type (primary skill gets 60%)
-        task_type = task_profile.get("taskType", "").lower()
-        if task_type == "frontend":
-            skill_match_score = frontend_match * 0.6 + backend_match * 0.25 + db_match * 0.15
-        elif task_type == "backend":
-            skill_match_score = backend_match * 0.6 + frontend_match * 0.25 + db_match * 0.15
-        elif task_type == "db":
-            skill_match_score = db_match * 0.6 + backend_match * 0.25 + frontend_match * 0.15
-        else:
-            skill_match_score = (frontend_match + backend_match + db_match) / 3
-
-        skill_match_score = max(0, min(1, skill_match_score))
-
-        # ✅ STEP 2: Calculate velocity_contribution
-        # Story points weighted by skill match and workload (burnout reduces capacity)
-        current_workload = dev["current_workload"]
-        burnout = np.tanh(current_workload / 40)
-        story_points = task_profile.get("storyPoints", task_profile.get("story_points", 3))
-        velocity_contribution = story_points * skill_match_score * (1 - burnout * 0.5)
-
-        # ✅ STEP 3: Interaction Features (New for Stacking V2)
-        skill_exp_inter = float(skill_match_score * dev["experience_level"])
-        workload_density = float(dev["current_workload"] / (dev["availability"] + 1))
-        task_complexity = int(task_profile.get("taskComplexity", task_profile.get("task_complexity", 5)))
-        story_points = int(task_profile.get("storyPoints", task_profile.get("story_points", 3)))
-        complexity_sp_ratio = float(task_complexity / (story_points + 1))
-
-        # Build feature row (MUST have all training features)
-        row = {
-            "sprint_id": 0,  # For prediction, sprint_id is not relevant
-            "experience_level": int(dev["experience_level"]),
-            "skill_frontend": int(dev["skill_frontend"]),
-            "skill_backend": int(dev["skill_backend"]),
-            "skill_db": int(dev["skill_db"]),
-            "task_complexity": task_complexity,
-            "story_points": story_points,
-            "req_frontend": int(task_profile.get("reqFrontend", task_profile.get("req_frontend", 0))),
-            "req_backend": int(task_profile.get("reqBackend", task_profile.get("req_backend", 0))),
-            "req_db": int(task_profile.get("reqDb", task_profile.get("req_db", 0))),
-            "current_tasks": int(dev["current_tasks"]),
-            "current_workload": int(dev["current_workload"]),
-            "availability": float(dev["availability"]),
-            
-            # ✅ CRITICAL: These are calculated ABOVE
-            "skill_match_score": float(skill_match_score),
-            "velocity_contribution": float(velocity_contribution),
-            
-            # ✅ NEW: Interaction Features
-            "skill_exp_inter": skill_exp_inter,
-            "workload_density": workload_density,
-            "complexity_sp_ratio": complexity_sp_ratio,
-
-            # ✅ BEHAVIORAL METRICS (Updated after each sprint)
-            "consistency": float(dev.get("consistency", 0.5)),
-            "learning_rate": float(dev.get("learning_rate", 0.1)),
-
-            # One-hot task type
-            "task_type_backend": 1 if task_type == "backend" else 0,
-            "task_type_frontend": 1 if task_type == "frontend" else 0,
-            "task_type_db": 1 if task_type == "db" else 0,
-            
-            # Store dev ID separately
-            "_dev_id": dev["dev_id"],
+        p_raw = str(task_profile.get("priority", task_profile.get("priority_id", "3"))).lower()
+        priority_map = {
+            "blocker": 1, "critical": 2, "major": 3, "minor": 4, "trivial": 5,
+            "high": 2, "medium": 3, "low": 4, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5
         }
+        priority_id = priority_map.get(p_raw, 3)
 
-        candidates.append(row)
+        depended_on = int(task_profile.get("dependedOn", task_profile.get("depended_on", 0)))
+        is_blocked = 1 if (task_profile.get("is_blocked") or task_profile.get("isBlocked") or depended_on > 0) else 0
+        dependency_count = int(task_profile.get("dependency_count", task_profile.get("dependencyCount", task_profile.get("dependedOnBy", depended_on))))
+
+        title = str(task_profile.get("title", task_profile.get("summary", task_profile.get("name", "Task description"))))
+        summary_char_length = max(10, len(title))
+
+        raw_type = str(task_profile.get("taskType", task_profile.get("task_type", "task"))).lower()
+        raw_domain = str(task_profile.get("domain", "")).lower()
+
+        if not raw_domain:
+            if "frontend" in raw_type or "ui" in raw_type:
+                raw_domain = "ui"
+            elif "backend" in raw_type or "core" in raw_type:
+                raw_domain = "core"
+            elif "db" in raw_type or "database" in raw_type:
+                raw_domain = "database"
+            else:
+                raw_domain = "other"
+
+        domain_analytics = 1 if "analytic" in raw_domain else 0
+        domain_clustering = 1 if "cluster" in raw_domain else 0
+        domain_core = 1 if ("core" in raw_domain or "backend" in raw_type or "backend" in raw_domain) else 0
+        domain_database = 1 if ("database" in raw_domain or "db" in raw_domain or "db" in raw_type) else 0
+        domain_stream = 1 if "stream" in raw_domain else 0
+        domain_ui = 1 if ("ui" in raw_domain or "frontend" in raw_domain or "frontend" in raw_type) else 0
+        domain_other = 1 if not any([domain_analytics, domain_clustering, domain_core, domain_database, domain_stream, domain_ui]) else 0
+
+        type_bug = 1 if ("bug" in raw_type or "defect" in raw_type) else 0
+        type_task = 1 if not type_bug else 0
+
+        req_fe = task_profile.get("reqFrontend", task_profile.get("req_frontend"))
+        req_be = task_profile.get("reqBackend", task_profile.get("req_backend"))
+        req_db = task_profile.get("reqDb", task_profile.get("req_db"))
+
+        for _, dev in dev_df.iterrows():
+            dev_fe = float(dev.get("skill_frontend", 3))
+            dev_be = float(dev.get("skill_backend", 3))
+            dev_db = float(dev.get("skill_db", 3))
+
+            if "domain_familiarity" in dev:
+                domain_fam = float(dev["domain_familiarity"])
+            elif domain_ui:
+                domain_fam = dev_fe / 5.0
+            elif domain_core:
+                domain_fam = dev_be / 5.0
+            elif domain_database:
+                domain_fam = dev_db / 5.0
+            else:
+                domain_fam = (dev_fe + dev_be + dev_db) / 15.0
+            domain_fam = max(0.0, min(1.0, domain_fam))
+
+            if req_fe is not None or req_be is not None or req_db is not None:
+                fe_m = max(0, 1 - (abs(dev_fe - float(req_fe or 0)) / 5.0))
+                be_m = max(0, 1 - (abs(dev_be - float(req_be or 0)) / 5.0))
+                db_m = max(0, 1 - (abs(dev_db - float(req_db or 0)) / 5.0))
+                if domain_ui:
+                    skill_match_score = fe_m * 0.6 + be_m * 0.25 + db_m * 0.15
+                elif domain_core:
+                    skill_match_score = be_m * 0.6 + fe_m * 0.25 + db_m * 0.15
+                elif domain_database:
+                    skill_match_score = db_m * 0.6 + be_m * 0.25 + fe_m * 0.15
+                else:
+                    skill_match_score = (fe_m + be_m + db_m) / 3.0
+            else:
+                skill_match_score = domain_fam
+            skill_match_score = max(0.0, min(1.0, float(skill_match_score)))
+
+            curr_tasks = int(dev.get("current_tasks", 0))
+            curr_workload = float(dev.get("current_workload", 0.0))
+            hist_vel = float(dev.get("historical_velocity_avg", dev.get("velocity", 12.0)))
+            prior_comp = int(dev.get("prior_completed_tasks", dev.get("completed_tasks", 15)))
+
+            emp_row = {
+                "story_points": story_points,
+                "has_story_points": has_story_points,
+                "priority_id": priority_id,
+                "is_blocked": is_blocked,
+                "dependency_count": dependency_count,
+                "summary_char_length": summary_char_length,
+                "dev_sprint_task_load": curr_tasks,
+                "dev_sprint_story_point_load": curr_workload,
+                "dev_historical_velocity_avg": hist_vel,
+                "dev_prior_completed_tasks": prior_comp,
+                "dev_domain_familiarity": domain_fam,
+                "domain_analytics": domain_analytics,
+                "domain_clustering": domain_clustering,
+                "domain_core": domain_core,
+                "domain_database": domain_database,
+                "domain_other": domain_other,
+                "domain_stream": domain_stream,
+                "domain_ui": domain_ui,
+                "type_bug": type_bug,
+                "type_task": type_task,
+
+                "_dev_id": dev["dev_id"],
+                "skill_match_score": skill_match_score,
+                "current_tasks": curr_tasks,
+                "current_workload": curr_workload,
+                "experience_level": dev.get("experience_level", 2),
+                "availability": dev.get("availability", 1.0),
+                "consistency": float(dev.get("consistency", 0.5)),
+                "learning_rate": float(dev.get("learning_rate", 0.1)),
+            }
+            candidates.append(emp_row)
+
+    else:
+        # =========================================
+        # SYNTHETIC BENCHMARK FEATURE PIPELINE (Lspgacy)
+        # =========================================
+        for _, dev in dev_df.iterrows():
+            frontend_match = max(0, 1 - (abs(dev["skill_frontend"] - task_profile.get("reqFrontend", task_profile.get("req_frontend", 0))) / 5))
+            backend_match = max(0, 1 - (abs(dev["skill_backend"] - task_profile.get("reqBackend", task_profile.get("req_backend", 0))) / 5))
+            db_match = max(0, 1 - (abs(dev["skill_db"] - task_profile.get("reqDb", task_profile.get("req_db", 0))) / 5))
+
+            task_type = task_profile.get("taskType", "").lower()
+            if task_type == "frontend":
+                skill_match_score = frontend_match * 0.6 + backend_match * 0.25 + db_match * 0.15
+            elif task_type == "backend":
+                skill_match_score = backend_match * 0.6 + frontend_match * 0.25 + db_match * 0.15
+            elif task_type == "db":
+                skill_match_score = db_match * 0.6 + backend_match * 0.25 + frontend_match * 0.15
+            else:
+                skill_match_score = (frontend_match + backend_match + db_match) / 3
+
+            skill_match_score = max(0, min(1, skill_match_score))
+
+            current_workload = dev["current_workload"]
+            burnout = np.tanh(current_workload / 40)
+            story_points = task_profile.get("storyPoints", task_profile.get("story_points", 3))
+            velocity_contribution = story_points * skill_match_score * (1 - burnout * 0.5)
+
+            skill_exp_inter = float(skill_match_score * dev["experience_level"])
+            workload_density = float(dev["current_workload"] / (dev["availability"] + 1))
+            task_complexity = int(task_profile.get("taskComplexity", task_profile.get("task_complexity", 5)))
+            story_points = int(task_profile.get("storyPoints", task_profile.get("story_points", 3)))
+            complexity_sp_ratio = float(task_complexity / (story_points + 1))
+
+            row = {
+                "sprint_id": 0,
+                "experience_level": int(dev["experience_level"]),
+                "skill_frontend": int(dev["skill_frontend"]),
+                "skill_backend": int(dev["skill_backend"]),
+                "skill_db": int(dev["skill_db"]),
+                "task_complexity": task_complexity,
+                "story_points": story_points,
+                "req_frontend": int(task_profile.get("reqFrontend", task_profile.get("req_frontend", 0))),
+                "req_backend": int(task_profile.get("reqBackend", task_profile.get("req_backend", 0))),
+                "req_db": int(task_profile.get("reqDb", task_profile.get("req_db", 0))),
+                "current_tasks": int(dev["current_tasks"]),
+                "current_workload": int(dev["current_workload"]),
+                "availability": float(dev["availability"]),
+                "skill_match_score": float(skill_match_score),
+                "velocity_contribution": float(velocity_contribution),
+                "skill_exp_inter": skill_exp_inter,
+                "workload_density": workload_density,
+                "complexity_sp_ratio": complexity_sp_ratio,
+                "consistency": float(dev.get("consistency", 0.5)),
+                "learning_rate": float(dev.get("learning_rate", 0.1)),
+                "task_type_backend": 1 if task_type == "backend" else 0,
+                "task_type_frontend": 1 if task_type == "frontend" else 0,
+                "task_type_db": 1 if task_type == "db" else 0,
+                "_dev_id": dev["dev_id"],
+            }
+            candidates.append(row)
 
     # =========================================
     # CREATE DATAFRAME AND ALIGN FEATURES
@@ -138,7 +242,7 @@ def rank_developers_for_task(
     dev_ids = candidates_df["_dev_id"].values
     candidates_df = candidates_df.drop(columns=["_dev_id"])
 
-    # ✅ Align to model's expected features for prediction
+    # Align to model's expected features for prediction
     model_input_df = candidates_df.reindex(columns=feature_columns, fill_value=0)
 
     logger.info(f"✓ Prepared {len(candidates_df)} candidates for prediction")
@@ -148,10 +252,15 @@ def rank_developers_for_task(
     # ML PREDICTION
     # =========================================
     try:
-        predicted = model.predict(model_input_df)
-        logger.info(f"✓ ML predictions: min={predicted.min():.2f}, max={predicted.max():.2f}, mean={predicted.mean():.2f}")
+        if hasattr(model, "predict_proba"):
+            proba = model.predict_proba(model_input_df)[:, 1]
+            predicted = np.round(proba * 100.0, 2)
+            logger.info(f"✓ ML completion prob: min={predicted.min():.2f}%, max={predicted.max():.2f}%, mean={predicted.mean():.2f}%")
+        else:
+            predicted = model.predict(model_input_df)
+            logger.info(f"✓ ML predictions: min={predicted.min():.2f}, max={predicted.max():.2f}, mean={predicted.mean():.2f}")
     except Exception as e:
-        logger.error(f"Error in model.predict(): {e}")
+        logger.error(f"Error in model prediction: {e}")
         raise
 
     # =========================================
@@ -187,11 +296,14 @@ def rank_developers_for_task(
     # =========================================
     # NORMALIZE ML PREDICTIONS
     # =========================================
-    max_pred = predicted.max()
-    if max_pred > 0:
-        pred_norm = (predicted / max_pred) * 100
+    if is_empirical:
+        pred_norm = np.clip(predicted, 0.0, 100.0)
     else:
-        pred_norm = np.zeros_like(predicted)
+        max_pred = predicted.max()
+        if max_pred > 0:
+            pred_norm = (predicted / max_pred) * 100
+        else:
+            pred_norm = np.zeros_like(predicted)
 
     # =========================================
     # BEHAVIORAL & GROWTH INCENTIVES (Option 3 Logic)
@@ -371,6 +483,7 @@ def allocate_sprint(
         allocations.append({
             "task_id": task.get("id", task.get("taskId", f"task-{task_idx}")),
             "dev_id": dev_id,
+            "allocated_to": dev_id,
             "match_score": float(dev_row["final_score"]),
             "skill_match": float(dev_row["skill_match_score"])
         })
