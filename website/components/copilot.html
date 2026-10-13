@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en" class="no-js" data-light="day">
+<head>
+<!-- head:start -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07090e">
+<meta name="author" content="R26-SE-005 · SLIIT Faculty of Computing">
+<link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/core.css">
+<link rel="stylesheet" href="../assets/css/components.css">
+<script>
+  (function () {
+    var d = document.documentElement, t = null;
+    d.classList.remove("no-js"); d.classList.add("js");
+    try { t = localStorage.getItem("siq-theme"); } catch (e) {}
+    if (t !== "night") t = "day";
+    d.setAttribute("data-theme", t);
+    d.setAttribute("data-light", t);
+  })();
+</script>
+<!-- head:end -->
+<title>AI Copilot · SprintIQ research · R26-SE-005</title>
+<meta name="description" content="The SprintIQ Copilot: an LLM with tool calling over the four SprintIQ models that proposes changes for a person to confirm.">
+</head>
+<body data-page="components copilot">
+<!-- header:start -->
+<a class="skip" href="#main">Skip to content</a>
+<div class="grain" aria-hidden="true"></div>
+<header class="nav" data-nav-bar>
+  <div class="nav__inner wrap">
+    <a class="brand" href="../index.html" aria-label="SprintIQ research, home">
+      <svg class="brand__mark" viewBox="0 -2 36 34" aria-hidden="true">
+        <defs>
+          <linearGradient id="sg-h" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/>
+          </linearGradient>
+        </defs>
+        <path d="M23.5 8.6C21.6 6.6 19 5.6 16 5.6c-4.4 0-7.4 2.4-7.4 5.7 0 3.5 3 4.7 7.4 5.5 4.6.8 7.6 2.3 7.6 5.8 0 3.4-3.1 5.8-7.6 5.8-3.2 0-5.9-1.1-7.8-3.1" fill="none" stroke="url(#sg-h)" stroke-width="4.2" stroke-linecap="round"/>
+        <g fill="none" stroke="#19e6c1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M24.3 6h3.2v3.2" opacity=".5"/><path d="M26.9 3.4h3.2v3.2" opacity=".75"/><path d="M29.5.8h3.2V4"/>
+        </g>
+      </svg>
+      <span class="brand__name">SprintIQ</span>
+      <span class="brand__id">R26-SE-005</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Main">
+      <ul>
+        <li><a class="nav__link" href="../index.html" data-nav="home">Home</a></li>
+        <li><a class="nav__link" href="../domain.html" data-nav="domain">Domain</a></li>
+        <li class="has-menu">
+          <a class="nav__link" href="../index.html#chapters" data-nav="components" aria-current="page" aria-haspopup="true">
+            Components
+            <svg class="nav__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="menu" role="group" aria-label="Research components">
+            <ul>
+              <li><a href="../components/estimation.html" data-nav="estimation"><span class="chip chip--model chip--m1">M1</span><span class="menu__title">Effort &amp; sprint estimation</span><span class="menu__sub">How big is it, and how much can we do?</span></a></li>
+              <li><a href="../components/allocation.html" data-nav="allocation"><span class="chip chip--model chip--m3">M3</span><span class="menu__title">Skill-aware resource allocation</span><span class="menu__sub">Who should take it?</span></a></li>
+              <li><a href="../components/cost.html" data-nav="cost"><span class="chip chip--model chip--m4">M4</span><span class="menu__title">Sprint cost forecasting</span><span class="menu__sub">What will it cost?</span></a></li>
+              <li><a href="../components/risk.html" data-nav="risk"><span class="chip chip--model chip--m2">M2</span><span class="menu__title">Sprint risk prediction</span><span class="menu__sub">What could go wrong?</span></a></li>
+              <li><a href="../components/copilot.html" data-nav="copilot" aria-current="page"><span class="chip chip--model chip--cp">AI</span><span class="menu__title">SprintIQ Copilot</span><span class="menu__sub">Ask across all four models</span></a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="has-menu">
+          <a class="nav__link" href="../milestones.html" data-nav="milestones" aria-haspopup="true">
+            Milestones
+            <svg class="nav__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="menu menu--milestones" role="group" aria-label="Assessments">
+            <ul>
+              <li><a href="../milestones.html#taf"><span class="menu__title">Topic assessment</span><span class="menu__date">TAF</span></a></li>
+              <li><a href="../milestones.html#charter"><span class="menu__title">Project charter</span><span class="menu__date">Charter</span></a></li>
+              <li><a href="../milestones.html#proposal"><span class="menu__title">Project proposal</span><span class="menu__date">PP0</span></a></li>
+              <li><a href="../milestones.html#pp1"><span class="menu__title">Progress presentation 1</span><span class="menu__date">PP1</span></a></li>
+              <li><a href="../milestones.html#pp2"><span class="menu__title">Progress presentation 2</span><span class="menu__date">PP2</span></a></li>
+              <li><a href="../milestones.html#website"><span class="menu__title">Research website</span><span class="menu__date">Web</span></a></li>
+              <li><a href="../milestones.html#paper"><span class="menu__title">Research paper</span><span class="menu__date">Paper</span></a></li>
+              <li><a href="../milestones.html#final-report"><span class="menu__title">Final report</span><span class="menu__date">Thesis</span></a></li>
+              <li><a href="../milestones.html#final"><span class="menu__title">Final presentation &amp; viva</span><span class="menu__date">Viva</span></a></li>
+            </ul>
+            <div class="menu__foot"><a class="link-arrow" href="../milestones.html">All milestones</a></div>
+          </div>
+        </li>
+        <li><a class="nav__link" href="../documents.html" data-nav="documents">Documents</a></li>
+        <li><a class="nav__link" href="../presentations.html" data-nav="presentations">Presentations</a></li>
+        <li><a class="nav__link" href="../about.html" data-nav="about">About us</a></li>
+      </ul>
+    </nav>
+
+    <div class="nav__actions">
+      <button class="icon-btn theme-toggle" type="button" data-theme-toggle aria-label="Switch to night mode">
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <a class="btn btn--primary btn--sm nav__contact" href="../contact.html" data-nav="contact">Contact us</a>
+
+      <details class="mnav" data-mnav>
+        <summary aria-label="Open menu"><span class="mnav__bars" aria-hidden="true"></span>Menu</summary>
+        <div class="mnav__sheet" data-lenis-prevent>
+          <nav aria-label="Mobile">
+            <div class="mnav__group">
+              <span class="label">Research</span>
+              <ul class="mnav__list">
+                <li><a href="../index.html" data-nav="home">Home</a></li>
+                <li><a href="../domain.html" data-nav="domain">Domain</a></li>
+                <li><a href="../milestones.html" data-nav="milestones">Milestones</a></li>
+                <li><a href="../documents.html" data-nav="documents">Documents</a></li>
+                <li><a href="../presentations.html" data-nav="presentations">Presentations</a></li>
+                <li><a href="../about.html" data-nav="about">About us</a></li>
+                <li><a href="../contact.html" data-nav="contact">Contact us</a></li>
+              </ul>
+            </div>
+            <div class="mnav__group">
+              <span class="label">Components, in sprint order</span>
+              <ul class="mnav__list">
+                <li><a href="../components/estimation.html" data-nav="estimation">Estimation <span class="mono">M1</span></a></li>
+                <li><a href="../components/allocation.html" data-nav="allocation">Allocation <span class="mono">M3</span></a></li>
+                <li><a href="../components/cost.html" data-nav="cost">Cost <span class="mono">M4</span></a></li>
+                <li><a href="../components/risk.html" data-nav="risk">Risk <span class="mono">M2</span></a></li>
+                <li><a href="../components/copilot.html" data-nav="copilot" aria-current="page">Copilot <span class="mono">AI</span></a></li>
+              </ul>
+            </div>
+          </nav>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+<!-- header:end -->
+
+<main id="main">
+  <section class="page-hero">
+    <div class="wrap page-hero__grid">
+      <div class="page-hero__copy">
+        <p class="crumbs"><a href="../index.html#chapters">Components</a><span aria-hidden="true">/</span><span>AI · Copilot</span></p>
+        <span class="eyebrow">Copilot · Day 08 · Any time</span>
+        <h1 class="q-settle">Ask across all four.</h1>
+        <p class="lead">A conversational assistant that calls all four models as tools, sees only what you can see, and changes nothing until you press Confirm.</p>
+        <dl class="page-hero__meta">
+          <div><dt>Component</dt><dd>SprintIQ Copilot</dd></div>
+          <div><dt>Owner</dt><dd>Group</dd></div>
+        </dl>
+      </div>
+      <figure class="page-hero__art" data-reveal="scale">
+        <img src="../assets/img/illus/gate-copilot.svg" width="600" height="480" alt="Illustration: a bright aqua orb above four small gate symbols, one for each model. Light threads run from the orb to two of them, the tool calls it is making; the other two threads are faint.">
+      </figure>
+    </div>
+    <div class="wrap"><nav class="on-this-page" aria-label="On this page"><a href="#problem">Problem</a><a href="#design">Design</a><a href="#tools">Tools</a><a href="#example">Example</a><a href="#safety">Safety</a><a href="#limits">Limitations</a></nav></div>
+  </section>
+
+  <div class="wrap section section--flush">
+    <div class="article">
+      <div class="article__body">
+        <section id="problem" aria-labelledby="problem-h">
+          <span class="eyebrow">01 · Problem</span>
+          <h2 id="problem-h">Four models, many screens</h2>
+          <div class="prose"><p>Each model lives on the screen for the decision it informs: estimates on stories, velocity on sprints, rankings on tasks, cost and risk on the sprint. A scrum master's real questions cut across all of them: <em>Is this sprint over-committed? Who should pick up the blocked story? Will we go over budget?</em></p><p>Answering them means opening several screens and combining the numbers by hand.</p></div>
+        </section>
+        <section id="design" aria-labelledby="design-h">
+          <span class="eyebrow">02 · Design</span>
+          <h2 id="design-h">An agent loop that proposes, never acts</h2>
+          <div class="prose"><p>The Copilot is a hosted LLM with tool calling, running inside the Spring Boot backend. Every tool calls the same application services the screens use, inside the user's own tenant and permissions, so it can only see what the user can see.</p><p>It may read freely, but it cannot write. A change becomes a <strong>proposal card</strong> whose summary is written by the server, not the model, and nothing happens until a person presses Confirm. Proposals expire after 24 hours.</p></div>
+          <div class="pipeline" data-pipeline style="--n: 6;">
+            <ol class="pipeline__rail" role="list"><li><button class="pipeline__stage" type="button" aria-expanded="true" aria-controls="cp-1"><span class="pipeline__dot">01</span>Ask</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="cp-2"><span class="pipeline__dot">02</span>Plan</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="cp-3"><span class="pipeline__dot">03</span>Call</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="cp-4"><span class="pipeline__dot">04</span>Answer</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="cp-5"><span class="pipeline__dot">05</span>Propose</button></li><li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="cp-6"><span class="pipeline__dot">06</span>Confirm</button></li></ol>
+            <span class="pipeline__token" aria-hidden="true"></span>
+            <div class="pipeline__detail"><div class="pipeline__panel is-active" id="cp-1"><h4>The question</h4><p>The user asks in plain language; the last 20 turns give context.</p></div><div class="pipeline__panel" id="cp-2"><h4>The model chooses tools</h4><p>Only tools the user has permission for are offered at all.</p></div><div class="pipeline__panel" id="cp-3"><h4>Tools run</h4><p>Up to six rounds of tool calls, each checked for permission again on execution.</p></div><div class="pipeline__panel" id="cp-4"><h4>Answer with figures</h4><p>Figures come from the models, with their ranges and caveats.</p></div><div class="pipeline__panel" id="cp-5"><h4>Proposal card</h4><p>Any change is a proposal with a server-written summary.</p></div><div class="pipeline__panel" id="cp-6"><h4>A person confirms</h4><p>Confirm runs the action through the normal permission checks; Dismiss discards it.</p></div></div>
+          </div>
+        </section>
+        <section id="tools" aria-labelledby="tools-h">
+          <span class="eyebrow">03 · Tools</span>
+          <h2 id="tools-h">Thirteen tools, five of them models</h2><div class="table-wrap"><table class="table"><caption>Every tool declares the permission it needs; tools the user lacks are never offered to the model.</caption><thead><tr><th scope="col">Tool</th><th scope="col">Kind</th><th scope="col">What it returns</th></tr></thead><tbody><tr><th scope="row"><span class="mono">list_projects</span></th><td>Read</td><td>Projects the user can see</td></tr><tr><th scope="row"><span class="mono">get_project_overview</span></th><td>Read</td><td>A project's overview and health</td></tr><tr><th scope="row"><span class="mono">list_sprints</span></th><td>Read</td><td>Sprints in a project</td></tr><tr><th scope="row"><span class="mono">get_sprint_summary</span></th><td>Read</td><td>A sprint, its items and points</td></tr><tr><th scope="row"><span class="mono">search_work_items</span></th><td>Read</td><td>Stories and tasks by text, sprint or kind</td></tr><tr><th scope="row"><span class="mono">estimate_story_points</span></th><td>M1</td><td>Story-point estimate with range and drivers</td></tr><tr><th scope="row"><span class="mono">forecast_velocity</span></th><td>M1</td><td>Next-sprint velocity band</td></tr><tr><th scope="row"><span class="mono">rank_developers_for_task</span></th><td>M3</td><td>Ranked developers for a task</td></tr><tr><th scope="row"><span class="mono">forecast_sprint_cost</span></th><td>M4</td><td>Planning or mid-sprint cost forecast</td></tr><tr><th scope="row"><span class="mono">get_sprint_risk</span></th><td>M2</td><td>Latest sprint risk scores and adjustments</td></tr><tr><th scope="row"><span class="mono">propose_accept_estimate</span></th><td>Proposal</td><td>Proposes accepting an estimate</td></tr><tr><th scope="row"><span class="mono">propose_assign_task</span></th><td>Proposal</td><td>Proposes an assignee for a task</td></tr><tr><th scope="row"><span class="mono">propose_move_story_to_sprint</span></th><td>Proposal</td><td>Proposes moving stories to a sprint</td></tr></tbody></table></div>
+        </section>
+        <section id="example" aria-labelledby="example-h">
+          <span class="eyebrow">04 · Example</span>
+          <h2 id="example-h">What a conversation looks like</h2><div class="chat chat--static" aria-label="Example Copilot conversation">
+            <div class="chat__msg chat__msg--user">Is sprint 14 over-committed?</div>
+            <div class="chat__steps">
+              <div class="chat__tool is-done"><span class="chat__tick" aria-hidden="true"></span><span class="mono">get_sprint_summary</span></div>
+              <div class="chat__tool is-done"><span class="chat__tick" aria-hidden="true"></span><span class="mono">forecast_velocity</span></div>
+              <div class="chat__tool is-done"><span class="chat__tick" aria-hidden="true"></span><span class="mono">get_sprint_risk</span></div>
+            </div>
+            <div class="chat__msg chat__msg--bot">Yes. Sprint 14 has <strong>34 points</strong> committed, and the velocity model expects <strong>23</strong> (range 20–26). Over-budget risk is <strong>Medium</strong>. Moving the two lowest-priority stories to sprint 15 brings the commitment inside the range.</div>
+            <div class="proposal">
+              <span class="label">Proposal · needs your confirmation</span>
+              <p>Move PROJ-142 and PROJ-147 to sprint 15</p>
+              <div class="cluster"><span class="btn btn--primary btn--sm" aria-disabled="true">Confirm</span><span class="btn btn--sm" aria-disabled="true">Dismiss</span></div>
+            </div>
+          </div>
+          <p class="data-note">Illustrative conversation. The tool names are the product's real ones; the figures are an example.</p>
+        </section>
+        <section id="safety" aria-labelledby="safety-h">
+          <span class="eyebrow">05 · Safety</span>
+          <h2 id="safety-h">Why it's safe to let it read</h2>
+          <div class="prose"><ul><li><strong>Same permissions as the user.</strong> Tools run inside the user's tenant and role; another user's conversation returns not-found.</li><li><strong>Prompt injection can only propose.</strong> Task titles and comments reach the model only as tool data. The worst an injected instruction can do is create a proposal, which a person must still confirm.</li><li><strong>Off by default.</strong> The Copilot sends the figures it looks up to the LLM provider, so it stays disabled until an organisation adds its key.</li><li><strong>Every step is visible.</strong> Each answer lists the tools it called and whether they succeeded.</li></ul></div>
+        </section>
+        <section id="limits" aria-labelledby="limits-h">
+          <span class="eyebrow">06 · Limitations</span>
+          <h2 id="limits-h">What it doesn't do yet</h2>
+          <div class="prose"><ul><li>Answers arrive as a whole turn; there is no streaming yet.</li><li>It lives on its own page rather than beside the board.</li><li>Its answers are only as good as the models it calls; it repeats their caveats rather than hiding them.</li></ul></div>
+        </section>
+        <nav class="pager" aria-label="Other components"><a class="card card--link pager__prev" href="risk.html"><span class="label">Previous · M2</span><strong>Risk</strong></a><a class="card card--link pager__next" href="../domain.html"><span class="label">Back to</span><strong>Domain</strong></a></nav>
+      </div>
+      <aside class="article__aside" aria-label="At a glance">
+        <div class="card card--pad">
+          <span class="label">At a glance</span>
+          <dl class="glance"><div><dt>Model</dt><dd>Gemini 2.0 Flash, swappable</dd></div><div><dt>Tools</dt><dd>13 · 5 model tools</dd></div><div><dt>Writes</dt><dd>Proposals only, confirmed by a person</dd></div><div><dt>Loop</dt><dd>At most 6 tool rounds per turn</dd></div></dl>
+        </div>
+        <div class="card card--pad person-card">
+            <span class="label">Built by</span>
+            <p style="margin-top: var(--sp-8); font-size: 0.9375rem;">The whole group, on top of the four models. <a class="text-link" href="../about.html">Meet the team</a>.</p>
+          </div>
+        <div class="card card--pad">
+          <span class="label">Papers and downloads</span>
+          <ul class="dl-list" role="list"><li><span>Group final report</span><span class="chip chip--pending">Pending</span></li></ul>
+          <a class="link-arrow" href="../documents.html" style="margin-top: var(--sp-13);">All documents</a>
+        </div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<!-- footer:start -->
+<footer class="footer" data-footer>
+  <div class="wrap">
+    <div class="footer__top">
+      <div class="footer__brand">
+        <a class="brand" href="../index.html" aria-label="SprintIQ research, home">
+          <svg class="brand__mark" viewBox="0 -2 36 34" aria-hidden="true">
+            <defs>
+              <linearGradient id="sg-f" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/>
+              </linearGradient>
+            </defs>
+            <path d="M23.5 8.6C21.6 6.6 19 5.6 16 5.6c-4.4 0-7.4 2.4-7.4 5.7 0 3.5 3 4.7 7.4 5.5 4.6.8 7.6 2.3 7.6 5.8 0 3.4-3.1 5.8-7.6 5.8-3.2 0-5.9-1.1-7.8-3.1" fill="none" stroke="url(#sg-f)" stroke-width="4.2" stroke-linecap="round"/>
+            <g fill="none" stroke="#19e6c1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M24.3 6h3.2v3.2" opacity=".5"/><path d="M26.9 3.4h3.2v3.2" opacity=".75"/><path d="M29.5.8h3.2V4"/>
+            </g>
+          </svg>
+          <span class="brand__name">SprintIQ</span>
+        </a>
+        <p>An AI-driven Agile project management framework for enhancing productivity and project success in Sri Lanka's software industry.</p>
+        <p class="footer__people">
+          <strong>R26-SE-005</strong> · BSc (Hons) in IT, Software Engineering<br>
+          Faculty of Computing, Sri Lanka Institute of Information Technology<br>
+          Supervisor <strong>Mrs. Karthiga Vivek</strong> · Co-supervisor <strong>Ms. Kaushalya Rajapakse</strong><br>
+          External supervisor <strong>Mr. Suresh Fernando</strong>
+        </p>
+      </div>
+      <div class="footer__col">
+        <h2>Research</h2>
+        <ul>
+          <li><a href="../domain.html">Domain</a></li>
+          <li><a href="../domain.html#gap">Research gap</a></li>
+          <li><a href="../domain.html#methodology">Methodology</a></li>
+          <li><a href="../milestones.html">Milestones</a></li>
+          <li><a href="../documents.html">Documents</a></li>
+          <li><a href="../presentations.html">Presentations</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h2>Components</h2>
+        <ul>
+          <li><a href="../components/estimation.html">M1 · Estimation</a></li>
+          <li><a href="../components/allocation.html">M3 · Allocation</a></li>
+          <li><a href="../components/cost.html">M4 · Cost</a></li>
+          <li><a href="../components/risk.html">M2 · Risk</a></li>
+          <li><a href="../components/copilot.html">Copilot</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h2>Group</h2>
+        <ul>
+          <li><a href="../about.html">About us</a></li>
+          <li><a href="../contact.html">Contact us</a></li>
+          <li><a href="../contact.html#template">E-mail template</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__ship">
+      <span class="footer__shipped">SHIPPED <span class="chevrons" aria-hidden="true"><span>›</span><span>›</span><span>›</span></span> R26-SE-005</span>
+      <span>© <span data-year>2026</span> SprintIQ research group · SLIIT · For academic purposes</span>
+      <a href="#main">Back to top ↑</a>
+    </div>
+  </div>
+</footer>
+<!-- footer:end -->
+<script src="../assets/js/site.js" defer></script>
+</body>
+</html>

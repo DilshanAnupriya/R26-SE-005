@@ -12,6 +12,12 @@
       "port": 3000
     },
     {
+      "name": "research-website",
+      "runtimeExecutable": "/opt/anaconda3/bin/python3",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "/Users/dilshan/Documents/GitHub/R26-SE-005/website"],
+      "port": 8765
+    },
+    {
       "name": "sprintiq-backend",
       "runtimeExecutable": "/private/tmp/claude-501/-Users-dilshan-Documents-GitHub-R26-SE-005/5746db14-5bab-4e63-890a-03a8595eacf3/scratchpad/run-backend.sh",
       "runtimeArgs": [],
