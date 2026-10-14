@@ -1,0 +1,19 @@
+# The image needs app/, models/ and requirements.txt. Everything else is training and
+# research material that would only slow the build and bloat the image.
+.venv/
+venv/
+**/__pycache__/
+**/*.py[cod]
+
+tests/
+training/
+experiments/
+catboost_info/
+
+# ~270MB of DistilBERT weights that need torch, which requirements.txt deliberately
+# leaves out. Without them the collaboration model scores from its composite equation.
+models/communication_model/
+models/communication_model_checkpoints/
+
+# Evaluation charts for the thesis, not read by the service.
+models/graphs/
