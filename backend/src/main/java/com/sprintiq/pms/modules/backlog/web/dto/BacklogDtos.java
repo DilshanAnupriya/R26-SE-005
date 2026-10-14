@@ -101,7 +101,9 @@ public final class BacklogDtos {
             @Schema(description = "The story's new priority. PRIORITY_CHANGED only.")
             Priority newPriority,
 
-            @Schema(description = "The story's new description. DESCRIPTION_UPDATED only.")
+            @Schema(description = "The story's new description. DESCRIPTION_UPDATED, and "
+                    + "optionally SCOPE_ADDED / SCOPE_REMOVED as the updated scope — the size "
+                    + "still decides the charge for those.")
             String newDescription,
 
             @Schema(description = "The story's new acceptance criteria. "
