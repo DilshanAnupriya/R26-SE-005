@@ -315,6 +315,61 @@ class AiLayerIT extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("requirement change is 0% until a requirement has actually moved")
+    void requirementChangeStartsAtZero() {
+        ProjectResponse project = newProject("Mobile Banking");
+        SprintResponse sprint = newSprintWithWork(project.id());
+
+        // A sprint with work on it and nothing changed: the model would have read its
+        // planning columns and handed back a standing 10-20%. Nothing has churned, so the
+        // figure is nought, and no model was asked for it.
+        SprintRiskResponse fresh = riskService.assess(sprint.id());
+        assertThat(fresh.requirementChange()).isNotNull();
+        assertThat(fresh.requirementChange().riskScore()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(fresh.requirementChange().predictionId()).isNull();
+        assertThat(riskService.latest(sprint.id()).requirementChange().riskScore())
+                .isEqualByComparingTo(BigDecimal.ZERO);
+
+        // The first logged change brings the model in.
+        requirementChangeService.log(project.id(), new LogRequirementChangeRequest(
+                RequirementChangeType.SCOPE_ADDED, ChangeImpactDirection.INCREASE,
+                sprint.id(), null, null, "A second payment provider", null, "Product owner"));
+        SprintRiskResponse changed = riskService.assess(sprint.id());
+        assertThat(changed.requirementChange().predictionId())
+                .as("once a requirement has moved, the model scores the sprint again")
+                .isNotNull();
+        assertThat(changed.requirementChange().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
+    }
+
+    @Test
+    @DisplayName("collaboration starts at 0% and still shows what the board charges")
+    void collaborationBaselineCarriesBoardCharges() {
+        ProjectResponse project = newProject("Mobile Banking");
+        SprintResponse sprint = newSprintWithWork(project.id());
+
+        // Nothing for the collaboration model to read. It used to come back unscored, and
+        // an unscored gauge had nothing for a board charge to sit on.
+        SprintRiskResponse fresh = riskService.assess(sprint.id());
+        assertThat(fresh.communicationCollaboration()).isNotNull();
+        assertThat(fresh.communicationCollaboration().riskScore()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(fresh.communicationCollaboration().predictionId()).isNull();
+
+        // A task added with nobody on it.
+        adjustmentService.revise(sprint.id(), RiskType.COMMUNICATION_COLLABORATION,
+                "TASK_UNASSIGNED:" + UUID.randomUUID(), BigDecimal.valueOf(3), "Nobody assigned to MB-1");
+        assertThat(riskService.latest(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .as("the charge moves the gauge straight away")
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+
+        // And a second baseline does not swallow it.
+        assertThat(riskService.assess(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+        assertThat(riskService.latest(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+    }
+
+    @Test
     @DisplayName("a logged requirement change survives pressing Assess")
     void requirementChangeSurvivesReassessment() {
         ProjectResponse project = newProject("Mobile Banking");
@@ -400,6 +455,15 @@ class AiLayerIT extends AbstractIntegrationTest {
         // something ticking the box does not actually do, which is the case that broke:
         // the board is unchanged, so the next scoring reads exactly what it read before.
         SprintResponse sprint = newSprintWithoutAGoal(project.id());
+        // A requirement-change history that nets to nothing. A sprint whose requirements
+        // have never moved scores 0% on that model without consulting it, and then has no
+        // step to offer; logging a change and withdrawing it brings the model in while
+        // leaving the gauge at the step's own credit alone.
+        RequirementChangeResponse logged = requirementChangeService.log(project.id(),
+                new LogRequirementChangeRequest(RequirementChangeType.SCOPE_ADDED,
+                        ChangeImpactDirection.INCREASE, sprint.id(), null, null,
+                        "Logged and withdrawn", null, "Product owner"));
+        requirementChangeService.delete(logged.id());
         riskService.assess(sprint.id());
 
         List<RiskRemediationStepResponse> offered = remediationService.stepsFor(sprint.id());

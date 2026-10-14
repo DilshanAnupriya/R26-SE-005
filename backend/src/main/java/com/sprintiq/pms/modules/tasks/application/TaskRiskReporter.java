@@ -90,6 +90,17 @@ public class TaskRiskReporter {
     private static final BigDecimal STARTED_ON_TIME_CREDIT = BigDecimal.valueOf(-4);
     private static final BigDecimal STARTED_ON_TIME_CREDIT_CAP = BigDecimal.valueOf(-8);
 
+    /** Collaboration credit per comment on a one-day task. */
+    private static final BigDecimal COMMENT_CREDIT = BigDecimal.valueOf(-2);
+    /** Per reply — more than a comment, because a reply is the thread being answered. */
+    private static final BigDecimal REPLY_CREDIT = BigDecimal.valueOf(-3);
+    /** How many comments, and separately replies, earn credit on one task. */
+    private static final long DISCUSSION_COUNTED = 3;
+
+    /** Collaboration charge for a one-day task in a sprint with nobody assigned. */
+    private static final BigDecimal UNASSIGNED_BASE = BigDecimal.valueOf(6);
+    private static final BigDecimal UNASSIGNED_CAP = BigDecimal.valueOf(10);
+
     /** An overdue task cannot cost the sprint more than this, however large its estimate. */
     private static final BigDecimal OVERDUE_CAP = BigDecimal.valueOf(15);
 
@@ -171,6 +182,11 @@ public class TaskRiskReporter {
             if (task.getReopenedCount() > 0) {
                 reopened(task);
             }
+        }
+
+        if (previous.isTerminal() != current.isTerminal() && task.getAssigneeId() == null) {
+            // An unowned task finished needs nobody; one reopened needs somebody again.
+            ownershipChanged(task);
         }
     }
 
@@ -304,6 +320,116 @@ public class TaskRiskReporter {
                 "Unanswered on %s for %s".formatted(task.getItemKey(), humanise(waitedMinutes)));
     }
 
+    /**
+     * Charges collaboration for a task in a sprint that nobody owns, and settles that
+     * charge once somebody does.
+     *
+     * <p>Unassigned, the task pays its full weighted charge: work nobody has picked up is
+     * the most basic coordination failure a board can show. Assigned, it keeps only the
+     * share of that charge matching the part of its estimate that ran out while it waited
+     * — picked up straight away, nothing is left; picked up with a third of its time gone,
+     * a third stays.</p>
+     *
+     * <p>Extending the estimate afterwards gives that time back: every minute added
+     * cancels a minute of the wait, and an extension as long as the wait clears the
+     * charge. Called after creation, assignment, re-estimation, a sprint move and a move
+     * into or out of Done, so the entry always describes the task as it stands.</p>
+     */
+    public void ownershipChanged(Task task) {
+        if (task.getSprintId() == null) {
+            return;
+        }
+        String key = unassignedKey(task);
+        TaskStatus status = task.getStatus();
+        boolean finished = status != null && status.isTerminal();
+
+        if (task.getAssigneeId() == null) {
+            if (finished) {
+                // Done without an owner: there is no work left for anybody to pick up.
+                adjustments.clear(task.getSprintId(), key);
+                return;
+            }
+            adjustments.revise(task.getSprintId(), RiskType.COMMUNICATION_COLLABORATION, key,
+                    cap(weight(task).multiply(UNASSIGNED_BASE), UNASSIGNED_CAP),
+                    "Nobody assigned to " + task.getItemKey());
+            return;
+        }
+
+        Long waitedSeconds = task.getUnassignedElapsedSeconds();
+        Integer estimateThen = task.getEstimateAtAssignMinutes();
+        if (waitedSeconds == null || estimateThen == null || estimateThen <= 0) {
+            // Owned from the start, or never estimated — no share of an estimate was lost.
+            adjustments.clear(task.getSprintId(), key);
+            return;
+        }
+        long estimateNow = task.getEstimateMinutes() == null ? estimateThen : task.getEstimateMinutes();
+        long extensionSeconds = Math.max(0L, estimateNow - estimateThen) * 60L;
+        long lostSeconds = Math.max(0L, waitedSeconds - extensionSeconds);
+        // Under a minute is assigning it straight away — the time it takes to pick a name
+        // — and left a "+0.02, waited 0m" row on the ledger that described nothing.
+        if (lostSeconds < 60) {
+            adjustments.clear(task.getSprintId(), key);
+            return;
+        }
+        BigDecimal lostShare = BigDecimal.valueOf(Math.min(lostSeconds, estimateThen * 60L))
+                .divide(BigDecimal.valueOf(estimateThen * 60L), 4, RoundingMode.HALF_UP);
+        BigDecimal fullCharge = cap(weight(estimateThen).multiply(UNASSIGNED_BASE), UNASSIGNED_CAP);
+        BigDecimal residual = fullCharge.multiply(lostShare).setScale(2, RoundingMode.HALF_UP);
+        if (residual.signum() == 0) {
+            adjustments.clear(task.getSprintId(), key);
+            return;
+        }
+        adjustments.revise(task.getSprintId(), RiskType.COMMUNICATION_COLLABORATION, key, residual,
+                "%s waited %s for an owner — %d%% of its estimate"
+                        .formatted(task.getItemKey(), humanise(lostSeconds / 60),
+                                lostShare.multiply(BigDecimal.valueOf(100)).intValue()));
+    }
+
+    /** A task left this sprint: its ownership charge goes with it. */
+    public void leftSprint(Task task, UUID previousSprintId) {
+        if (previousSprintId != null && !previousSprintId.equals(task.getSprintId())) {
+            adjustments.clear(previousSprintId, unassignedKey(task));
+        }
+    }
+
+    /**
+     * Credits collaboration for the discussion on this task: its comments, and the
+     * replies to them.
+     *
+     * <p>Talking on the task is the behaviour the collaboration score exists to reward,
+     * and a ledger that could only charge silence drifted up for a team that was talking
+     * perfectly well. A reply is worth more than a comment, because it is the thread
+     * being answered rather than only opened.</p>
+     *
+     * <p>Recomputed from the thread's counts on every change rather than appended per
+     * comment, for the same reason as the reopen charge: deleting a comment gives its
+     * credit back, and the entry describes the thread rather than the clicks. Only the
+     * first {@value #DISCUSSION_COUNTED} of each count, or a task could be talked into a
+     * negative risk with a dozen "+1"s. Weighted like every other per-task entry.</p>
+     */
+    public void discussionChanged(Task task, long comments, long replies) {
+        discussionCredit(task, commentedKey(task), comments, COMMENT_CREDIT, "comment", "comments");
+        discussionCredit(task, repliedKey(task), replies, REPLY_CREDIT, "reply", "replies");
+        if (comments + replies > 0) {
+            // The sweep's "nobody has discussed this" charge, withdrawn now rather than at
+            // its next pass, so the comment visibly ends the silence it was charged for.
+            adjustments.clear(task.getSprintId(), "TASK_SILENT:" + task.getId());
+        }
+    }
+
+    private void discussionCredit(Task task, String key, long count, BigDecimal perItem,
+                                  String one, String many) {
+        if (count <= 0) {
+            adjustments.clear(task.getSprintId(), key);
+            return;
+        }
+        long counted = Math.min(count, DISCUSSION_COUNTED);
+        BigDecimal credit = weight(task).multiply(perItem).multiply(BigDecimal.valueOf(counted))
+                .setScale(2, RoundingMode.HALF_UP);
+        adjustments.revise(task.getSprintId(), RiskType.COMMUNICATION_COLLABORATION, key, credit,
+                "%d %s on %s".formatted(count, count == 1 ? one : many, task.getItemKey()));
+    }
+
     /** The question was answered, or the comment went away. Withdraw the charge. */
     public void commentAnswered(Task task) {
         adjustments.clear(task.getSprintId(), unansweredKey(task));
@@ -337,6 +463,9 @@ public class TaskRiskReporter {
         adjustments.clear(task.getSprintId(), reopenBudgetKey(task.getId()));
         adjustments.clear(task.getSprintId(), onTimeKey(task));
         adjustments.clear(task.getSprintId(), startedOnTimeKey(task));
+        adjustments.clear(task.getSprintId(), commentedKey(task));
+        adjustments.clear(task.getSprintId(), repliedKey(task));
+        adjustments.clear(task.getSprintId(), unassignedKey(task));
         adjustments.clear(task.getSprintId(), unansweredKey(task));
         adjustments.clear(task.getSprintId(), blockedKey(task.getId()));
     }
@@ -373,6 +502,18 @@ public class TaskRiskReporter {
     /** A credit, scaled by the task's size and held above {@code floor}. */
     private static BigDecimal credit(Task task, BigDecimal base, BigDecimal floor) {
         return weight(task).multiply(base).max(floor).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String unassignedKey(Task task) {
+        return "TASK_UNASSIGNED:" + task.getId();
+    }
+
+    private static String commentedKey(Task task) {
+        return "TASK_COMMENTED:" + task.getId();
+    }
+
+    private static String repliedKey(Task task) {
+        return "TASK_REPLIED:" + task.getId();
     }
 
     private static String startedOnTimeKey(Task task) {

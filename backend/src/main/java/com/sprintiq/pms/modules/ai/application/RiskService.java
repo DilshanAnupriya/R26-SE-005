@@ -494,16 +494,34 @@ public class RiskService {
         // Collaboration is the one model that can decline before it is called. Three of
         // its five readings are healthiest at zero, so an untouched sprint assembles a
         // perfectly well-formed vector that the model reads as a well-run team — a
-        // confident all-clear for a sprint nobody has started. Returning null instead
-        // puts the panel in its "nothing to read yet" state, which is the true
-        // statement, and costs nothing rather than billing for the inference.
+        // confident all-clear for a sprint nobody has started. So the model is not asked.
+        // The sprint is scored at a baseline of nought instead of left unscored: an
+        // unscored gauge had nothing for the board's own readings to sit on, so a task
+        // added with nobody assigned charged the ledger and moved no figure at all.
         CollaborationFeatureSource.SprintCollaboration signals = null;
         if (riskType == RiskType.COMMUNICATION_COLLABORATION) {
             Window window = collaborationWindow(sprint);
             signals = collaboration.collaborationFor(sprint.sprintId(), window.start(), window.end());
             if (!signals.hasSignal()) {
-                return null;
+                return baselineZero(RiskType.COMMUNICATION_COLLABORATION, sprint, ledger,
+                        "Nothing to read about how the team is collaborating yet, so the model "
+                        + "was not asked. What the board records — unassigned work, silent "
+                        + "tasks, unanswered questions — moves this from nought.");
             }
+        }
+
+        // Requirement change is zero until a requirement has actually moved. The model
+        // reads planning columns — story length, missing criteria, the project's history —
+        // and from those alone it hands a sprint nobody has touched a standing 10-20%,
+        // which reads on the gauge as churn that has not happened. So until the register
+        // holds a change for this sprint, or its scope has moved since it started, the
+        // honest figure is nought and the model is not asked. The first logged change
+        // brings the model in, on top of that change's own charge.
+        if (riskType == RiskType.REQUIREMENT_CHANGE && !requirementsHaveMoved(sprint, ledger)) {
+            return baselineZero(RiskType.REQUIREMENT_CHANGE, sprint, ledger,
+                    "No requirement has changed in this sprint yet, so there is no "
+                    + "requirement-change risk. Log a change when one happens and this "
+                    + "will move.");
         }
 
         // A switch expression rather than a statement, so a fourth risk type is a
@@ -565,6 +583,64 @@ public class RiskService {
 
         return new Scored(RiskAssessmentResponse.from(saved, overlay),
                 prediction.getStatus() == PredictionStatus.DEGRADED);
+    }
+
+    /**
+     * Whether anything about this sprint's requirements has moved yet.
+     *
+     * <p>Either a change in the register — every logged change writes a requirement-change
+     * entry to the sprint's ledger, so the ledger is the record that one exists — or scope
+     * added to or pulled from the sprint after it started. Planning is not churn:
+     * {@code Sprint.recordScopeChange} ignores everything before the start.</p>
+     */
+    private static boolean requirementsHaveMoved(SprintFeatureSource.SprintFeatures sprint,
+                                                 SprintRiskAdjustmentService.Ledger ledger) {
+        boolean logged = ledger.entries().stream()
+                .anyMatch(entry -> entry.getRiskType() == RiskType.REQUIREMENT_CHANGE);
+        BigDecimal volatility = sprint.scopeVolatility();
+        return logged || (volatility != null && volatility.signum() > 0);
+    }
+
+    /**
+     * An assessment of nought, for a model with nothing yet to read — requirements that
+     * have not moved, or a team with no collaboration on record.
+     *
+     * <p>Written as a real assessment rather than left blank, so the gauge says 0% —
+     * which is the finding — instead of "not scored", the board's own readings have a
+     * figure to move, and the overall weighs the calm picture in rather than
+     * renormalising it away. No model is called, so there is no prediction behind it;
+     * everything that reads one already tolerates its absence.</p>
+     *
+     * <p>Like any scoring it carries the board's entries through: the new row is the new
+     * cutoff, and without the carry it would absorb the very charge — an unassigned task,
+     * say — it was written to put on show.</p>
+     */
+    private Scored baselineZero(RiskType riskType,
+                                SprintFeatureSource.SprintFeatures sprint,
+                                SprintRiskAdjustmentService.Ledger ledger,
+                                String explanation) {
+        RiskAssessment assessment = RiskAssessment.builder()
+                .projectId(sprint.projectId())
+                .sprintId(sprint.sprintId())
+                .riskType(riskType)
+                .riskScore(BigDecimal.ZERO)
+                .riskLabel(false)
+                .severity(severityOf(BigDecimal.ZERO))
+                .drivers(new ArrayList<>())
+                .mitigations(new ArrayList<>())
+                .explanation(explanation)
+                .build();
+        assessment.setOrganizationId(TenantContext.requireOrganizationId());
+        adjustmentService.carryThroughScoring(sprint.sprintId(), riskType,
+                assessments.findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprint.sprintId(), riskType)
+                        .map(RiskAssessment::getCreatedAt)
+                        .orElse(null));
+        RiskAssessment saved = assessments.save(assessment);
+        // Re-read: the carry has just marked entries the ledger passed in still reads as
+        // absorbable, and the response has to agree with the next `latest`.
+        return new Scored(RiskAssessmentResponse.from(saved,
+                adjustmentService.ledgerFor(sprint.sprintId()).netSince(riskType, saved.getCreatedAt())),
+                false);
     }
 
     /**

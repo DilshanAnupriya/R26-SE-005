@@ -201,6 +201,186 @@ class TaskReopenRiskTest {
     }
 
     /**
+     * A task in a sprint with nobody assigned raises collaboration risk by its size;
+     * assigning it gives back the share matching the estimate still left, and extending
+     * the estimate gives back the rest of the wait.
+     */
+    @Nested
+    @DisplayName("ownership")
+    class Ownership {
+
+        private Task owned(int estimateThen, Integer estimateNow, Long waitedSeconds) {
+            Task task = Task.builder()
+                    .sprintId(SPRINT)
+                    .itemKey("SIQ-6")
+                    .status(TaskStatus.TODO)
+                    .assigneeId(UUID.randomUUID())
+                    .estimateMinutes(estimateNow)
+                    .estimateAtAssignMinutes(estimateThen)
+                    .unassignedElapsedSeconds(waitedSeconds)
+                    .build();
+            task.setId(UUID.randomUUID());
+            return task;
+        }
+
+        private BigDecimal charge(Task task) {
+            return ledger.entries.stream()
+                    .filter(entry -> ("TASK_UNASSIGNED:" + task.getId()).equals(entry.sourceKey()))
+                    .map(Entry::delta)
+                    .findFirst()
+                    .orElse(BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("nobody assigned raises collaboration by the task's weight")
+        void unassignedIsCharged() {
+            Task small = task(0, 60);
+            Task day = task(0, 480);
+            reporter.ownershipChanged(small);
+            reporter.ownershipChanged(day);
+
+            assertThat(charge(small)).isEqualByComparingTo(BigDecimal.valueOf(3));
+            assertThat(charge(day)).isEqualByComparingTo(BigDecimal.valueOf(6));
+            assertThat(ledger.entries).allMatch(e -> e.riskType() == RiskType.COMMUNICATION_COLLABORATION);
+        }
+
+        @Test
+        @DisplayName("assigned straight away, nothing is left")
+        void assignedAtOnce() {
+            Task task = owned(60, 60, 0L);
+            reporter.ownershipChanged(task);
+
+            assertThat(charge(task)).isZero();
+        }
+
+        @Test
+        @DisplayName("assigned a third of the way in, a third of the charge stays")
+        void partShareStays() {
+            Task task = owned(60, 60, 20L * 60);
+            reporter.ownershipChanged(task);
+
+            assertThat(charge(task)).isEqualByComparingTo(BigDecimal.valueOf(1));
+        }
+
+        @Test
+        @DisplayName("extending the estimate by the wait gives the rest back")
+        void extensionClears() {
+            Task halfBack = owned(60, 70, 20L * 60);
+            reporter.ownershipChanged(halfBack);
+            assertThat(charge(halfBack)).isEqualByComparingTo(BigDecimal.valueOf(0.5));
+
+            Task allBack = owned(60, 80, 20L * 60);
+            reporter.ownershipChanged(allBack);
+            assertThat(charge(allBack)).isZero();
+        }
+
+        @Test
+        @DisplayName("assigned after the estimate ran out, the whole charge stays")
+        void lateKeepsAll() {
+            Task task = owned(60, 60, 2L * 3600);
+            reporter.ownershipChanged(task);
+
+            assertThat(charge(task)).isEqualByComparingTo(BigDecimal.valueOf(3));
+        }
+
+        @Test
+        @DisplayName("a task finished with nobody on it is no longer charged")
+        void finishedUnownedClears() {
+            Task task = task(0, 60);
+            reporter.ownershipChanged(task);
+            task.transitionTo(TaskStatus.DONE);
+            reporter.statusChanged(task, TaskStatus.IN_REVIEW);
+
+            assertThat(charge(task)).isZero();
+        }
+
+        @Test
+        @DisplayName("the first assignment is stamped once, from the task's own clock")
+        void stampedOnce() {
+            Task task = Task.builder().status(TaskStatus.TODO).estimateMinutes(60)
+                    .elapsedSeconds(600).build();
+            task.setAssigneeId(UUID.randomUUID());
+            task.stampFirstAssignment(java.time.Instant.now());
+            task.setElapsedSeconds(1800);
+            task.setAssigneeId(UUID.randomUUID());
+            task.stampFirstAssignment(java.time.Instant.now());
+
+            assertThat(task.getUnassignedElapsedSeconds()).isEqualTo(600L);
+            assertThat(task.getEstimateAtAssignMinutes()).isEqualTo(60);
+        }
+    }
+
+    /** Talking on the task lowers collaboration risk, by the task's size. */
+    @Nested
+    @DisplayName("comments and replies")
+    class Discussion {
+
+        private BigDecimal at(String keyPrefix, Task task) {
+            return ledger.entries.stream()
+                    .filter(entry -> (keyPrefix + task.getId()).equals(entry.sourceKey()))
+                    .map(Entry::delta)
+                    .findFirst()
+                    .orElse(BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("a comment lowers collaboration by the task's weight")
+        void commentCredits() {
+            Task small = task(0, 60);
+            Task day = task(0, 480);
+            reporter.discussionChanged(small, 1, 0);
+            reporter.discussionChanged(day, 1, 0);
+
+            assertThat(at("TASK_COMMENTED:", small)).isEqualByComparingTo(BigDecimal.valueOf(-1));
+            assertThat(at("TASK_COMMENTED:", day)).isEqualByComparingTo(BigDecimal.valueOf(-2));
+            assertThat(ledger.entries).allMatch(e -> e.riskType() == RiskType.COMMUNICATION_COLLABORATION);
+        }
+
+        @Test
+        @DisplayName("a reply lowers it by more than a comment")
+        void replyCredits() {
+            Task day = task(0, 480);
+            reporter.discussionChanged(day, 1, 1);
+
+            assertThat(at("TASK_REPLIED:", day)).isEqualByComparingTo(BigDecimal.valueOf(-3));
+            assertThat(ledger.charged(RiskType.COMMUNICATION_COLLABORATION))
+                    .isEqualByComparingTo(BigDecimal.valueOf(-5));
+        }
+
+        @Test
+        @DisplayName("only the first three of each count, so spam cannot buy the risk down")
+        void capped() {
+            Task day = task(0, 480);
+            reporter.discussionChanged(day, 40, 40);
+
+            assertThat(at("TASK_COMMENTED:", day)).isEqualByComparingTo(BigDecimal.valueOf(-6));
+            assertThat(at("TASK_REPLIED:", day)).isEqualByComparingTo(BigDecimal.valueOf(-9));
+        }
+
+        @Test
+        @DisplayName("deleting the discussion gives the credit back")
+        void deletionWithdraws() {
+            Task day = task(0, 480);
+            reporter.discussionChanged(day, 2, 1);
+            reporter.discussionChanged(day, 0, 0);
+
+            assertThat(ledger.entries).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the first comment ends the sweep's silence charge at once")
+        void endsTheSilenceCharge() {
+            Task day = task(0, 480);
+            ledger.revise(SPRINT, RiskType.COMMUNICATION_COLLABORATION,
+                    "TASK_SILENT:" + day.getId(), BigDecimal.valueOf(6), "silent");
+
+            reporter.discussionChanged(day, 1, 0);
+
+            assertThat(ledger.keys()).doesNotContain("TASK_SILENT:" + day.getId());
+        }
+    }
+
+    /**
      * The other direction: a task moved to In Progress or Done while its estimate still
      * has time on it lowers over-budget, by its size.
      */
