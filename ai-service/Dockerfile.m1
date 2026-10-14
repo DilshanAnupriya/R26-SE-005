@@ -1,0 +1,25 @@
+# M1 estimation service on its own. Build from the repository root:
+#   docker build -f ai-service/Dockerfile.m1 -t <registry>/m1-service:1.0 ai-service
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /srv
+
+# LightGBM's Linux wheel links against the OpenMP runtime, which the slim image lacks.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Separate layer so a code-only change reuses the cached install.
+COPY requirements-m1.txt .
+RUN pip install --no-cache-dir -r requirements-m1.txt
+
+# Only M1's code and models: the image carries nothing the service does not serve.
+COPY app/__init__.py app/m1_main.py app/predictor.py app/features.py \
+     app/velocity_predictor.py app/velocity_features.py ./app/
+COPY models/model_xgb_lgbm_uncertainty.pkl models/velocity_transfer_bundle.pkl ./models/
+
+RUN useradd --system --no-create-home m1 && chown -R m1 /srv
+USER m1
+
+EXPOSE 8000
+CMD ["uvicorn", "app.m1_main:app", "--host", "0.0.0.0", "--port", "8000"]
