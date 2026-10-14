@@ -369,23 +369,26 @@ class AiLayerIT extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("board evidence is still folded into the model's own figure")
-    void boardReadingsAreStillAbsorbed() {
+    @DisplayName("board evidence survives pressing Assess")
+    void boardReadingsSurviveReassessment() {
         ProjectResponse project = newProject("Mobile Banking");
         SprintResponse sprint = newSprintWithWork(project.id());
         riskService.assess(sprint.id());
 
-        // The counterpart risk: if everything survived scoring, a blocked task would be
-        // charged twice — once by the model that read it in blocked_count, and again by
-        // an overlay that refused to clear.
         adjustmentService.record(sprint.id(), RiskType.OVER_BUDGET,
                 BigDecimal.valueOf(8), "Task blocked: MBA-1");
         assertThat(riskService.latest(sprint.id()).overBudget().adjustmentDelta())
                 .isEqualByComparingTo(BigDecimal.valueOf(8));
 
+        // Re-scoring used to fold this away, and the gauge fell straight back to where it
+        // was before the card moved — the button appeared to undo the board. What the
+        // board added since the last scoring is carried through the new one instead.
         assertThat(riskService.assess(sprint.id()).overBudget().adjustmentDelta())
-                .as("a blocked task is in the features, so re-scoring absorbs the overlay")
-                .isEqualByComparingTo(BigDecimal.ZERO);
+                .as("the Assess response itself has to carry the board's charge")
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
+        assertThat(riskService.latest(sprint.id()).overBudget().adjustmentDelta())
+                .as("and so does every read after it")
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
     }
 
     @Test

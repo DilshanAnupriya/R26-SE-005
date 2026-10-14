@@ -239,6 +239,13 @@ public class TaskService {
                 var assignee = story.getAssigneeId() == null ? null
                         : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
 
+                // A story card is a card on the board like any other, and dragging it into
+                // Blocked is the same news about the sprint. This branch used to charge
+                // nothing, so a sprint planned as stories alone never moved on a block.
+                riskReporter.blockChanged(story.getSprintId(), story.getId(), story.getItemKey(),
+                        estimateMins > 0 ? estimateMins : null,
+                        story.isBlocked() && !story.getStatus().isTerminal());
+
                 realtime.projectEvent(story.getProjectId(), "task.status_changed",
                         java.util.Map.of("taskId", String.valueOf(story.getId()), "status", request.status().name()));
 
@@ -566,6 +573,8 @@ public class TaskService {
 
         activityService.record(target(task), ActivityAction.BLOCKED,
                 "%s blocked: %s".formatted(task.getItemKey(), request.reason().trim()));
+        // Blocked from the detail page is as blocked as dragged into the column.
+        riskReporter.blockChanged(task);
         return toResponse(task);
     }
 
@@ -585,6 +594,7 @@ public class TaskService {
 
         activityService.record(target(task), ActivityAction.UNBLOCKED,
                 "%s unblocked".formatted(task.getItemKey()));
+        riskReporter.blockChanged(task);
         return toResponse(task);
     }
 

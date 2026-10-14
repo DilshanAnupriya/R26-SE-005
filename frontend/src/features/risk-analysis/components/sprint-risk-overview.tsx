@@ -345,11 +345,11 @@ function AdjustmentLedger({ adjustments }: { adjustments: RiskAdjustment[] }) {
       <p className="flex items-start gap-1.5 border-t border-line px-4 py-2 text-xs text-ink-3">
         <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden />
         Points are an agreed ranking of how much each event disturbs a plan, not a measured
-        quantity. Re-assessing folds the board readings into the model&rsquo;s own figure and
-        starts them again; entries marked <em>stands after Assess</em> keep counting, because
-        nothing the models read represents them yet. A claimed fix is released from here the
-        moment it does — when the model stops offering that step, the fall is in its own
-        score instead.
+        quantity. Re-assessing re-scores the models and keeps everything the board has added or
+        taken off since — those entries are marked <em>stands after Assess</em>, and each one
+        goes when the board does, a card unblocked or a task finished. A claimed fix is
+        released from here once the model stops offering that step, because the fall is then
+        in its own score instead.
       </p>
     </Card>
   );

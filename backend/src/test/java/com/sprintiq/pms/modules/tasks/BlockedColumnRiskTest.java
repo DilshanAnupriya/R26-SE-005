@@ -98,25 +98,76 @@ class BlockedColumnRiskTest {
     }
 
     @Nested
+    @DisplayName("Standing past Assess")
+    class Standing {
+
+        @Test
+        @DisplayName("is held under the card's own key, as an entry re-scoring cannot fold away")
+        void isKeyedAndStanding() {
+            Task task = task(TaskStatus.BLOCKED, 480);
+            reporter.statusChanged(task, TaskStatus.TODO);
+
+            // The over-budget models never read an in-sprint block, so an ordinary entry
+            // was absorbed by the next Assess and the gauge fell straight back.
+            Entry entry = ledger.entries.get(0);
+            assertThat(entry.standing()).isTrue();
+            assertThat(entry.sourceKey()).isEqualTo("TASK_BLOCKED:" + task.getId());
+        }
+
+        @Test
+        @DisplayName("a story card dragged into Blocked is charged by its points")
+        void storyCardsCharge() {
+            UUID story = UUID.randomUUID();
+            reporter.blockChanged(SPRINT, story, "MBA-2", 480, true);
+
+            Entry entry = ledger.entries.get(0);
+            assertThat(entry.riskType()).isEqualTo(RiskType.OVER_BUDGET);
+            assertThat(entry.delta()).isEqualByComparingTo(BigDecimal.valueOf(8));
+            assertThat(entry.sourceKey()).isEqualTo("TASK_BLOCKED:" + story);
+        }
+
+        @Test
+        @DisplayName("blocking with the button charges the same as the drag")
+        void flagAloneCharges() {
+            Task task = task(TaskStatus.TODO, 480);
+            task.setBlocked(true);
+            reporter.blockChanged(task);
+
+            assertThat(ledger.entries).singleElement()
+                    .extracting(Entry::delta).isEqualTo(BigDecimal.valueOf(8).setScale(2));
+        }
+
+        @Test
+        @DisplayName("deleting a blocked task withdraws its charge")
+        void deletionWithdraws() {
+            Task task = task(TaskStatus.BLOCKED, 480);
+            reporter.removed(task);
+
+            assertThat(ledger.cleared).contains("TASK_BLOCKED:" + task.getId());
+        }
+    }
+
+    @Nested
     @DisplayName("Unblocking")
     class Unblocking {
 
         @Test
-        @DisplayName("gives back exactly what blocking took")
-        void reversesTheCharge() {
+        @DisplayName("withdraws exactly the charge blocking made, and writes no refund")
+        void withdrawsTheCharge() {
             Task task = task(TaskStatus.BLOCKED, 480);
             reporter.statusChanged(task, TaskStatus.IN_PROGRESS);
-            BigDecimal charged = ledger.entries.get(0).delta();
+            String key = ledger.entries.get(0).sourceKey();
 
             ledger.entries.clear();
             Task freed = task(TaskStatus.IN_PROGRESS, 480);
+            freed.setId(task.getId());
             reporter.statusChanged(freed, TaskStatus.BLOCKED);
 
-            // Symmetric on purpose: a sprint that gets its blockers cleared has to end up
-            // back where it started, or the ledger only ever drifts upward and a team
-            // that fixed the problem still reads as one that did not.
-            assertThat(ledger.entries.get(0).delta()).isEqualByComparingTo(charged.negate());
-            assertThat(ledger.entries.get(0).reason()).contains("Task unblocked");
+            // A sprint that gets its blockers cleared has to end up back where it started.
+            // A refund row could not promise that: it outlived the Assess that folded the
+            // charge away, and left the sprint less risky than before it was blocked.
+            assertThat(ledger.entries).isEmpty();
+            assertThat(ledger.cleared).contains(key);
         }
 
         @Test
@@ -133,21 +184,25 @@ class BlockedColumnRiskTest {
     // ------------------------------------------------------------------- fixtures
 
     private static Task task(TaskStatus status, Integer estimateMinutes) {
-        return Task.builder()
+        Task task = Task.builder()
                 .sprintId(SPRINT)
                 .itemKey("MBA-1")
                 .title("Wire the payment callback")
                 .status(status)
                 .estimateMinutes(estimateMinutes)
                 .build();
+        task.setId(UUID.randomUUID());
+        return task;
     }
 
     /** One ledger write, flattened to what the assertions read. */
-    private record Entry(RiskType riskType, BigDecimal delta, String reason) {}
+    private record Entry(RiskType riskType, BigDecimal delta, String reason,
+                         String sourceKey, boolean standing) {}
 
     private static final class Recorder extends SprintRiskAdjustmentService {
 
         private final List<Entry> entries = new ArrayList<>();
+        private final List<String> cleared = new ArrayList<>();
 
         Recorder() {
             // The repository is never reached: every method the reporter calls is
@@ -157,24 +212,30 @@ class BlockedColumnRiskTest {
 
         @Override
         public void record(UUID sprintId, RiskType riskType, BigDecimal delta, String reason) {
-            entries.add(new Entry(riskType, delta, reason));
+            entries.add(new Entry(riskType, delta, reason, null, false));
         }
 
         @Override
         public void revise(UUID sprintId, RiskType riskType, String sourceKey,
                            BigDecimal delta, String reason) {
-            entries.add(new Entry(riskType, delta, reason));
+            entries.add(new Entry(riskType, delta, reason, sourceKey, false));
+        }
+
+        @Override
+        public void reviseStanding(UUID sprintId, RiskType riskType, String sourceKey,
+                                   BigDecimal delta, String reason) {
+            entries.add(new Entry(riskType, delta, reason, sourceKey, true));
         }
 
         @Override
         public void recordOnce(UUID sprintId, RiskType riskType, String sourceKey,
                               BigDecimal delta, String reason) {
-            entries.add(new Entry(riskType, delta, reason));
+            entries.add(new Entry(riskType, delta, reason, sourceKey, false));
         }
 
         @Override
         public void clear(UUID sprintId, String sourceKey) {
-            // Nothing to record: the assertions here are about what was charged.
+            cleared.add(sourceKey);
         }
     }
 }

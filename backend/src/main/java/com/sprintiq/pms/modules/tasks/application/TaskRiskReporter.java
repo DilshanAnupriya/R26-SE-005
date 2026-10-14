@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Turns board events into risk points.
@@ -109,14 +110,8 @@ public class TaskRiskReporter {
         if (current == previous) {
             return;
         }
-        BigDecimal blocked = cap(weight(task).multiply(BLOCKED_BASE), BLOCKED_CAP);
-
-        if (current == TaskStatus.BLOCKED) {
-            adjustments.record(task.getSprintId(), RiskType.OVER_BUDGET, blocked,
-                    "Task blocked: " + task.getItemKey());
-        } else if (previous == TaskStatus.BLOCKED) {
-            adjustments.record(task.getSprintId(), RiskType.OVER_BUDGET, blocked.negate(),
-                    "Task unblocked: " + task.getItemKey());
+        if (current == TaskStatus.BLOCKED || previous == TaskStatus.BLOCKED) {
+            blockChanged(task);
         }
 
         if (current.isCompleted() && !previous.isCompleted()) {
@@ -148,6 +143,45 @@ public class TaskRiskReporter {
                 reopened(task);
             }
         }
+    }
+
+    /**
+     * Charges or withdraws the over-budget cost of this task being blocked.
+     *
+     * <p>Called from every path that can block or unblock a card — the column drag and
+     * the Block / Unblock buttons — because a task is blocked whichever way it got there.
+     * Before this only the drag charged, so a card blocked from its detail page cost the
+     * sprint nothing.</p>
+     *
+     * <p>One standing entry per card rather than a charge and a matching refund. The pair
+     * came apart: the next Assess folded the charge away (the over-budget models never
+     * read an in-sprint block, so the score fell straight back) while the refund written
+     * after it still counted, and a sprint that blocked and unblocked one card ended up
+     * <em>less</em> risky than one that never had. A key held for as long as the card is
+     * blocked, and cleared when it is not, cannot drift either way.</p>
+     */
+    public void blockChanged(Task task) {
+        TaskStatus status = task.getStatus();
+        boolean blocked = status != null && !status.isTerminal()
+                && (task.isBlocked() || status == TaskStatus.BLOCKED);
+        blockChanged(task.getSprintId(), task.getId(), task.getItemKey(),
+                task.getEstimateMinutes(), blocked);
+    }
+
+    /**
+     * The same, for a card that is not a task row — a sprint story with no tasks of its
+     * own, which the board shows as a card under the story's id.
+     */
+    public void blockChanged(UUID sprintId, UUID cardId, String itemKey,
+                             Integer estimateMinutes, boolean blocked) {
+        String key = blockedKey(cardId);
+        if (!blocked) {
+            adjustments.clear(sprintId, key);
+            return;
+        }
+        adjustments.reviseStanding(sprintId, RiskType.OVER_BUDGET, key,
+                cap(weight(estimateMinutes).multiply(BLOCKED_BASE), BLOCKED_CAP),
+                "Task blocked: " + itemKey);
     }
 
     /**
@@ -250,6 +284,7 @@ public class TaskRiskReporter {
         adjustments.clear(task.getSprintId(), reopenBudgetKey(task));
         adjustments.clear(task.getSprintId(), onTimeKey(task));
         adjustments.clear(task.getSprintId(), unansweredKey(task));
+        adjustments.clear(task.getSprintId(), blockedKey(task.getId()));
     }
 
     // --------------------------------------------------------------- internals
@@ -274,6 +309,10 @@ public class TaskRiskReporter {
         return "TASK_UNANSWERED:" + task.getId();
     }
 
+    private static String blockedKey(UUID cardId) {
+        return "TASK_BLOCKED:" + cardId;
+    }
+
     /** "3h" and "2d" read on a ledger row; "185 minutes" does not. */
     private static String humanise(long minutes) {
         if (minutes < 60) {
@@ -291,7 +330,10 @@ public class TaskRiskReporter {
      * weighs 1.0 — the absence of an estimate is not evidence that the task is small.</p>
      */
     private static BigDecimal weight(Task task) {
-        Integer minutes = task.getEstimateMinutes();
+        return weight(task.getEstimateMinutes());
+    }
+
+    private static BigDecimal weight(Integer minutes) {
         if (minutes == null || minutes <= 0) {
             return BigDecimal.ONE;
         }
