@@ -343,6 +343,33 @@ class AiLayerIT extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("collaboration starts at 0% and still shows what the board charges")
+    void collaborationBaselineCarriesBoardCharges() {
+        ProjectResponse project = newProject("Mobile Banking");
+        SprintResponse sprint = newSprintWithWork(project.id());
+
+        // Nothing for the collaboration model to read. It used to come back unscored, and
+        // an unscored gauge had nothing for a board charge to sit on.
+        SprintRiskResponse fresh = riskService.assess(sprint.id());
+        assertThat(fresh.communicationCollaboration()).isNotNull();
+        assertThat(fresh.communicationCollaboration().riskScore()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(fresh.communicationCollaboration().predictionId()).isNull();
+
+        // A task added with nobody on it.
+        adjustmentService.revise(sprint.id(), RiskType.COMMUNICATION_COLLABORATION,
+                "TASK_UNASSIGNED:" + UUID.randomUUID(), BigDecimal.valueOf(3), "Nobody assigned to MB-1");
+        assertThat(riskService.latest(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .as("the charge moves the gauge straight away")
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+
+        // And a second baseline does not swallow it.
+        assertThat(riskService.assess(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+        assertThat(riskService.latest(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+    }
+
+    @Test
     @DisplayName("a logged requirement change survives pressing Assess")
     void requirementChangeSurvivesReassessment() {
         ProjectResponse project = newProject("Mobile Banking");

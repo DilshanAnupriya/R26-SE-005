@@ -365,7 +365,9 @@ public class TaskRiskReporter {
         long estimateNow = task.getEstimateMinutes() == null ? estimateThen : task.getEstimateMinutes();
         long extensionSeconds = Math.max(0L, estimateNow - estimateThen) * 60L;
         long lostSeconds = Math.max(0L, waitedSeconds - extensionSeconds);
-        if (lostSeconds == 0) {
+        // Under a minute is assigning it straight away — the time it takes to pick a name
+        // — and left a "+0.02, waited 0m" row on the ledger that described nothing.
+        if (lostSeconds < 60) {
             adjustments.clear(task.getSprintId(), key);
             return;
         }
