@@ -1,0 +1,12 @@
+# Keeps image builds from uploading the local environment and training material.
+# The virtualenv alone is several GB, and a cloud build sends the whole folder first.
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+catboost_info/
+experiments/
+training/
+tests/
+models/graphs/
+models/communication_model/

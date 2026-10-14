@@ -1,0 +1,11 @@
+# Only what the M2 risk service (app/m2_main.py) imports. Pinned to the versions the
+# risk bundles were verified to load and score with: scikit-learn refuses a label
+# encoder pickled by a different minor version, and CatBoost reads its own format.
+fastapi>=0.115
+uvicorn[standard]>=0.34
+pydantic>=2.10
+
+numpy==2.3.5
+pandas>=2.2
+scikit-learn==1.7.2
+catboost==1.2.10
