@@ -49,10 +49,14 @@ public class TaskRiskReporter {
     /**
      * Budget cost of the first reopen, before weighting.
      *
-     * <p>Lower than the collaboration charge because the first bounce is mostly a
-     * communication failure: the estimate has usually not been blown yet by one pass.</p>
+     * <p>Six points for a one-day task, the same scale as the board's other per-task
+     * charges — a task finished and then taken back out of Done is work the sprint
+     * believed was paid for and now has to pay for again. It used to be 2.5, which a
+     * small task halved to barely a point: dragging a card out of Done moved the gauge
+     * by less than the on-time credit it withdrew, and read as the reopen doing
+     * nothing.</p>
      */
-    private static final BigDecimal REOPEN_BUDGET_BASE = BigDecimal.valueOf(2.5);
+    private static final BigDecimal REOPEN_BUDGET_BASE = BigDecimal.valueOf(6);
 
     /**
      * Budget cost of each reopen after the first — larger than the first, the opposite
@@ -211,11 +215,35 @@ public class TaskRiskReporter {
                 reopenKey(task), cap(size.multiply(raw), REOPEN_CAP),
                 "Reopened %d time%s: %s".formatted(reopens, reopens == 1 ? "" : "s", task.getItemKey()));
 
+        reworkCharged(task.getSprintId(), task.getId(), task.getItemKey(),
+                task.getEstimateMinutes(), reopens);
+    }
+
+    /**
+     * Charges over-budget for a story card taken back out of Done.
+     *
+     * <p>A sprint story with no tasks of its own is a card on the board like any other,
+     * and dragging it out of Done is the same news. It is charged to over-budget only:
+     * the collaboration model reads reopens off task rows, and a story card has none.</p>
+     */
+    public void storyReopened(UUID sprintId, UUID storyId, String itemKey,
+                              Integer estimateMinutes, int reopens) {
+        if (reopens <= 0) {
+            return;
+        }
+        reworkCharged(sprintId, storyId, itemKey, estimateMinutes, reopens);
+    }
+
+    /** The over-budget cost of a card's reopens — larger with each one, scaled by size. */
+    private void reworkCharged(UUID sprintId, UUID cardId, String itemKey,
+                               Integer estimateMinutes, int reopens) {
+        BigDecimal repeats = BigDecimal.valueOf(reopens - 1L);
         BigDecimal budgetRaw = REOPEN_BUDGET_BASE.add(REOPEN_BUDGET_REPEAT.multiply(repeats));
-        adjustments.revise(task.getSprintId(), RiskType.OVER_BUDGET,
-                reopenBudgetKey(task), cap(size.multiply(budgetRaw), REOPEN_BUDGET_CAP),
+        adjustments.revise(sprintId, RiskType.OVER_BUDGET,
+                reopenBudgetKey(cardId),
+                cap(weight(estimateMinutes).multiply(budgetRaw), REOPEN_BUDGET_CAP),
                 "Rework on %s: %d reopen%s beyond the estimate"
-                        .formatted(task.getItemKey(), reopens, reopens == 1 ? "" : "s"));
+                        .formatted(itemKey, reopens, reopens == 1 ? "" : "s"));
     }
 
     /**
@@ -281,7 +309,7 @@ public class TaskRiskReporter {
     public void removed(Task task) {
         adjustments.clear(task.getSprintId(), overdueKey(task));
         adjustments.clear(task.getSprintId(), reopenKey(task));
-        adjustments.clear(task.getSprintId(), reopenBudgetKey(task));
+        adjustments.clear(task.getSprintId(), reopenBudgetKey(task.getId()));
         adjustments.clear(task.getSprintId(), onTimeKey(task));
         adjustments.clear(task.getSprintId(), unansweredKey(task));
         adjustments.clear(task.getSprintId(), blockedKey(task.getId()));
@@ -297,8 +325,8 @@ public class TaskRiskReporter {
         return "TASK_REOPENED:" + task.getId();
     }
 
-    private static String reopenBudgetKey(Task task) {
-        return "TASK_REOPEN_BUDGET:" + task.getId();
+    private static String reopenBudgetKey(UUID cardId) {
+        return "TASK_REOPEN_BUDGET:" + cardId;
     }
 
     private static String onTimeKey(Task task) {

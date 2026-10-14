@@ -216,7 +216,13 @@ public class TaskService {
                     case IN_REVIEW -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_REVIEW;
                     case DONE -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.DONE;
                     case CANCELLED -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.CANCELLED;
-                    case BLOCKED -> story.getStatus();
+                    // A blocked story stays where it was — unless it was finished. Blocked
+                    // work is not done work, so a card dragged from Done to Blocked is a
+                    // reopen like any other move out of Done, and the card still shows in
+                    // Blocked through the flag set below.
+                    case BLOCKED -> story.getStatus().isTerminal()
+                            ? com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_PROGRESS
+                            : story.getStatus();
                     default -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.BACKLOG;
                 };
                 if (request.status() == TaskStatus.BLOCKED) {
@@ -245,6 +251,12 @@ public class TaskService {
                 riskReporter.blockChanged(story.getSprintId(), story.getId(), story.getItemKey(),
                         estimateMins > 0 ? estimateMins : null,
                         story.isBlocked() && !story.getStatus().isTerminal());
+                // Taken back out of Done: work the sprint thought was paid for, again.
+                if (newStatus.isReopenFrom(previous)) {
+                    riskReporter.storyReopened(story.getSprintId(), story.getId(),
+                            story.getItemKey(), estimateMins > 0 ? estimateMins : null,
+                            story.getReopenedCount());
+                }
 
                 realtime.projectEvent(story.getProjectId(), "task.status_changed",
                         java.util.Map.of("taskId", String.valueOf(story.getId()), "status", request.status().name()));
