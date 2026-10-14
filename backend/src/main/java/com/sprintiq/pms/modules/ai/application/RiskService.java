@@ -545,6 +545,16 @@ public class RiskService {
                 .build();
         assessment.setOrganizationId(TenantContext.requireOrganizationId());
 
+        // Re-scoring must not undo what the board has done to this risk since the last
+        // scoring. Most of it is never seen by the models — they read pre-sprint columns —
+        // so letting the new cutoff absorb it put the gauge straight back where it was
+        // before the card moved. Done only here, once the model has actually answered: a
+        // scoring that fails writes no new cutoff and has nothing to carry anything past.
+        adjustmentService.carryThroughScoring(sprint.sprintId(), riskType,
+                assessments.findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprint.sprintId(), riskType)
+                        .map(RiskAssessment::getCreatedAt)
+                        .orElse(null));
+
         RiskAssessment saved = assessments.save(assessment);
 
         // Measured against the scoring that has just been written, so everything the
