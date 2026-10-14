@@ -521,6 +521,14 @@ export function TaskDetailDialog({
                     void queryClient.invalidateQueries({
                       queryKey: queryKeys.projects.board(task.projectId),
                     });
+                    // A comment or reply credits the sprint's collaboration risk, so the
+                    // gauges should move now rather than at their next poll.
+                    if (task.sprintId) {
+                      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(task.sprintId) });
+                      void queryClient.invalidateQueries({
+                        queryKey: queryKeys.ai.riskAdjustments(task.sprintId),
+                      });
+                    }
                   }}
                 />
               </div>

@@ -122,6 +122,11 @@ export function useCreateTask(projectId: string) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.board(projectId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.overview(projectId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.workload(projectId) });
+      // A task added to a sprint with nobody on it is charged to collaboration at once.
+      if (task.sprintId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(task.sprintId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskAdjustments(task.sprintId) });
+      }
       toast.success(`${task.itemKey} added.`);
     },
     onError: (error) => {
@@ -293,6 +298,12 @@ export function useAssignTask(projectId: string) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.board(projectId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.detail(task.id) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.workload(projectId) });
+      // Ownership moves collaboration risk: an owner gives back part of the unassigned
+      // charge, and removing one puts it all back.
+      if (task.sprintId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(task.sprintId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskAdjustments(task.sprintId) });
+      }
       toast.success(
         task.assigneeName ? `Assigned to ${task.assigneeName}.` : "Unassigned.",
       );

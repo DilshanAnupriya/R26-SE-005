@@ -147,9 +147,12 @@ public class TaskService {
                 .runningSince(Instant.now())
                 .build();
         task.setOrganizationId(TenantContext.requireOrganizationId());
+        task.stampFirstAssignment(Instant.now());
         task = taskRepository.save(task);
 
         activityService.recordCreated(target(task), "%s created".formatted(task.getItemKey()));
+        // Added to a sprint with nobody on it: charged to collaboration until somebody is.
+        riskReporter.ownershipChanged(task);
 
         if (request.assigneeId() != null) {
             notifications.notify(new NotificationService.Notify(request.assigneeId(),
@@ -164,6 +167,7 @@ public class TaskService {
     @Transactional
     public TaskResponse update(UUID taskId, UpdateTaskRequest request) {
         Task task = require(taskId);
+        UUID previousSprintId = task.getSprintId();
         ChangeSet changes = new ChangeSet();
 
         changes.apply("title", task.getTitle(), trim(request.title()), task::setTitle);
@@ -198,6 +202,10 @@ public class TaskService {
         }
         task = taskRepository.save(task);
         activityService.recordChanges(target(task), changes);
+        // A new estimate re-weighs an unowned task's charge, and an extension gives back
+        // the time an owned one lost waiting; a sprint move takes the charge with it.
+        riskReporter.leftSprint(task, previousSprintId);
+        riskReporter.ownershipChanged(task);
         return toResponse(task);
     }
 
@@ -367,6 +375,11 @@ public class TaskService {
         Task task = require(taskId);
         CommentThreadReader.ThreadStats thread =
                 threadStatsFor(List.of(taskId)).get(taskId);
+        // Every comment, reply and deletion on the task lands here, so this is where the
+        // discussion credit is re-read from the thread — added or withdrawn to match it.
+        riskReporter.discussionChanged(task,
+                thread == null ? 0 : thread.commentCount(),
+                thread == null ? 0 : thread.replyCount());
         if (thread == null || thread.oldestUnansweredAt() == null) {
             // Somebody answered, or the comment was deleted. Withdraw the charge — a
             // risk adjustment that can only ever go up stops describing the sprint and
@@ -465,7 +478,11 @@ public class TaskService {
         if (request.predictionId() != null) {
             task.setAiPredictionId(request.predictionId());
         }
+        task.stampFirstAssignment(Instant.now());
         task = taskRepository.save(task);
+        // Owned now — or not any more. Either way the collaboration charge is re-judged:
+        // an owner gives back the share of the charge matching the estimate still left.
+        riskReporter.ownershipChanged(task);
 
         activityService.recordChange(target(task),
                 request.assigneeId() == null ? ActivityAction.UNASSIGNED : ActivityAction.ASSIGNED,
