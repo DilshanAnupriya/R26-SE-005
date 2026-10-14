@@ -95,11 +95,27 @@ public class RequirementChangeService {
 
     @Transactional
     public RequirementChangeResponse log(UUID projectId, LogRequirementChangeRequest request) {
+        return log(projectId, request, 1);
+    }
+
+    /**
+     * Logs a change that moved its field by more than one step.
+     *
+     * <p>For a priority change made on a story, where the size of the move is known: a
+     * story raised from Low to High displaces twice what one raised to Medium does, and
+     * dropping High to Low hands back twice what dropping it to Medium does. The type's
+     * own weight is the charge per level, so a one-level move costs exactly what it
+     * always has.</p>
+     *
+     * @param levels how many levels the field moved; anything below one counts as one
+     */
+    @Transactional
+    public RequirementChangeResponse log(UUID projectId, LogRequirementChangeRequest request, int levels) {
         ProjectRef project = projectLookup.requireWritable(projectId);
 
         RequirementChangeType type = request.changeType();
         ChangeImpactDirection direction = type.effectiveDirection(request.impactDirection());
-        BigDecimal delta = type.riskDelta(direction);
+        BigDecimal delta = type.riskDelta(direction).multiply(BigDecimal.valueOf(Math.max(1, levels)));
 
         Requirement requirement = null;
         if (request.requirementId() != null) {
