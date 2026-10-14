@@ -67,6 +67,12 @@ class TaskReopenRiskTest {
         }
 
         @Override
+        public void reviseStanding(UUID sprintId, RiskType riskType, String sourceKey,
+                                   BigDecimal delta, String reason) {
+            revise(sprintId, riskType, sourceKey, delta, reason);
+        }
+
+        @Override
         public void record(UUID sprintId, RiskType riskType, BigDecimal delta, String reason) {
             entries.add(new Entry(sprintId, riskType, null, delta));
         }
@@ -191,6 +197,65 @@ class TaskReopenRiskTest {
             reporter.reopened(task(0, 480));
 
             assertThat(ledger.entries).isEmpty();
+        }
+    }
+
+    /**
+     * The rule as the team states it: a task moved to Done is finished, and the same task
+     * moved anywhere else afterwards is a reopen that costs over-budget by its size.
+     */
+    @Nested
+    @DisplayName("moving a finished card out of Done")
+    class OutOfDone {
+
+        private BigDecimal reworkAfterMovingTo(TaskStatus target, int estimateMinutes) {
+            Task task = task(0, estimateMinutes);
+            task.transitionTo(TaskStatus.DONE);
+            reporter.statusChanged(task, TaskStatus.IN_REVIEW);
+
+            task.transitionTo(target);
+            reporter.statusChanged(task, TaskStatus.DONE);
+            return ledger.entries.stream()
+                    .filter(entry -> ("TASK_REOPEN_BUDGET:" + task.getId()).equals(entry.sourceKey()))
+                    .map(Entry::delta)
+                    .findFirst()
+                    .orElse(BigDecimal.ZERO);
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest
+        @org.junit.jupiter.params.provider.EnumSource(value = TaskStatus.class,
+                names = {"TODO", "IN_PROGRESS", "IN_REVIEW", "BLOCKED"})
+        @DisplayName("to any open column is a reopen charged to over-budget")
+        void everyOpenColumnIsAReopen(TaskStatus target) {
+            // A one-hour task weighs 0.5, so its first reopen is half the six-point base.
+            assertThat(reworkAfterMovingTo(target, 60)).isEqualByComparingTo(BigDecimal.valueOf(3));
+        }
+
+        @Test
+        @DisplayName("a bigger task costs more")
+        void weightedBySize() {
+            assertThat(reworkAfterMovingTo(TaskStatus.TODO, 480))
+                    .isEqualByComparingTo(BigDecimal.valueOf(6));
+        }
+
+        @Test
+        @DisplayName("moving between open columns is not a reopen")
+        void ordinaryMovesAreFree() {
+            Task task = task(0, 60);
+            task.transitionTo(TaskStatus.IN_PROGRESS);
+            reporter.statusChanged(task, TaskStatus.IN_REVIEW);
+
+            assertThat(ledger.keys()).noneMatch(key -> key.startsWith("TASK_REOPEN_BUDGET:"));
+        }
+
+        @Test
+        @DisplayName("a story card taken out of Done is charged the same way")
+        void storyCards() {
+            UUID story = UUID.randomUUID();
+            reporter.storyReopened(SPRINT, story, "PAY-5", 60, 1);
+
+            assertThat(ledger.keyFor(RiskType.OVER_BUDGET)).isEqualTo("TASK_REOPEN_BUDGET:" + story);
+            assertThat(ledger.charged(RiskType.OVER_BUDGET)).isEqualByComparingTo(BigDecimal.valueOf(3));
         }
     }
 

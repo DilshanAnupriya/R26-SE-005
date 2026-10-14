@@ -13,7 +13,6 @@ import { KanbanBoard } from "@/features/board/components/kanban-board";
 import { TaskDetailDialog } from "@/features/board/components/task-detail-dialog";
 import {
   useAssignTask,
-  useCountReopen,
   useMoveTask,
   useReopenTask,
   useReportOverdue,
@@ -21,7 +20,6 @@ import {
   useTaskBoard,
 } from "@/features/board/hooks";
 import type { Task } from "@/lib/api/delivery-schemas";
-import { isBoardTask } from "@/features/board/api";
 import { useProject } from "@/features/projects/hooks";
 import { useSprints } from "@/features/sprints/hooks";
 import { useMembers } from "@/features/organizations/hooks";
@@ -56,7 +54,6 @@ export default function BoardPage({
   const move = useMoveTask(projectId);
   const assign = useAssignTask(projectId);
   const reopen = useReopenTask(projectId);
-  const countReopen = useCountReopen(projectId);
   const reportOverdue = useReportOverdue();
   const reportUnanswered = useReportUnansweredComment();
   const { connected } = useRealtime();
@@ -72,16 +69,13 @@ export default function BoardPage({
       : null) ?? null;
 
   /**
-   * Opening a card counts as a reopen — the work was taken as settled and somebody is
-   * handling it again — so the sprint's over-budget and collaboration risk hear about it.
-   * Fired here, once per click, rather than from inside the dialog: a dialog that
-   * reported on mount would charge the sprint again on every re-render.
+   * Opening a card only shows it. A reopen is a card taken back out of Done — a drag or
+   * the Reopen button — and the server counts and charges that on the move itself.
+   * Counting every open as one charged the sprint for rework whenever somebody read a
+   * card, finished or not.
    */
   function openTask(task: Task) {
     setDetailTaskId(task.id);
-    if (isBoardTask(task)) {
-      countReopen.mutate({ taskId: task.id });
-    }
   }
 
   // Someone else's drag or assignment updates this board without a refresh.
