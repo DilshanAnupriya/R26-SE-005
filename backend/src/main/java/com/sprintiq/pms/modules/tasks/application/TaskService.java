@@ -216,7 +216,13 @@ public class TaskService {
                     case IN_REVIEW -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_REVIEW;
                     case DONE -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.DONE;
                     case CANCELLED -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.CANCELLED;
-                    case BLOCKED -> story.getStatus();
+                    // A blocked story stays where it was — unless it was finished. Blocked
+                    // work is not done work, so a card dragged from Done to Blocked is a
+                    // reopen like any other move out of Done, and the card still shows in
+                    // Blocked through the flag set below.
+                    case BLOCKED -> story.getStatus().isTerminal()
+                            ? com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_PROGRESS
+                            : story.getStatus();
                     default -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.BACKLOG;
                 };
                 if (request.status() == TaskStatus.BLOCKED) {
@@ -238,6 +244,19 @@ public class TaskService {
                 int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
                 var assignee = story.getAssigneeId() == null ? null
                         : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
+
+                // A story card is a card on the board like any other, and dragging it into
+                // Blocked is the same news about the sprint. This branch used to charge
+                // nothing, so a sprint planned as stories alone never moved on a block.
+                riskReporter.blockChanged(story.getSprintId(), story.getId(), story.getItemKey(),
+                        estimateMins > 0 ? estimateMins : null,
+                        story.isBlocked() && !story.getStatus().isTerminal());
+                // Taken back out of Done: work the sprint thought was paid for, again.
+                if (newStatus.isReopenFrom(previous)) {
+                    riskReporter.storyReopened(story.getSprintId(), story.getId(),
+                            story.getItemKey(), estimateMins > 0 ? estimateMins : null,
+                            story.getReopenedCount());
+                }
 
                 realtime.projectEvent(story.getProjectId(), "task.status_changed",
                         java.util.Map.of("taskId", String.valueOf(story.getId()), "status", request.status().name()));
@@ -566,6 +585,8 @@ public class TaskService {
 
         activityService.record(target(task), ActivityAction.BLOCKED,
                 "%s blocked: %s".formatted(task.getItemKey(), request.reason().trim()));
+        // Blocked from the detail page is as blocked as dragged into the column.
+        riskReporter.blockChanged(task);
         return toResponse(task);
     }
 
@@ -585,6 +606,7 @@ public class TaskService {
 
         activityService.record(target(task), ActivityAction.UNBLOCKED,
                 "%s unblocked".formatted(task.getItemKey()));
+        riskReporter.blockChanged(task);
         return toResponse(task);
     }
 

@@ -2,10 +2,12 @@ package com.sprintiq.pms.modules.ai.application;
 
 import com.sprintiq.pms.modules.ai.domain.RiskType;
 import com.sprintiq.pms.modules.ai.domain.SprintRiskAdjustment;
+import com.sprintiq.pms.modules.ai.domain.SprintRiskAdjustmentRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -164,5 +166,78 @@ class AdjustmentsSurviveAssessTest {
 
         assertThat(ledger().netSince(RiskType.OVER_BUDGET, SCORED_AT)).isZero();
         assertThat(ledger().netSince(RiskType.COMMUNICATION_COLLABORATION, SCORED_AT)).isZero();
+    }
+
+    @Nested
+    @DisplayName("Pressing Assess")
+    class Carrying {
+
+        /** The next scoring, after everything above was written. */
+        private final Instant rescoredAt = AFTER.plus(Duration.ofHours(1));
+
+        private void carry(RiskType type, Instant previousScoring) {
+            new SprintRiskAdjustmentService(repository()).carryThroughScoring(
+                    UUID.randomUUID(), type, previousScoring);
+        }
+
+        @Test
+        @DisplayName("keeps what the board added and took off since the last scoring")
+        void keepsTheMovement() {
+            entry(RiskType.OVER_BUDGET, 8, AFTER, false);   // a card blocked
+            entry(RiskType.OVER_BUDGET, -3, AFTER, false);  // a task done on time
+
+            carry(RiskType.OVER_BUDGET, SCORED_AT);
+
+            // Without the carry the new cutoff swallowed both and the gauge fell straight
+            // back to the model's figure — the button appeared to undo the board.
+            assertThat(ledger().netSince(RiskType.OVER_BUDGET, rescoredAt))
+                    .isEqualByComparingTo(BigDecimal.valueOf(5));
+        }
+
+        @Test
+        @DisplayName("does not revive what an earlier scoring already folded away")
+        void leavesOldHistoryAlone() {
+            entry(RiskType.OVER_BUDGET, 8, BEFORE, false);
+
+            carry(RiskType.OVER_BUDGET, SCORED_AT);
+
+            assertThat(ledger().netSince(RiskType.OVER_BUDGET, rescoredAt)).isZero();
+        }
+
+        @Test
+        @DisplayName("touches only the risk being scored")
+        void scopedToTheScoredType() {
+            entry(RiskType.COMMUNICATION_COLLABORATION, 4, AFTER, false);
+
+            carry(RiskType.OVER_BUDGET, SCORED_AT);
+
+            assertThat(ledger().netSince(RiskType.COMMUNICATION_COLLABORATION, rescoredAt)).isZero();
+        }
+
+        @Test
+        @DisplayName("a sprint never scored before carries everything it has")
+        void firstScoringCarriesAll() {
+            entry(RiskType.OVER_BUDGET, 8, BEFORE, false);
+
+            carry(RiskType.OVER_BUDGET, null);
+
+            assertThat(ledger().netSince(RiskType.OVER_BUDGET, rescoredAt))
+                    .isEqualByComparingTo(BigDecimal.valueOf(8));
+        }
+
+        /**
+         * The two repository calls the carry makes, over this test's own entries. A proxy
+         * rather than a mock: the inline mock maker does not run on the JDK this builds on.
+         */
+        private SprintRiskAdjustmentRepository repository() {
+            return (SprintRiskAdjustmentRepository) Proxy.newProxyInstance(
+                    getClass().getClassLoader(),
+                    new Class<?>[] {SprintRiskAdjustmentRepository.class},
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "findBySprintIdOrderByCreatedAtDesc" -> List.copyOf(entries);
+                        case "saveAll" -> args[0];
+                        default -> throw new UnsupportedOperationException(method.getName());
+                    });
+        }
     }
 }

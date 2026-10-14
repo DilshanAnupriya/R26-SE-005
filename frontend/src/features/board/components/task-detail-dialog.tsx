@@ -502,8 +502,8 @@ export function TaskDetailDialog({
               </div>
               <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
                 {reopens > 0
-                  ? "Opening this task counts as a reopen. Every one of them raises this sprint's over-budget risk, and each raises it by more than the last — the estimate is already spent by then."
-                  : "Opening this task counts as a reopen, which raises this sprint's over-budget risk."}
+                  ? "Taken back out of Done this many times. Every reopen raises this sprint's over-budget risk by the task's size, and each by more than the last — the estimate is already spent by then."
+                  : "Moving this task out of Done once it is finished counts as a reopen, and raises this sprint's over-budget risk by the task's size."}
               </p>
             </div>
 

@@ -1,6 +1,7 @@
 package com.sprintiq.pms.modules.tasks.application;
 
 import com.sprintiq.pms.modules.ai.application.SprintRiskAdjustmentService;
+import com.sprintiq.pms.modules.ai.application.TaskRiskWeight;
 import com.sprintiq.pms.modules.ai.domain.RiskType;
 import com.sprintiq.pms.modules.tasks.domain.Task;
 import com.sprintiq.pms.modules.tasks.domain.TaskStatus;
@@ -11,6 +12,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Turns board events into risk points.
@@ -47,10 +49,14 @@ public class TaskRiskReporter {
     /**
      * Budget cost of the first reopen, before weighting.
      *
-     * <p>Lower than the collaboration charge because the first bounce is mostly a
-     * communication failure: the estimate has usually not been blown yet by one pass.</p>
+     * <p>Six points for a one-day task, the same scale as the board's other per-task
+     * charges — a task finished and then taken back out of Done is work the sprint
+     * believed was paid for and now has to pay for again. It used to be 2.5, which a
+     * small task halved to barely a point: dragging a card out of Done moved the gauge
+     * by less than the on-time credit it withdrew, and read as the reopen doing
+     * nothing.</p>
      */
-    private static final BigDecimal REOPEN_BUDGET_BASE = BigDecimal.valueOf(2.5);
+    private static final BigDecimal REOPEN_BUDGET_BASE = BigDecimal.valueOf(6);
 
     /**
      * Budget cost of each reopen after the first — larger than the first, the opposite
@@ -69,7 +75,20 @@ public class TaskRiskReporter {
     private static final BigDecimal BLOCKED_CAP = BigDecimal.valueOf(10);
 
     /** Credit for finishing inside the estimate — the one adjustment that is earned. */
-    private static final BigDecimal ON_TIME_CREDIT = BigDecimal.valueOf(-3);
+    private static final BigDecimal ON_TIME_CREDIT = BigDecimal.valueOf(-6);
+    private static final BigDecimal ON_TIME_CREDIT_CAP = BigDecimal.valueOf(-10);
+
+    /**
+     * Credit for picking a task up before its estimate has run out, for a one-day task.
+     *
+     * <p>Smaller than finishing on time, because starting is a promise rather than a
+     * delivery — but it is still the board saying the plan is holding, and the half-time
+     * rule already charges the opposite case. Both credits are weighted by the task
+     * exactly as the charges are: half a day's work finished on time is not the same
+     * evidence as a fortnight's.</p>
+     */
+    private static final BigDecimal STARTED_ON_TIME_CREDIT = BigDecimal.valueOf(-4);
+    private static final BigDecimal STARTED_ON_TIME_CREDIT_CAP = BigDecimal.valueOf(-8);
 
     /** An overdue task cannot cost the sprint more than this, however large its estimate. */
     private static final BigDecimal OVERDUE_CAP = BigDecimal.valueOf(15);
@@ -94,7 +113,6 @@ public class TaskRiskReporter {
 
     private static final BigDecimal UNANSWERED_CAP = BigDecimal.valueOf(12);
 
-    private static final BigDecimal MINUTES_PER_DAY = BigDecimal.valueOf(8 * 60);
 
     // ------------------------------------------------------------------- events
 
@@ -109,14 +127,19 @@ public class TaskRiskReporter {
         if (current == previous) {
             return;
         }
-        BigDecimal blocked = cap(weight(task).multiply(BLOCKED_BASE), BLOCKED_CAP);
+        if (current == TaskStatus.BLOCKED || previous == TaskStatus.BLOCKED) {
+            blockChanged(task);
+        }
 
-        if (current == TaskStatus.BLOCKED) {
-            adjustments.record(task.getSprintId(), RiskType.OVER_BUDGET, blocked,
-                    "Task blocked: " + task.getItemKey());
-        } else if (previous == TaskStatus.BLOCKED) {
-            adjustments.record(task.getSprintId(), RiskType.OVER_BUDGET, blocked.negate(),
-                    "Task unblocked: " + task.getItemKey());
+        // Picked up while its estimate still had time on it. Only a pick-up from To Do
+        // counts: a card unblocked or sent back from review has not started anything new,
+        // and one dragged out of Done is a reopen, charged below. Keyed per task, so
+        // dragging a card back and forth between To Do and In Progress earns it once.
+        if (current == TaskStatus.IN_PROGRESS && previous == TaskStatus.TODO
+                && withinEstimate(task)) {
+            adjustments.revise(task.getSprintId(), RiskType.OVER_BUDGET, startedOnTimeKey(task),
+                    credit(task, STARTED_ON_TIME_CREDIT, STARTED_ON_TIME_CREDIT_CAP),
+                    "Started within estimate: " + task.getItemKey());
         }
 
         if (current.isCompleted() && !previous.isCompleted()) {
@@ -129,9 +152,10 @@ public class TaskRiskReporter {
             // time a card touched Done, so a task bouncing Done → review → Done earned
             // -3 per lap and cancelled the rework it was accumulating — the sprint's
             // over-budget score sat still through exactly the pattern it exists to catch.
-            if (!task.isOverEstimate() && task.getEstimateMinutes() != null) {
+            if (withinEstimate(task)) {
                 adjustments.revise(task.getSprintId(), RiskType.OVER_BUDGET, onTimeKey(task),
-                        ON_TIME_CREDIT, "Completed within estimate: " + task.getItemKey());
+                        credit(task, ON_TIME_CREDIT, ON_TIME_CREDIT_CAP),
+                        "Completed within estimate: " + task.getItemKey());
             }
             // The task made it out; whatever it was going to cost for running late, it
             // no longer does. Leaving the penalty behind would mean a sprint that
@@ -148,6 +172,45 @@ public class TaskRiskReporter {
                 reopened(task);
             }
         }
+    }
+
+    /**
+     * Charges or withdraws the over-budget cost of this task being blocked.
+     *
+     * <p>Called from every path that can block or unblock a card — the column drag and
+     * the Block / Unblock buttons — because a task is blocked whichever way it got there.
+     * Before this only the drag charged, so a card blocked from its detail page cost the
+     * sprint nothing.</p>
+     *
+     * <p>One standing entry per card rather than a charge and a matching refund. The pair
+     * came apart: the next Assess folded the charge away (the over-budget models never
+     * read an in-sprint block, so the score fell straight back) while the refund written
+     * after it still counted, and a sprint that blocked and unblocked one card ended up
+     * <em>less</em> risky than one that never had. A key held for as long as the card is
+     * blocked, and cleared when it is not, cannot drift either way.</p>
+     */
+    public void blockChanged(Task task) {
+        TaskStatus status = task.getStatus();
+        boolean blocked = status != null && !status.isTerminal()
+                && (task.isBlocked() || status == TaskStatus.BLOCKED);
+        blockChanged(task.getSprintId(), task.getId(), task.getItemKey(),
+                task.getEstimateMinutes(), blocked);
+    }
+
+    /**
+     * The same, for a card that is not a task row — a sprint story with no tasks of its
+     * own, which the board shows as a card under the story's id.
+     */
+    public void blockChanged(UUID sprintId, UUID cardId, String itemKey,
+                             Integer estimateMinutes, boolean blocked) {
+        String key = blockedKey(cardId);
+        if (!blocked) {
+            adjustments.clear(sprintId, key);
+            return;
+        }
+        adjustments.reviseStanding(sprintId, RiskType.OVER_BUDGET, key,
+                cap(weight(estimateMinutes).multiply(BLOCKED_BASE), BLOCKED_CAP),
+                "Task blocked: " + itemKey);
     }
 
     /**
@@ -177,11 +240,35 @@ public class TaskRiskReporter {
                 reopenKey(task), cap(size.multiply(raw), REOPEN_CAP),
                 "Reopened %d time%s: %s".formatted(reopens, reopens == 1 ? "" : "s", task.getItemKey()));
 
+        reworkCharged(task.getSprintId(), task.getId(), task.getItemKey(),
+                task.getEstimateMinutes(), reopens);
+    }
+
+    /**
+     * Charges over-budget for a story card taken back out of Done.
+     *
+     * <p>A sprint story with no tasks of its own is a card on the board like any other,
+     * and dragging it out of Done is the same news. It is charged to over-budget only:
+     * the collaboration model reads reopens off task rows, and a story card has none.</p>
+     */
+    public void storyReopened(UUID sprintId, UUID storyId, String itemKey,
+                              Integer estimateMinutes, int reopens) {
+        if (reopens <= 0) {
+            return;
+        }
+        reworkCharged(sprintId, storyId, itemKey, estimateMinutes, reopens);
+    }
+
+    /** The over-budget cost of a card's reopens — larger with each one, scaled by size. */
+    private void reworkCharged(UUID sprintId, UUID cardId, String itemKey,
+                               Integer estimateMinutes, int reopens) {
+        BigDecimal repeats = BigDecimal.valueOf(reopens - 1L);
         BigDecimal budgetRaw = REOPEN_BUDGET_BASE.add(REOPEN_BUDGET_REPEAT.multiply(repeats));
-        adjustments.revise(task.getSprintId(), RiskType.OVER_BUDGET,
-                reopenBudgetKey(task), cap(size.multiply(budgetRaw), REOPEN_BUDGET_CAP),
+        adjustments.revise(sprintId, RiskType.OVER_BUDGET,
+                reopenBudgetKey(cardId),
+                cap(weight(estimateMinutes).multiply(budgetRaw), REOPEN_BUDGET_CAP),
                 "Rework on %s: %d reopen%s beyond the estimate"
-                        .formatted(task.getItemKey(), reopens, reopens == 1 ? "" : "s"));
+                        .formatted(itemKey, reopens, reopens == 1 ? "" : "s"));
     }
 
     /**
@@ -247,9 +334,11 @@ public class TaskRiskReporter {
     public void removed(Task task) {
         adjustments.clear(task.getSprintId(), overdueKey(task));
         adjustments.clear(task.getSprintId(), reopenKey(task));
-        adjustments.clear(task.getSprintId(), reopenBudgetKey(task));
+        adjustments.clear(task.getSprintId(), reopenBudgetKey(task.getId()));
         adjustments.clear(task.getSprintId(), onTimeKey(task));
+        adjustments.clear(task.getSprintId(), startedOnTimeKey(task));
         adjustments.clear(task.getSprintId(), unansweredKey(task));
+        adjustments.clear(task.getSprintId(), blockedKey(task.getId()));
     }
 
     // --------------------------------------------------------------- internals
@@ -262,8 +351,32 @@ public class TaskRiskReporter {
         return "TASK_REOPENED:" + task.getId();
     }
 
-    private static String reopenBudgetKey(Task task) {
-        return "TASK_REOPEN_BUDGET:" + task.getId();
+    private static String reopenBudgetKey(UUID cardId) {
+        return "TASK_REOPEN_BUDGET:" + cardId;
+    }
+
+    /**
+     * Whether the task is still inside its estimate on the board's own clock.
+     *
+     * <p>The clock the card counts down with: time in flight since it was added, paused
+     * while it sits in Done. This used to read logged effort instead, which almost no
+     * team keeps — so every finished task was "on time", however late the card had run.
+     * Logged effort past the estimate still disqualifies it; either one is enough to say
+     * the estimate did not hold.</p>
+     */
+    private static boolean withinEstimate(Task task) {
+        return task.getEstimateMinutes() != null && task.getEstimateMinutes() > 0
+                && !task.isOverdueAgainstEstimate(Instant.now())
+                && !task.isOverEstimate();
+    }
+
+    /** A credit, scaled by the task's size and held above {@code floor}. */
+    private static BigDecimal credit(Task task, BigDecimal base, BigDecimal floor) {
+        return weight(task).multiply(base).max(floor).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String startedOnTimeKey(Task task) {
+        return "TASK_STARTED_ON_TIME:" + task.getId();
     }
 
     private static String onTimeKey(Task task) {
@@ -272,6 +385,10 @@ public class TaskRiskReporter {
 
     private static String unansweredKey(Task task) {
         return "TASK_UNANSWERED:" + task.getId();
+    }
+
+    private static String blockedKey(UUID cardId) {
+        return "TASK_BLOCKED:" + cardId;
     }
 
     /** "3h" and "2d" read on a ledger row; "185 minutes" does not. */
@@ -291,12 +408,12 @@ public class TaskRiskReporter {
      * weighs 1.0 — the absence of an estimate is not evidence that the task is small.</p>
      */
     private static BigDecimal weight(Task task) {
-        Integer minutes = task.getEstimateMinutes();
-        if (minutes == null || minutes <= 0) {
-            return BigDecimal.ONE;
-        }
-        BigDecimal raw = BigDecimal.valueOf(minutes).divide(MINUTES_PER_DAY, 4, RoundingMode.HALF_UP);
-        return raw.max(BigDecimal.valueOf(0.5)).min(BigDecimal.valueOf(2.0));
+        return weight(task.getEstimateMinutes());
+    }
+
+    private static BigDecimal weight(Integer minutes) {
+        // Shared with the sprint watch, so a card is the same size to every rule.
+        return TaskRiskWeight.of(minutes);
     }
 
     private static BigDecimal cap(BigDecimal value, BigDecimal limit) {
