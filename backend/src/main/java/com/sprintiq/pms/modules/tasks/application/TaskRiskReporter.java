@@ -1,6 +1,7 @@
 package com.sprintiq.pms.modules.tasks.application;
 
 import com.sprintiq.pms.modules.ai.application.SprintRiskAdjustmentService;
+import com.sprintiq.pms.modules.ai.application.TaskRiskWeight;
 import com.sprintiq.pms.modules.ai.domain.RiskType;
 import com.sprintiq.pms.modules.tasks.domain.Task;
 import com.sprintiq.pms.modules.tasks.domain.TaskStatus;
@@ -95,7 +96,6 @@ public class TaskRiskReporter {
 
     private static final BigDecimal UNANSWERED_CAP = BigDecimal.valueOf(12);
 
-    private static final BigDecimal MINUTES_PER_DAY = BigDecimal.valueOf(8 * 60);
 
     // ------------------------------------------------------------------- events
 
@@ -334,11 +334,8 @@ public class TaskRiskReporter {
     }
 
     private static BigDecimal weight(Integer minutes) {
-        if (minutes == null || minutes <= 0) {
-            return BigDecimal.ONE;
-        }
-        BigDecimal raw = BigDecimal.valueOf(minutes).divide(MINUTES_PER_DAY, 4, RoundingMode.HALF_UP);
-        return raw.max(BigDecimal.valueOf(0.5)).min(BigDecimal.valueOf(2.0));
+        // Shared with the sprint watch, so a card is the same size to every rule.
+        return TaskRiskWeight.of(minutes);
     }
 
     private static BigDecimal cap(BigDecimal value, BigDecimal limit) {
