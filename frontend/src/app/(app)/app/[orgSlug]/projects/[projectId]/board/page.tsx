@@ -11,6 +11,7 @@ import { useProjectRealtime, useRealtime } from "@/components/realtime-provider"
 import { AddTaskDialog } from "@/features/board/components/add-task-dialog";
 import { KanbanBoard } from "@/features/board/components/kanban-board";
 import { TaskDetailDialog } from "@/features/board/components/task-detail-dialog";
+import { UnassignedAlert } from "@/features/board/components/unassigned-alert";
 import {
   useAssignTask,
   useMoveTask,
@@ -98,6 +99,12 @@ export default function BoardPage({
         </div>
 
         <div className="flex items-center gap-3">
+          <UnassignedAlert
+            tasks={board.data?.columns.flatMap((column) => column.tasks) ?? []}
+            members={memberList}
+            onAssign={(taskId, assigneeId) => assign.mutate({ taskId, assigneeId })}
+            disabled={assign.isPending}
+          />
           <Badge variant={connected ? "secondary" : "outline"} className="gap-1.5">
             <Radio
               className={connected ? "size-3 text-emerald-600" : "size-3 text-muted-foreground"}

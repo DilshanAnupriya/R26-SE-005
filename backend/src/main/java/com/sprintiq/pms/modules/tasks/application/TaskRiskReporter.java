@@ -97,6 +97,10 @@ public class TaskRiskReporter {
     /** How many comments, and separately replies, earn credit on one task. */
     private static final long DISCUSSION_COUNTED = 3;
 
+    /** Collaboration charge for a one-day task in a sprint with nobody assigned. */
+    private static final BigDecimal UNASSIGNED_BASE = BigDecimal.valueOf(6);
+    private static final BigDecimal UNASSIGNED_CAP = BigDecimal.valueOf(10);
+
     /** An overdue task cannot cost the sprint more than this, however large its estimate. */
     private static final BigDecimal OVERDUE_CAP = BigDecimal.valueOf(15);
 
@@ -178,6 +182,11 @@ public class TaskRiskReporter {
             if (task.getReopenedCount() > 0) {
                 reopened(task);
             }
+        }
+
+        if (previous.isTerminal() != current.isTerminal() && task.getAssigneeId() == null) {
+            // An unowned task finished needs nobody; one reopened needs somebody again.
+            ownershipChanged(task);
         }
     }
 
@@ -312,6 +321,76 @@ public class TaskRiskReporter {
     }
 
     /**
+     * Charges collaboration for a task in a sprint that nobody owns, and settles that
+     * charge once somebody does.
+     *
+     * <p>Unassigned, the task pays its full weighted charge: work nobody has picked up is
+     * the most basic coordination failure a board can show. Assigned, it keeps only the
+     * share of that charge matching the part of its estimate that ran out while it waited
+     * — picked up straight away, nothing is left; picked up with a third of its time gone,
+     * a third stays.</p>
+     *
+     * <p>Extending the estimate afterwards gives that time back: every minute added
+     * cancels a minute of the wait, and an extension as long as the wait clears the
+     * charge. Called after creation, assignment, re-estimation, a sprint move and a move
+     * into or out of Done, so the entry always describes the task as it stands.</p>
+     */
+    public void ownershipChanged(Task task) {
+        if (task.getSprintId() == null) {
+            return;
+        }
+        String key = unassignedKey(task);
+        TaskStatus status = task.getStatus();
+        boolean finished = status != null && status.isTerminal();
+
+        if (task.getAssigneeId() == null) {
+            if (finished) {
+                // Done without an owner: there is no work left for anybody to pick up.
+                adjustments.clear(task.getSprintId(), key);
+                return;
+            }
+            adjustments.revise(task.getSprintId(), RiskType.COMMUNICATION_COLLABORATION, key,
+                    cap(weight(task).multiply(UNASSIGNED_BASE), UNASSIGNED_CAP),
+                    "Nobody assigned to " + task.getItemKey());
+            return;
+        }
+
+        Long waitedSeconds = task.getUnassignedElapsedSeconds();
+        Integer estimateThen = task.getEstimateAtAssignMinutes();
+        if (waitedSeconds == null || estimateThen == null || estimateThen <= 0) {
+            // Owned from the start, or never estimated — no share of an estimate was lost.
+            adjustments.clear(task.getSprintId(), key);
+            return;
+        }
+        long estimateNow = task.getEstimateMinutes() == null ? estimateThen : task.getEstimateMinutes();
+        long extensionSeconds = Math.max(0L, estimateNow - estimateThen) * 60L;
+        long lostSeconds = Math.max(0L, waitedSeconds - extensionSeconds);
+        if (lostSeconds == 0) {
+            adjustments.clear(task.getSprintId(), key);
+            return;
+        }
+        BigDecimal lostShare = BigDecimal.valueOf(Math.min(lostSeconds, estimateThen * 60L))
+                .divide(BigDecimal.valueOf(estimateThen * 60L), 4, RoundingMode.HALF_UP);
+        BigDecimal fullCharge = cap(weight(estimateThen).multiply(UNASSIGNED_BASE), UNASSIGNED_CAP);
+        BigDecimal residual = fullCharge.multiply(lostShare).setScale(2, RoundingMode.HALF_UP);
+        if (residual.signum() == 0) {
+            adjustments.clear(task.getSprintId(), key);
+            return;
+        }
+        adjustments.revise(task.getSprintId(), RiskType.COMMUNICATION_COLLABORATION, key, residual,
+                "%s waited %s for an owner — %d%% of its estimate"
+                        .formatted(task.getItemKey(), humanise(lostSeconds / 60),
+                                lostShare.multiply(BigDecimal.valueOf(100)).intValue()));
+    }
+
+    /** A task left this sprint: its ownership charge goes with it. */
+    public void leftSprint(Task task, UUID previousSprintId) {
+        if (previousSprintId != null && !previousSprintId.equals(task.getSprintId())) {
+            adjustments.clear(previousSprintId, unassignedKey(task));
+        }
+    }
+
+    /**
      * Credits collaboration for the discussion on this task: its comments, and the
      * replies to them.
      *
@@ -384,6 +463,7 @@ public class TaskRiskReporter {
         adjustments.clear(task.getSprintId(), startedOnTimeKey(task));
         adjustments.clear(task.getSprintId(), commentedKey(task));
         adjustments.clear(task.getSprintId(), repliedKey(task));
+        adjustments.clear(task.getSprintId(), unassignedKey(task));
         adjustments.clear(task.getSprintId(), unansweredKey(task));
         adjustments.clear(task.getSprintId(), blockedKey(task.getId()));
     }
@@ -420,6 +500,10 @@ public class TaskRiskReporter {
     /** A credit, scaled by the task's size and held above {@code floor}. */
     private static BigDecimal credit(Task task, BigDecimal base, BigDecimal floor) {
         return weight(task).multiply(base).max(floor).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String unassignedKey(Task task) {
+        return "TASK_UNASSIGNED:" + task.getId();
     }
 
     private static String commentedKey(Task task) {
