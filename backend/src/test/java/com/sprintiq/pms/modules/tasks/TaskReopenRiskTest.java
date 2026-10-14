@@ -200,6 +200,76 @@ class TaskReopenRiskTest {
         }
     }
 
+    /** Talking on the task lowers collaboration risk, by the task's size. */
+    @Nested
+    @DisplayName("comments and replies")
+    class Discussion {
+
+        private BigDecimal at(String keyPrefix, Task task) {
+            return ledger.entries.stream()
+                    .filter(entry -> (keyPrefix + task.getId()).equals(entry.sourceKey()))
+                    .map(Entry::delta)
+                    .findFirst()
+                    .orElse(BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("a comment lowers collaboration by the task's weight")
+        void commentCredits() {
+            Task small = task(0, 60);
+            Task day = task(0, 480);
+            reporter.discussionChanged(small, 1, 0);
+            reporter.discussionChanged(day, 1, 0);
+
+            assertThat(at("TASK_COMMENTED:", small)).isEqualByComparingTo(BigDecimal.valueOf(-1));
+            assertThat(at("TASK_COMMENTED:", day)).isEqualByComparingTo(BigDecimal.valueOf(-2));
+            assertThat(ledger.entries).allMatch(e -> e.riskType() == RiskType.COMMUNICATION_COLLABORATION);
+        }
+
+        @Test
+        @DisplayName("a reply lowers it by more than a comment")
+        void replyCredits() {
+            Task day = task(0, 480);
+            reporter.discussionChanged(day, 1, 1);
+
+            assertThat(at("TASK_REPLIED:", day)).isEqualByComparingTo(BigDecimal.valueOf(-3));
+            assertThat(ledger.charged(RiskType.COMMUNICATION_COLLABORATION))
+                    .isEqualByComparingTo(BigDecimal.valueOf(-5));
+        }
+
+        @Test
+        @DisplayName("only the first three of each count, so spam cannot buy the risk down")
+        void capped() {
+            Task day = task(0, 480);
+            reporter.discussionChanged(day, 40, 40);
+
+            assertThat(at("TASK_COMMENTED:", day)).isEqualByComparingTo(BigDecimal.valueOf(-6));
+            assertThat(at("TASK_REPLIED:", day)).isEqualByComparingTo(BigDecimal.valueOf(-9));
+        }
+
+        @Test
+        @DisplayName("deleting the discussion gives the credit back")
+        void deletionWithdraws() {
+            Task day = task(0, 480);
+            reporter.discussionChanged(day, 2, 1);
+            reporter.discussionChanged(day, 0, 0);
+
+            assertThat(ledger.entries).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the first comment ends the sweep's silence charge at once")
+        void endsTheSilenceCharge() {
+            Task day = task(0, 480);
+            ledger.revise(SPRINT, RiskType.COMMUNICATION_COLLABORATION,
+                    "TASK_SILENT:" + day.getId(), BigDecimal.valueOf(6), "silent");
+
+            reporter.discussionChanged(day, 1, 0);
+
+            assertThat(ledger.keys()).doesNotContain("TASK_SILENT:" + day.getId());
+        }
+    }
+
     /**
      * The other direction: a task moved to In Progress or Done while its estimate still
      * has time on it lowers over-budget, by its size.
