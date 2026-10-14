@@ -75,7 +75,20 @@ public class TaskRiskReporter {
     private static final BigDecimal BLOCKED_CAP = BigDecimal.valueOf(10);
 
     /** Credit for finishing inside the estimate — the one adjustment that is earned. */
-    private static final BigDecimal ON_TIME_CREDIT = BigDecimal.valueOf(-3);
+    private static final BigDecimal ON_TIME_CREDIT = BigDecimal.valueOf(-6);
+    private static final BigDecimal ON_TIME_CREDIT_CAP = BigDecimal.valueOf(-10);
+
+    /**
+     * Credit for picking a task up before its estimate has run out, for a one-day task.
+     *
+     * <p>Smaller than finishing on time, because starting is a promise rather than a
+     * delivery — but it is still the board saying the plan is holding, and the half-time
+     * rule already charges the opposite case. Both credits are weighted by the task
+     * exactly as the charges are: half a day's work finished on time is not the same
+     * evidence as a fortnight's.</p>
+     */
+    private static final BigDecimal STARTED_ON_TIME_CREDIT = BigDecimal.valueOf(-4);
+    private static final BigDecimal STARTED_ON_TIME_CREDIT_CAP = BigDecimal.valueOf(-8);
 
     /** An overdue task cannot cost the sprint more than this, however large its estimate. */
     private static final BigDecimal OVERDUE_CAP = BigDecimal.valueOf(15);
@@ -118,6 +131,17 @@ public class TaskRiskReporter {
             blockChanged(task);
         }
 
+        // Picked up while its estimate still had time on it. Only a pick-up from To Do
+        // counts: a card unblocked or sent back from review has not started anything new,
+        // and one dragged out of Done is a reopen, charged below. Keyed per task, so
+        // dragging a card back and forth between To Do and In Progress earns it once.
+        if (current == TaskStatus.IN_PROGRESS && previous == TaskStatus.TODO
+                && withinEstimate(task)) {
+            adjustments.revise(task.getSprintId(), RiskType.OVER_BUDGET, startedOnTimeKey(task),
+                    credit(task, STARTED_ON_TIME_CREDIT, STARTED_ON_TIME_CREDIT_CAP),
+                    "Started within estimate: " + task.getItemKey());
+        }
+
         if (current.isCompleted() && !previous.isCompleted()) {
             // Finishing inside the estimate is the evidence that the plan was sound, and
             // a ledger that only ever accumulates bad news would drift upward all sprint
@@ -128,9 +152,10 @@ public class TaskRiskReporter {
             // time a card touched Done, so a task bouncing Done → review → Done earned
             // -3 per lap and cancelled the rework it was accumulating — the sprint's
             // over-budget score sat still through exactly the pattern it exists to catch.
-            if (!task.isOverEstimate() && task.getEstimateMinutes() != null) {
+            if (withinEstimate(task)) {
                 adjustments.revise(task.getSprintId(), RiskType.OVER_BUDGET, onTimeKey(task),
-                        ON_TIME_CREDIT, "Completed within estimate: " + task.getItemKey());
+                        credit(task, ON_TIME_CREDIT, ON_TIME_CREDIT_CAP),
+                        "Completed within estimate: " + task.getItemKey());
             }
             // The task made it out; whatever it was going to cost for running late, it
             // no longer does. Leaving the penalty behind would mean a sprint that
@@ -311,6 +336,7 @@ public class TaskRiskReporter {
         adjustments.clear(task.getSprintId(), reopenKey(task));
         adjustments.clear(task.getSprintId(), reopenBudgetKey(task.getId()));
         adjustments.clear(task.getSprintId(), onTimeKey(task));
+        adjustments.clear(task.getSprintId(), startedOnTimeKey(task));
         adjustments.clear(task.getSprintId(), unansweredKey(task));
         adjustments.clear(task.getSprintId(), blockedKey(task.getId()));
     }
@@ -327,6 +353,30 @@ public class TaskRiskReporter {
 
     private static String reopenBudgetKey(UUID cardId) {
         return "TASK_REOPEN_BUDGET:" + cardId;
+    }
+
+    /**
+     * Whether the task is still inside its estimate on the board's own clock.
+     *
+     * <p>The clock the card counts down with: time in flight since it was added, paused
+     * while it sits in Done. This used to read logged effort instead, which almost no
+     * team keeps — so every finished task was "on time", however late the card had run.
+     * Logged effort past the estimate still disqualifies it; either one is enough to say
+     * the estimate did not hold.</p>
+     */
+    private static boolean withinEstimate(Task task) {
+        return task.getEstimateMinutes() != null && task.getEstimateMinutes() > 0
+                && !task.isOverdueAgainstEstimate(Instant.now())
+                && !task.isOverEstimate();
+    }
+
+    /** A credit, scaled by the task's size and held above {@code floor}. */
+    private static BigDecimal credit(Task task, BigDecimal base, BigDecimal floor) {
+        return weight(task).multiply(base).max(floor).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String startedOnTimeKey(Task task) {
+        return "TASK_STARTED_ON_TIME:" + task.getId();
     }
 
     private static String onTimeKey(Task task) {
