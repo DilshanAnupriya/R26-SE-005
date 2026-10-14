@@ -9,12 +9,18 @@ import { queryKeys } from "@/lib/api/query-keys";
 import { riskApi, type ImpactDirection, type RequirementChangeType } from "./api";
 import { RISK_MODELS } from "./risk-models";
 
+/** How often an open risk view re-reads the gauges — the sprint watch runs every minute. */
+export const RISK_REFRESH_MS = 60_000;
+
 export function useSprintRisk(sprintId: string | undefined) {
   const { api, status } = useSession();
   return useQuery({
     queryKey: queryKeys.ai.risk(sprintId ?? ""),
     queryFn: () => riskApi.latest(api, sprintId!),
     enabled: status === "authenticated" && Boolean(sprintId),
+    // The sprint watch moves these on its own, every minute, as tasks cross half their
+    // estimate. Polling while the view is open is what makes that visible without a reload.
+    refetchInterval: RISK_REFRESH_MS,
   });
 }
 
@@ -82,6 +88,7 @@ export function useRiskAdjustments(sprintId: string | undefined) {
     queryKey: queryKeys.ai.riskAdjustments(sprintId ?? ""),
     queryFn: () => riskApi.adjustments(api, sprintId!),
     enabled: status === "authenticated" && Boolean(sprintId),
+    refetchInterval: RISK_REFRESH_MS,
   });
 }
 
