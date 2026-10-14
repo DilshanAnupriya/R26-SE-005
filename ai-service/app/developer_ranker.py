@@ -298,23 +298,20 @@ def rank_developers_for_task(
     raw_workloads = candidates_df["current_workload"].values.astype(float) if "current_workload" in candidates_df.columns else np.zeros(len(candidates_df))
 
     # ✅ WORKLOAD BALANCE & FAIRNESS:
-    # 1. Exponential decay relative to team mean workload
-    mean_workload = raw_workloads.mean() if raw_workloads.mean() > 0 else 1.0
-    workload_balance_array = np.exp(-raw_workloads / (mean_workload + 1e-6))
-    
-    # 2. Task count fairness (penalize devs with active tasks when others are free)
+    # 1. Capacity load ratio relative to developer's velocity / standard sprint capacity (>= 10 SP)
+    if "dev_historical_velocity_avg" in candidates_df.columns:
+        ref_capacities = np.maximum(10.0, candidates_df["dev_historical_velocity_avg"].values.astype(float))
+    else:
+        ref_capacities = np.full(len(candidates_df), 12.0)
+    load_ratios = raw_workloads / ref_capacities
+    workload_balance_array = np.exp(-1.5 * load_ratios)
+
+    # 2. Task count fairness (smooth progressive capacity penalty)
     current_tasks_array = candidates_df["current_tasks"].values.astype(float)
-    min_tasks = current_tasks_array.min()
-    task_fairness = []
-    for t in current_tasks_array:
-        if t == 0:
-            task_fairness.append(1.0)  # Idle developer boost
-        elif t > min_tasks:
-            task_fairness.append(1.0 / (1.0 + 0.6 * (t - min_tasks) ** 1.5))
-        else:
-            task_fairness.append(0.9)
-    
-    combined_workload_balance = np.clip(workload_balance_array * np.array(task_fairness), 0, 1)
+    task_fairness = 1.0 / (1.0 + 0.25 * current_tasks_array)
+
+    combined_workload_balance = np.clip(workload_balance_array * task_fairness, 0.0, 1.0)
+    mean_workload = float(raw_workloads.mean()) if len(raw_workloads) > 0 else 0.0
 
     logger.info(
         f"  Workload balance — mean={mean_workload:.1f}, "
