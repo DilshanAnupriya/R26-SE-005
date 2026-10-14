@@ -141,19 +141,40 @@ def rank_developers_for_task(
             curr_workload = float(dev.get("current_workload", 0.0))
             hist_vel = float(dev.get("historical_velocity_avg", dev.get("velocity", 12.0)))
             prior_comp = int(dev.get("prior_completed_tasks", dev.get("completed_tasks", 15)))
+            init_sp = float(task_profile.get("initialStoryPoints", task_profile.get("initial_story_points", story_points)))
+            scope_creep = float(task_profile.get("scopeCreep", task_profile.get("scope_creep", story_points - init_sp)))
+            scope_creep_ratio = float(scope_creep / max(1.0, init_sp))
+            sprint_len = float(task_profile.get("sprintLength", task_profile.get("sprint_len", 14.0)))
+            sprint_devs = float(task_profile.get("sprintDevs", task_profile.get("sprint_devs", max(1, len(dev_df)))))
+            sprint_total_issues = float(task_profile.get("sprintTotalIssues", task_profile.get("sprint_total_issues", 40.0)))
+            comment_count = int(task_profile.get("commentCount", task_profile.get("comment_count", 0)))
+            issue_link_count = int(task_profile.get("issueLinkCount", task_profile.get("issue_link_count", 0)))
+            prior_rate = float(dev.get("prior_completed_rate", dev.get("completed_rate", 0.78)))
+            load_ratio = float(curr_workload / max(1.0, hist_vel))
 
             emp_row = {
                 "story_points": story_points,
+                "initial_story_points": init_sp,
                 "has_story_points": has_story_points,
+                "scope_creep": scope_creep,
+                "scope_creep_ratio": scope_creep_ratio,
                 "priority_id": priority_id,
                 "is_blocked": is_blocked,
                 "dependency_count": dependency_count,
+                "issue_link_count": issue_link_count,
+                "comment_count": comment_count,
                 "summary_char_length": summary_char_length,
+                "sprint_len": sprint_len,
+                "sprint_devs": sprint_devs,
+                "sprint_total_issues": sprint_total_issues,
+                "dev_prior_completed_tasks": prior_comp,
+                "dev_prior_completed_rate": prior_rate,
+                "dev_historical_velocity_avg": hist_vel,
+                "dev_domain_familiarity": domain_fam,
                 "dev_sprint_task_load": curr_tasks,
                 "dev_sprint_story_point_load": curr_workload,
-                "dev_historical_velocity_avg": hist_vel,
-                "dev_prior_completed_tasks": prior_comp,
-                "dev_domain_familiarity": domain_fam,
+                "dev_load_ratio": load_ratio,
+                "is_cold_start_dev": 1 if prior_comp == 0 else 0,
                 "domain_analytics": domain_analytics,
                 "domain_clustering": domain_clustering,
                 "domain_core": domain_core,
@@ -163,6 +184,13 @@ def rank_developers_for_task(
                 "domain_ui": domain_ui,
                 "type_bug": type_bug,
                 "type_task": type_task,
+                "task_type_Bug": type_bug,
+                "task_type_Story": 1 if not type_bug and "story" in raw_type else (1 if not type_bug else 0),
+                "task_type_Improvement": 1 if "improve" in raw_type else 0,
+                "task_domain_backend": 1 if ("backend" in raw_domain or "core" in raw_domain or raw_domain == "backend") else 0,
+                "task_domain_database": 1 if ("database" in raw_domain or "db" in raw_domain) else 0,
+                "task_domain_devops": 1 if ("devops" in raw_domain or "ci" in raw_domain) else 0,
+                "task_domain_frontend": 1 if ("frontend" in raw_domain or "ui" in raw_domain) else 0,
 
                 "_dev_id": dev["dev_id"],
                 "skill_match_score": skill_match_score,
@@ -349,13 +377,13 @@ def rank_developers_for_task(
     # =========================================
     results = pd.DataFrame({
         "dev_id": dev_ids,
-        "skill_frontend": dev_df["skill_frontend"].values,
-        "skill_backend": dev_df["skill_backend"].values,
-        "skill_db": dev_df["skill_db"].values,
-        "experience_level": dev_df["experience_level"].values,
-        "current_tasks": dev_df["current_tasks"].values,
-        "current_workload": dev_df["current_workload"].values,
-        "availability": dev_df["availability"].values,
+        "skill_frontend": dev_df["skill_frontend"].values if "skill_frontend" in dev_df.columns else np.zeros(len(dev_df)),
+        "skill_backend": dev_df["skill_backend"].values if "skill_backend" in dev_df.columns else np.zeros(len(dev_df)),
+        "skill_db": dev_df["skill_db"].values if "skill_db" in dev_df.columns else np.zeros(len(dev_df)),
+        "experience_level": dev_df["experience_level"].values if "experience_level" in dev_df.columns else np.full(len(dev_df), 2),
+        "current_tasks": dev_df["current_tasks"].values if "current_tasks" in dev_df.columns else np.zeros(len(dev_df)),
+        "current_workload": dev_df["current_workload"].values if "current_workload" in dev_df.columns else np.zeros(len(dev_df)),
+        "availability": dev_df["availability"].values if "availability" in dev_df.columns else np.ones(len(dev_df)),
         "skill_match_score": np.round(skill_match_array, 3),
         "predicted_performance": np.round(predicted, 2),
         "workload_balance": np.round(combined_workload_balance, 3),

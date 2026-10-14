@@ -1,14 +1,15 @@
 """Real Data Preprocessor for Empirical Agile Resource Allocation.
 
 Ingests raw Jira sprint data from public open-source Agile repositories
-(Randula Koralage Agile Scrum Sprint Velocity Dataset: Spring XD and Apache Mesos).
+(Randula Koralage Agile Scrum Sprint Velocity Dataset: Spring XD).
 
 Enforces:
 1. Strict temporal chronological splitting (Sprints 1-45 for training, Sprints 46-66 for held-out test).
-2. Historical features computed strictly from past sprints (s < S_current).
-3. No fabrication of human skill/experience; uses observable domain familiarity and completed task counts.
-4. Objective blocker definition (only true dependency links, not general issue links).
-5. Ground-truth target: task_completed_within_sprint.
+2. Merges issue metadata with sprint summary events using issueKey == key, recovering all 551 failure/punted instances.
+3. Maps sprint identifiers to true sequential Scrum sprint numbers (Sprint 1..68).
+4. Historical features computed strictly from past sprints (s < S_current) to prevent data leakage.
+5. Rich Agile context friction features: comment volatility, scope creep, sprint congestion, and load ratios.
+6. Ground-truth target: task_completed_within_sprint (1 = Completed, 0 = Delayed/Punted/Spillover).
 """
 
 from __future__ import annotations
@@ -83,56 +84,98 @@ def build_empirical_dataset() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
 
     logger.info("Raw shapes: issues=%s, summary=%s, sprints=%s", df_issues.shape, df_summary.shape, df_sprints.shape)
 
-    # Clean story points: numeric conversion
-    df_issues["storyPoint"] = pd.to_numeric(df_issues["storyPoint"], errors="coerce")
-    df_issues["has_story_points"] = df_issues["storyPoint"].notna().astype(int)
+    # 1. Clean story points and numerical fields
+    for c in ["storyPoint", "commentCount", "issueLinks", "blockedBy", "blocks", "dependedOnBy", "dependedOn", "subtasks", "priority"]:
+        if c in df_issues:
+            df_issues[c] = pd.to_numeric(df_issues[c], errors="coerce").fillna(0)
 
-    # Exclude records without valid assignee
-    df_valid_issues = df_issues[df_issues["assignee"].notna() & (df_issues["assignee"] != "null")].copy()
-    logger.info("Issues after filtering missing assignees: %d", len(df_valid_issues))
+    for c in ["initialStoryPoint", "currentStoryPoint", "priorityId"]:
+        if c in df_summary:
+            df_summary[c] = pd.to_numeric(df_summary[c], errors="coerce").fillna(0)
 
-    # Merge on (key, sprint) to obtain exact sprint completion status
+    # 2. Exclude records without valid assignee
+    df_valid_summary = df_summary[df_summary["assignee"].notna() & (df_summary["assignee"] != "null") & (df_summary["assignee"] != "")].copy()
+    logger.info("Summary records after filtering missing assignees: %d", len(df_valid_summary))
+
+    # 3. Map sprintId to sequential sprint numbers (Sprint 1..68)
+    sprint_num_map = {}
+    for idx, r in df_sprints.iterrows():
+        name = str(r["sprintName"]).strip()
+        if "Sprint" in name:
+            try:
+                sprint_num_map[r["sprintId"]] = int(name.replace("Sprint", "").strip())
+            except Exception:
+                sprint_num_map[r["sprintId"]] = idx + 1
+        else:
+            sprint_num_map[r["sprintId"]] = idx + 1
+
+    df_valid_summary["sprint_num"] = df_valid_summary["sprintId"].map(sprint_num_map).fillna(999).astype(int)
+
+    # 4. Merge sprint summary event with issue metadata on issueKey == key
+    # (Recovers all punted/carried-over issues where Jira updated the issue's final sprint field)
     merged = pd.merge(
-        df_valid_issues,
-        df_summary[["issueKey", "sprintId", "status", "initialStoryPoint", "currentStoryPoint"]],
-        left_on=["key", "sprint"],
-        right_on=["issueKey", "sprintId"],
+        df_valid_summary,
+        df_issues,
+        left_on="issueKey",
+        right_on="key",
         how="inner",
-        suffixes=("", "_summary")
+        suffixes=("_summary", "_issues")
     )
     logger.info("Matched task assignments across issues and sprint summary: %d", len(merged))
 
-    # Ground-truth target: 1 = Completed within sprint, 0 = Delayed/Not completed/Punted
+    # 5. Ground-truth target: 1 = Completed within sprint, 0 = Delayed/Not completed/Punted
     merged["task_completed_within_sprint"] = (merged["status_summary"] == "Completed").astype(int)
-    merged["task_type"] = merged["issueType"]
+    logger.info(
+        "Ground truth class distribution: Completed=%d (%.1f%%), Failed/Punted=%d (%.1f%%)",
+        (merged["task_completed_within_sprint"] == 1).sum(),
+        merged["task_completed_within_sprint"].mean() * 100,
+        (merged["task_completed_within_sprint"] == 0).sum(),
+        (1 - merged["task_completed_within_sprint"].mean()) * 100,
+    )
 
-    # Classify domain
+    # 6. Sprint metadata enrichment
+    sprint_meta = df_sprints.set_index("sprintId")
+    merged["sprint_len"] = merged["sprintId"].map(sprint_meta["SprintLength"]).fillna(14).astype(float)
+    merged["sprint_devs"] = merged["sprintId"].map(sprint_meta["NoOfDevelopers"]).fillna(10).astype(float)
+    merged["sprint_total_issues"] = merged["sprintId"].map(sprint_meta["totalNumberOfIssues"]).fillna(40).astype(float)
+
+    # 7. Task type and domain
+    merged["task_type"] = merged["issueType"]
     merged["task_domain"] = [
-        classify_task_domain(s, t) for s, t in zip(merged["summary"], merged["issueType"])
+        classify_task_domain(s, t) for s, t in zip(merged["summary_issues"], merged["issueType"])
     ]
 
-    # Blockers and dependencies: strict separation
-    # In Spring XD, dependedOn is the real dependency count
+    # 8. Scope, story points, and creep features
+    merged["story_points"] = merged["currentStoryPoint"]
+    merged["initial_story_points"] = merged["initialStoryPoint"]
+    merged["has_story_points"] = (merged["story_points"] > 0).astype(int)
+    merged["scope_creep"] = merged["story_points"] - merged["initial_story_points"]
+    merged["scope_creep_ratio"] = merged["scope_creep"] / np.maximum(1.0, merged["initial_story_points"])
+
+    # 9. Blockers, dependencies, and friction
     depended_on = pd.to_numeric(merged.get("dependedOn", 0), errors="coerce").fillna(0)
     subtasks = pd.to_numeric(merged.get("subtasks", 0), errors="coerce").fillna(0)
     issue_links = pd.to_numeric(merged.get("issueLinks", 0), errors="coerce").fillna(0)
+    comment_count = pd.to_numeric(merged.get("commentCount", 0), errors="coerce").fillna(0)
 
     merged["is_blocked"] = (depended_on > 0).astype(int)
     merged["dependency_count"] = (depended_on + subtasks).astype(int)
     merged["issue_link_count"] = issue_links.astype(int)
-    merged["summary_char_length"] = merged["summary"].astype(str).str.len()
+    merged["comment_count"] = comment_count.astype(int)
+    merged["summary_char_length"] = merged["summary_issues"].astype(str).str.len()
 
-    # Normalize priority (Jira priorities typically 1 to 5)
-    merged["priority_id"] = pd.to_numeric(merged.get("priority", 3), errors="coerce").fillna(3).astype(int)
+    # Priority normalization
+    raw_prio = pd.to_numeric(merged.get("priorityId", 3), errors="coerce").fillna(3).astype(int)
+    merged["priority_id"] = np.where(raw_prio > 0, raw_prio, 3)
 
-    # Project and Developer Anonymization with project namespace
+    # 10. Developer and project anonymization
     project_id = "SPRING_XD"
-    unique_assignees = sorted(merged["assignee"].unique())
+    unique_assignees = sorted(merged["assignee_summary"].unique())
     dev_id_map = {name: f"{project_id}_D{i+1}" for i, name in enumerate(unique_assignees)}
-    merged["dev_id"] = merged["assignee"].map(dev_id_map)
+    merged["dev_id"] = merged["assignee_summary"].map(dev_id_map)
     merged["project_id"] = project_id
-    merged["sprint_id"] = merged["sprint"].astype(int)
-    merged["task_id"] = merged["key"].astype(str)
+    merged["sprint_id"] = merged["sprint_num"]
+    merged["task_id"] = merged["issueKey"].astype(str)
 
     # Sort strictly chronologically by sprint and task
     merged = merged.sort_values(by=["sprint_id", "task_id"]).reset_index(drop=True)
@@ -143,13 +186,14 @@ def build_empirical_dataset() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
     logger.info("Computing point-in-time historical signals across %d sprints...", merged["sprint_id"].nunique())
 
     dev_prior_completed_tasks = []
+    dev_prior_completed_rate = []
     dev_historical_velocity_avg = []
     dev_domain_familiarity = []
     is_cold_start_dev = []
+    dev_load_ratios = []
 
-    # Calculate retrospective sprint commitment load (committed backlog per sprint)
     dev_sprint_task_load_map = merged.groupby(["sprint_id", "dev_id"]).size().to_dict()
-    dev_sprint_sp_load_map = merged.groupby(["sprint_id", "dev_id"])["storyPoint"].sum(min_count=1).fillna(0).to_dict()
+    dev_sprint_sp_load_map = merged.groupby(["sprint_id", "dev_id"])["story_points"].sum().to_dict()
 
     all_sprints = sorted(merged["sprint_id"].unique())
 
@@ -165,34 +209,47 @@ def build_empirical_dataset() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
         n_completed = len(prior_completed)
         dev_prior_completed_tasks.append(n_completed)
 
-        if n_completed == 0:
+        cur_dev_sp = dev_sprint_sp_load_map.get((cur_sprint, cur_dev), 0.0)
+
+        if len(prior_records) == 0:
             is_cold_start_dev.append(1)
+            dev_prior_completed_rate.append(0.77)  # global prior
             dev_domain_familiarity.append(0.0)
+
             # Impute rolling velocity from team mean up to sprint S-1
             team_prior = merged[(merged["sprint_id"] < cur_sprint) & (merged["task_completed_within_sprint"] == 1)]
             if len(team_prior) > 0:
-                team_mean_vel = float(team_prior.groupby(["sprint_id", "dev_id"])["storyPoint"].sum().mean())
+                team_mean_vel = float(team_prior.groupby(["sprint_id", "dev_id"])["story_points"].sum().mean())
             else:
-                team_mean_vel = 0.0
+                team_mean_vel = 5.0
+            if np.isnan(team_mean_vel) or team_mean_vel < 1.0:
+                team_mean_vel = 5.0
             dev_historical_velocity_avg.append(round(team_mean_vel, 2))
+            dev_load_ratios.append(round(cur_dev_sp / team_mean_vel, 4))
         else:
             is_cold_start_dev.append(0)
-            # Domain familiarity: proportion of prior completed tasks in target domain
+            dev_prior_completed_rate.append(round(n_completed / len(prior_records), 4))
+
             domain_prior_count = len(prior_completed[prior_completed["task_domain"] == cur_domain])
-            dev_domain_familiarity.append(round(domain_prior_count / n_completed, 4))
+            dev_domain_familiarity.append(round(domain_prior_count / max(1, n_completed), 4))
 
             # Rolling 3-sprint velocity average
             lookback_sprints = [s for s in all_sprints if s < cur_sprint][-3:]
             recent_prior = prior_completed[prior_completed["sprint_id"].isin(lookback_sprints)]
-            if len(lookback_sprints) > 0:
-                vel = float(recent_prior["storyPoint"].sum()) / len(lookback_sprints)
+            if len(lookback_sprints) > 0 and len(recent_prior) > 0:
+                vel = float(recent_prior["story_points"].sum()) / len(lookback_sprints)
             else:
-                vel = float(prior_completed["storyPoint"].sum())
+                vel = float(prior_completed["story_points"].sum()) / max(1, len(set(prior_completed["sprint_id"]))) if len(prior_completed) > 0 else 5.0
+            if np.isnan(vel) or vel < 1.0:
+                vel = 1.0
             dev_historical_velocity_avg.append(round(vel, 2))
+            dev_load_ratios.append(round(cur_dev_sp / vel, 4))
 
     merged["dev_prior_completed_tasks"] = dev_prior_completed_tasks
+    merged["dev_prior_completed_rate"] = dev_prior_completed_rate
     merged["dev_historical_velocity_avg"] = dev_historical_velocity_avg
     merged["dev_domain_familiarity"] = dev_domain_familiarity
+    merged["dev_load_ratio"] = dev_load_ratios
     merged["is_cold_start_dev"] = is_cold_start_dev
 
     # Assign sprint backlog commitment load
@@ -214,27 +271,31 @@ def build_empirical_dataset() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
         "task_type",
         "task_domain",
         "story_points",
+        "initial_story_points",
         "has_story_points",
+        "scope_creep",
+        "scope_creep_ratio",
         "priority_id",
         "is_blocked",
         "dependency_count",
         "issue_link_count",
+        "comment_count",
         "summary_char_length",
+        "sprint_len",
+        "sprint_devs",
+        "sprint_total_issues",
         "dev_prior_completed_tasks",
+        "dev_prior_completed_rate",
         "dev_historical_velocity_avg",
         "dev_domain_familiarity",
         "dev_sprint_task_load",
         "dev_sprint_story_point_load",
+        "dev_load_ratio",
         "is_cold_start_dev",
         "task_completed_within_sprint",
     ]
 
-    # Rename storyPoint to story_points for consistency
-    merged["story_points"] = merged["storyPoint"]
     df_clean = merged[final_cols].copy()
-
-    # Fill NaN story points with 0 for model consumption, while keeping has_story_points=0 indicator
-    df_clean["story_points"] = df_clean["story_points"].fillna(0.0)
 
     # =========================================================================
     # CHRONOLOGICAL SPLIT (Sprints 1-45 Train, Sprints 46-66 Held-Out Test)
@@ -246,13 +307,15 @@ def build_empirical_dataset() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
     df_test = df_clean[df_clean["split"] == "test"].copy().drop(columns=["split"])
 
     logger.info(
-        "Split summary: Train (Sprints <= %d) = %d rows (%.1f%% completed); Test (Sprints > %d) = %d rows (%.1f%% completed)",
+        "Split summary: Train (Sprints <= %d) = %d rows (%.1f%% completed, %d failures); Test (Sprints > %d) = %d rows (%.1f%% completed, %d failures)",
         SPLIT_SPRINT,
         len(df_train),
         df_train["task_completed_within_sprint"].mean() * 100,
+        (df_train["task_completed_within_sprint"] == 0).sum(),
         SPLIT_SPRINT,
         len(df_test),
         df_test["task_completed_within_sprint"].mean() * 100,
+        (df_test["task_completed_within_sprint"] == 0).sum(),
     )
 
     # Save to disk

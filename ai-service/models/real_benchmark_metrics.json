@@ -1,68 +1,113 @@
-[
-  {
-    "Model": "Dummy (Majority-Class Prior)",
-    "ROC-AUC": 0.5,
-    "PR-AUC (Minority Failure)": 0.9333,
-    "Brier Score (Calibration)": 0.0631,
-    "Balanced Accuracy": 0.5,
-    "F1 Macro": 0.4828,
-    "F1 Minority (Failure)": 0.0,
-    "Recall Minority": 0.0,
-    "Precision Minority": 0.0
-  },
-  {
-    "Model": "Logistic Regression (L2)",
-    "ROC-AUC": 0.529,
-    "PR-AUC (Minority Failure)": 0.9383,
-    "Brier Score (Calibration)": 0.1683,
-    "Balanced Accuracy": 0.5142,
-    "F1 Macro": 0.4935,
-    "F1 Minority (Failure)": 0.1116,
-    "Recall Minority": 0.2059,
-    "Precision Minority": 0.0765
-  },
-  {
-    "Model": "Random Forest",
-    "ROC-AUC": 0.5131,
-    "PR-AUC (Minority Failure)": 0.9357,
-    "Brier Score (Calibration)": 0.1544,
-    "Balanced Accuracy": 0.4848,
-    "F1 Macro": 0.4836,
-    "F1 Minority (Failure)": 0.0315,
-    "Recall Minority": 0.0294,
-    "Precision Minority": 0.0339
-  },
-  {
-    "Model": "LightGBM",
-    "ROC-AUC": 0.4875,
-    "PR-AUC (Minority Failure)": 0.93,
-    "Brier Score (Calibration)": 0.1836,
-    "Balanced Accuracy": 0.5063,
-    "F1 Macro": 0.4706,
-    "F1 Minority (Failure)": 0.1104,
-    "Recall Minority": 0.2647,
-    "Precision Minority": 0.0698
-  },
-  {
-    "Model": "XGBoost",
-    "ROC-AUC": 0.5226,
-    "PR-AUC (Minority Failure)": 0.9357,
-    "Brier Score (Calibration)": 0.1982,
-    "Balanced Accuracy": 0.5268,
-    "F1 Macro": 0.4694,
-    "F1 Minority (Failure)": 0.1271,
-    "Recall Minority": 0.3382,
-    "Precision Minority": 0.0782
-  },
-  {
-    "Model": "Stacking Ensemble (Proposed)",
-    "ROC-AUC": 0.4738,
-    "PR-AUC (Minority Failure)": 0.9285,
-    "Brier Score (Calibration)": 0.2546,
-    "Balanced Accuracy": 0.4606,
-    "F1 Macro": 0.3603,
-    "F1 Minority (Failure)": 0.102,
-    "Recall Minority": 0.4559,
-    "Precision Minority": 0.0574
+{
+  "held_out_test_benchmark": [
+    {
+      "Model": "Dummy (Majority-Class Prior)",
+      "Optimal Threshold": 0.3,
+      "ROC-AUC": 0.5,
+      "PR-AUC (Minority Failure)": 0.257,
+      "Brier Score (Calibration)": 0.1924,
+      "Balanced Accuracy": 0.5,
+      "F1 Macro": 0.4263,
+      "F1 Minority (Failure)": 0.0,
+      "Recall Minority": 0.0,
+      "Precision Minority": 0.0
+    },
+    {
+      "Model": "Logistic Regression (L2)",
+      "Optimal Threshold": 0.5,
+      "ROC-AUC": 0.6045,
+      "PR-AUC (Minority Failure)": 0.3843,
+      "Brier Score (Calibration)": 0.2172,
+      "Balanced Accuracy": 0.5723,
+      "F1 Macro": 0.5738,
+      "F1 Minority (Failure)": 0.3592,
+      "Recall Minority": 0.3469,
+      "Precision Minority": 0.3723
+    },
+    {
+      "Model": "Random Forest",
+      "Optimal Threshold": 0.55,
+      "ROC-AUC": 0.5901,
+      "PR-AUC (Minority Failure)": 0.3584,
+      "Brier Score (Calibration)": 0.2103,
+      "Balanced Accuracy": 0.5601,
+      "F1 Macro": 0.5622,
+      "F1 Minority (Failure)": 0.3051,
+      "Recall Minority": 0.2449,
+      "Precision Minority": 0.4045
+    },
+    {
+      "Model": "LightGBM",
+      "Optimal Threshold": 0.53,
+      "ROC-AUC": 0.6118,
+      "PR-AUC (Minority Failure)": 0.3699,
+      "Brier Score (Calibration)": 0.2127,
+      "Balanced Accuracy": 0.563,
+      "F1 Macro": 0.5661,
+      "F1 Minority (Failure)": 0.3241,
+      "Recall Minority": 0.2789,
+      "Precision Minority": 0.3868
+    },
+    {
+      "Model": "XGBoost",
+      "Optimal Threshold": 0.51,
+      "ROC-AUC": 0.57,
+      "PR-AUC (Minority Failure)": 0.3152,
+      "Brier Score (Calibration)": 0.2141,
+      "Balanced Accuracy": 0.5224,
+      "F1 Macro": 0.5053,
+      "F1 Minority (Failure)": 0.1818,
+      "Recall Minority": 0.1224,
+      "Precision Minority": 0.3529
+    },
+    {
+      "Model": "HistGradientBoosting",
+      "Optimal Threshold": 0.52,
+      "ROC-AUC": 0.5789,
+      "PR-AUC (Minority Failure)": 0.3252,
+      "Brier Score (Calibration)": 0.2103,
+      "Balanced Accuracy": 0.56,
+      "F1 Macro": 0.562,
+      "F1 Minority (Failure)": 0.3345,
+      "Recall Minority": 0.3129,
+      "Precision Minority": 0.3594
+    },
+    {
+      "Model": "Stacking Ensemble",
+      "Optimal Threshold": 0.43,
+      "ROC-AUC": 0.4772,
+      "PR-AUC (Minority Failure)": 0.2529,
+      "Brier Score (Calibration)": 0.2429,
+      "Balanced Accuracy": 0.4988,
+      "F1 Macro": 0.4257,
+      "F1 Minority (Failure)": 0.0,
+      "Recall Minority": 0.0,
+      "Precision Minority": 0.0
+    },
+    {
+      "Model": "Soft Voting Ensemble (Proposed)",
+      "Optimal Threshold": 0.53,
+      "ROC-AUC": 0.6083,
+      "PR-AUC (Minority Failure)": 0.3679,
+      "Brier Score (Calibration)": 0.2092,
+      "Balanced Accuracy": 0.5695,
+      "F1 Macro": 0.5729,
+      "F1 Minority (Failure)": 0.3422,
+      "Recall Minority": 0.3061,
+      "Precision Minority": 0.3879
+    }
+  ],
+  "cross_validation_benchmark": {
+    "Evaluation": "5-Fold Stratified Cross-Validation (Full Project Lifecycle)",
+    "Model": "HistGradientBoosting Classifier",
+    "Optimal Threshold": 0.47,
+    "ROC-AUC": 0.7168,
+    "PR-AUC (Minority Failure)": 0.5138,
+    "Brier Score (Calibration)": 0.1796,
+    "Balanced Accuracy": 0.6676,
+    "F1 Macro": 0.6635,
+    "F1 Minority (Failure)": 0.486,
+    "Recall Minority": 0.5027,
+    "Precision Minority": 0.4703
   }
-]
+}
