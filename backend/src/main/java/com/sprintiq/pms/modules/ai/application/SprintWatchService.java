@@ -59,11 +59,22 @@ public class SprintWatchService {
 
     // Deliberately small. These are nudges accumulated across many tasks, not verdicts:
     // one quiet task should tint a sprint, and a dozen should colour it.
-    private static final BigDecimal DELTA_TASK_SILENT = BigDecimal.valueOf(3);
     private static final BigDecimal DELTA_COMMENT_UNANSWERED = BigDecimal.valueOf(4);
-    private static final BigDecimal DELTA_NOT_STARTED_COLLAB = BigDecimal.valueOf(2);
-    private static final BigDecimal DELTA_NOT_STARTED_BUDGET = BigDecimal.valueOf(3);
     private static final BigDecimal DELTA_OVERDUE_BUDGET = BigDecimal.valueOf(5);
+
+    /*
+     * The two half-time rules are weighted by the task, through the same
+     * {@link TaskRiskWeight} the board's blocked charge uses: a day's work nobody has
+     * started is not the same news as half an hour's. Each base is what a one-day task
+     * pays; anything up to half a day weighs 0.5, which keeps a small task at the flat
+     * charge these rules used to make (3, 3 and 2).
+     */
+    private static final BigDecimal SILENT_BASE = BigDecimal.valueOf(6);
+    private static final BigDecimal SILENT_CAP = BigDecimal.valueOf(10);
+    private static final BigDecimal NOT_STARTED_BUDGET_BASE = BigDecimal.valueOf(6);
+    private static final BigDecimal NOT_STARTED_BUDGET_CAP = BigDecimal.valueOf(10);
+    private static final BigDecimal NOT_STARTED_COLLAB_BASE = BigDecimal.valueOf(4);
+    private static final BigDecimal NOT_STARTED_COLLAB_CAP = BigDecimal.valueOf(6);
 
     /**
      * A story's overrun, in risk points: one per half hour past its budget.
@@ -89,11 +100,13 @@ public class SprintWatchService {
     private final AppProperties properties;
 
     /**
-     * Every fifteen minutes: frequent enough that the number tracks the board, rare
-     * enough that it is not a load generator. Each rule is idempotent, so running more
-     * often changes nothing except how quickly a penalty appears or clears.
+     * Every minute. The half-time rules have to land close to the half-time mark itself:
+     * a thirty-minute task is due its charge fifteen minutes after it was added, and the
+     * fifteen-minute sweep this used to be could notice that as late as the deadline. Each
+     * rule is idempotent and an unchanged reading writes nothing, so running more often
+     * changes only how quickly a penalty appears or clears.
      */
-    @Scheduled(fixedDelayString = "${app.ai.watch-interval-ms:900000}",
+    @Scheduled(fixedDelayString = "${app.ai.watch-interval-ms:60000}",
                initialDelayString = "${app.ai.watch-initial-delay-ms:60000}")
     public void sweep() {
         List<SprintFeatureSource.ActiveSprint> active;
@@ -300,8 +313,9 @@ public class SprintWatchService {
         if (now.isBefore(halfTime)) {
             return;
         }
-        adjustments.recordOnce(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
-                DELTA_TASK_SILENT,
+        // Revised rather than recorded once, so re-estimating the task re-prices it.
+        adjustments.revise(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
+                TaskRiskWeight.charge(task.estimateMinutes(), SILENT_BASE, SILENT_CAP),
                 "No discussion on \"" + task.title() + "\" past half its estimate");
     }
 
@@ -354,11 +368,13 @@ public class SprintWatchService {
         if (now.isBefore(halfTime)) {
             return;
         }
-        adjustments.recordOnce(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
-                DELTA_NOT_STARTED_COLLAB,
+        adjustments.revise(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
+                TaskRiskWeight.charge(task.estimateMinutes(),
+                        NOT_STARTED_COLLAB_BASE, NOT_STARTED_COLLAB_CAP),
                 "\"" + task.title() + "\" not started at half its estimate");
-        adjustments.recordOnce(sprintId, RiskType.OVER_BUDGET, budgetKey,
-                DELTA_NOT_STARTED_BUDGET,
+        adjustments.revise(sprintId, RiskType.OVER_BUDGET, budgetKey,
+                TaskRiskWeight.charge(task.estimateMinutes(),
+                        NOT_STARTED_BUDGET_BASE, NOT_STARTED_BUDGET_CAP),
                 "\"" + task.title() + "\" not started at half its estimate");
     }
 

@@ -87,9 +87,17 @@ export function useMoveTask(projectId: string) {
       );
     },
 
-    onSettled: () => {
+    onSettled: (task) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.board(projectId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects.overview(projectId) });
+      // A move into or out of Blocked charges the sprint's over-budget risk, so the
+      // gauges and the ledger behind them have to hear about it — otherwise the risk
+      // page shows the pre-drag figure until its cache happens to go stale.
+      if (task?.sprintId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(task.sprintId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskAdjustments(task.sprintId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskTrend(task.sprintId) });
+      }
     },
   });
 }

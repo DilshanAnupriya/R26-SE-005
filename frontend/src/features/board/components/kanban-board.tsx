@@ -51,8 +51,8 @@ export function KanbanBoard({
   /** Sends a finished card back for rework. Only offered on finished cards. */
   onReopen?: (task: Task) => void;
   /**
-   * Opens a card's detail dialog. Every open counts as a reopen, so the handler is what
-   * decides whether it does — the board only reports that a card was clicked.
+   * Opens a card's detail dialog. Only shows it — a reopen is a card taken back out of
+   * Done, which the move itself reports.
    */
   onOpenTask?: (task: Task) => void;
   /**
@@ -316,7 +316,7 @@ function TaskCard({
               type="button"
               onClick={() => onOpenTask?.(task)}
               className="w-full rounded text-left text-sm font-medium leading-snug hover:underline hover:text-primary transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              title={`Open ${task.itemKey}. Counts as a reopen.`}
+              title={`Open ${task.itemKey}`}
             >
               {task.title}
             </button>

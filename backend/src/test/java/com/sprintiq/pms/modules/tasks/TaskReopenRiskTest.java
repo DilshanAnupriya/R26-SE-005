@@ -67,6 +67,12 @@ class TaskReopenRiskTest {
         }
 
         @Override
+        public void reviseStanding(UUID sprintId, RiskType riskType, String sourceKey,
+                                   BigDecimal delta, String reason) {
+            revise(sprintId, riskType, sourceKey, delta, reason);
+        }
+
+        @Override
         public void record(UUID sprintId, RiskType riskType, BigDecimal delta, String reason) {
             entries.add(new Entry(sprintId, riskType, null, delta));
         }
@@ -195,6 +201,154 @@ class TaskReopenRiskTest {
     }
 
     /**
+     * The other direction: a task moved to In Progress or Done while its estimate still
+     * has time on it lowers over-budget, by its size.
+     */
+    @Nested
+    @DisplayName("moving a card on time")
+    class OnTime {
+
+        private Task fresh(int estimateMinutes, long elapsedSeconds) {
+            Task task = Task.builder()
+                    .sprintId(SPRINT)
+                    .itemKey("SIQ-4")
+                    .status(TaskStatus.TODO)
+                    .estimateMinutes(estimateMinutes)
+                    .elapsedSeconds(elapsedSeconds)
+                    .build();
+            task.setId(UUID.randomUUID());
+            return task;
+        }
+
+        private BigDecimal creditFor(Task task, String keyPrefix) {
+            return ledger.entries.stream()
+                    .filter(entry -> (keyPrefix + task.getId()).equals(entry.sourceKey()))
+                    .map(Entry::delta)
+                    .findFirst()
+                    .orElse(BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("starting within the estimate lowers over-budget by the task's weight")
+        void startedOnTime() {
+            Task small = fresh(60, 600);   // ten minutes into an hour
+            small.transitionTo(TaskStatus.IN_PROGRESS);
+            reporter.statusChanged(small, TaskStatus.TODO);
+
+            Task day = fresh(480, 600);
+            day.transitionTo(TaskStatus.IN_PROGRESS);
+            reporter.statusChanged(day, TaskStatus.TODO);
+
+            assertThat(creditFor(small, "TASK_STARTED_ON_TIME:")).isEqualByComparingTo(BigDecimal.valueOf(-2));
+            assertThat(creditFor(day, "TASK_STARTED_ON_TIME:")).isEqualByComparingTo(BigDecimal.valueOf(-4));
+        }
+
+        @Test
+        @DisplayName("finishing within the estimate lowers it by the task's weight")
+        void finishedOnTime() {
+            Task small = fresh(60, 600);
+            small.transitionTo(TaskStatus.DONE);
+            reporter.statusChanged(small, TaskStatus.IN_PROGRESS);
+
+            assertThat(creditFor(small, "TASK_ON_TIME:")).isEqualByComparingTo(BigDecimal.valueOf(-3));
+        }
+
+        @Test
+        @DisplayName("past the estimate on the board's clock, neither move earns a credit")
+        void lateEarnsNothing() {
+            Task late = fresh(60, 2 * 3600);   // two hours into a one-hour task
+            late.transitionTo(TaskStatus.IN_PROGRESS);
+            reporter.statusChanged(late, TaskStatus.TODO);
+            late.transitionTo(TaskStatus.DONE);
+            reporter.statusChanged(late, TaskStatus.IN_PROGRESS);
+
+            assertThat(ledger.keys()).noneMatch(key -> key.contains("ON_TIME"));
+        }
+
+        @Test
+        @DisplayName("going back from review to In Progress is not a fresh start")
+        void reviewBounceIsNotAStart() {
+            Task task = fresh(60, 600);
+            task.transitionTo(TaskStatus.IN_REVIEW);
+            task.transitionTo(TaskStatus.IN_PROGRESS);
+            reporter.statusChanged(task, TaskStatus.IN_REVIEW);
+
+            assertThat(creditFor(task, "TASK_STARTED_ON_TIME:")).isZero();
+        }
+
+        @Test
+        @DisplayName("an unestimated task has no estimate to be inside of")
+        void unestimatedEarnsNothing() {
+            Task task = Task.builder().sprintId(SPRINT).itemKey("SIQ-5")
+                    .status(TaskStatus.TODO).build();
+            task.setId(UUID.randomUUID());
+            task.transitionTo(TaskStatus.IN_PROGRESS);
+            reporter.statusChanged(task, TaskStatus.TODO);
+
+            assertThat(ledger.entries).isEmpty();
+        }
+    }
+
+    /**
+     * The rule as the team states it: a task moved to Done is finished, and the same task
+     * moved anywhere else afterwards is a reopen that costs over-budget by its size.
+     */
+    @Nested
+    @DisplayName("moving a finished card out of Done")
+    class OutOfDone {
+
+        private BigDecimal reworkAfterMovingTo(TaskStatus target, int estimateMinutes) {
+            Task task = task(0, estimateMinutes);
+            task.transitionTo(TaskStatus.DONE);
+            reporter.statusChanged(task, TaskStatus.IN_REVIEW);
+
+            task.transitionTo(target);
+            reporter.statusChanged(task, TaskStatus.DONE);
+            return ledger.entries.stream()
+                    .filter(entry -> ("TASK_REOPEN_BUDGET:" + task.getId()).equals(entry.sourceKey()))
+                    .map(Entry::delta)
+                    .findFirst()
+                    .orElse(BigDecimal.ZERO);
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest
+        @org.junit.jupiter.params.provider.EnumSource(value = TaskStatus.class,
+                names = {"TODO", "IN_PROGRESS", "IN_REVIEW", "BLOCKED"})
+        @DisplayName("to any open column is a reopen charged to over-budget")
+        void everyOpenColumnIsAReopen(TaskStatus target) {
+            // A one-hour task weighs 0.5, so its first reopen is half the six-point base.
+            assertThat(reworkAfterMovingTo(target, 60)).isEqualByComparingTo(BigDecimal.valueOf(3));
+        }
+
+        @Test
+        @DisplayName("a bigger task costs more")
+        void weightedBySize() {
+            assertThat(reworkAfterMovingTo(TaskStatus.TODO, 480))
+                    .isEqualByComparingTo(BigDecimal.valueOf(6));
+        }
+
+        @Test
+        @DisplayName("moving between open columns is not a reopen")
+        void ordinaryMovesAreFree() {
+            Task task = task(0, 60);
+            task.transitionTo(TaskStatus.IN_PROGRESS);
+            reporter.statusChanged(task, TaskStatus.IN_REVIEW);
+
+            assertThat(ledger.keys()).noneMatch(key -> key.startsWith("TASK_REOPEN_BUDGET:"));
+        }
+
+        @Test
+        @DisplayName("a story card taken out of Done is charged the same way")
+        void storyCards() {
+            UUID story = UUID.randomUUID();
+            reporter.storyReopened(SPRINT, story, "PAY-5", 60, 1);
+
+            assertThat(ledger.keyFor(RiskType.OVER_BUDGET)).isEqualTo("TASK_REOPEN_BUDGET:" + story);
+            assertThat(ledger.charged(RiskType.OVER_BUDGET)).isEqualByComparingTo(BigDecimal.valueOf(3));
+        }
+    }
+
+    /**
      * The bug this pins: the credit for finishing inside the estimate used to be appended
      * on every completion, so a card cycling Done → review → Done banked -3 a lap. That
      * exactly cancelled the rework it was accruing, and the over-budget score sat still
@@ -233,7 +387,8 @@ class TaskReopenRiskTest {
             BigDecimal afterSecond = ledger.charged(RiskType.OVER_BUDGET);
 
             // Finishing inside the estimate earns the credit exactly once...
-            assertThat(onTime).isEqualByComparingTo(BigDecimal.valueOf(-3));
+            // A one-day task, so the full six-point credit.
+            assertThat(onTime).isEqualByComparingTo(BigDecimal.valueOf(-6));
             // ...and every lap after it costs strictly more than the one before.
             assertThat(afterFirst).isGreaterThan(onTime);
             assertThat(afterSecond).isGreaterThan(afterFirst);

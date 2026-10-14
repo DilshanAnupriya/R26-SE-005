@@ -108,6 +108,9 @@ export function useSprintRisk(sprintId: string | undefined) {
     // Reads the stored assessment. Producing a fresh one is an explicit action.
     queryFn: () => aiApi.latestRisk(api, sprintId!),
     enabled: status === "authenticated" && Boolean(sprintId),
+    // The sprint watch moves these on its own, every minute, as tasks cross half their
+    // estimate. Polling while the view is open is what makes that visible without a reload.
+    refetchInterval: 60_000,
   });
 }
 
@@ -148,6 +151,7 @@ export function useRiskAdjustments(sprintId: string | undefined) {
     queryKey: [...queryKeys.ai.risk(sprintId ?? ""), "adjustments"],
     queryFn: () => aiApi.riskAdjustments(api, sprintId!),
     enabled: status === "authenticated" && Boolean(sprintId),
+    refetchInterval: 60_000,
   });
 }
 
