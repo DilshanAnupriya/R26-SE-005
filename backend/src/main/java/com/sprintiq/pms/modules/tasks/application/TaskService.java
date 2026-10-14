@@ -367,6 +367,11 @@ public class TaskService {
         Task task = require(taskId);
         CommentThreadReader.ThreadStats thread =
                 threadStatsFor(List.of(taskId)).get(taskId);
+        // Every comment, reply and deletion on the task lands here, so this is where the
+        // discussion credit is re-read from the thread — added or withdrawn to match it.
+        riskReporter.discussionChanged(task,
+                thread == null ? 0 : thread.commentCount(),
+                thread == null ? 0 : thread.replyCount());
         if (thread == null || thread.oldestUnansweredAt() == null) {
             // Somebody answered, or the comment was deleted. Withdraw the charge — a
             // risk adjustment that can only ever go up stops describing the sprint and

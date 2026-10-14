@@ -90,6 +90,13 @@ public class TaskRiskReporter {
     private static final BigDecimal STARTED_ON_TIME_CREDIT = BigDecimal.valueOf(-4);
     private static final BigDecimal STARTED_ON_TIME_CREDIT_CAP = BigDecimal.valueOf(-8);
 
+    /** Collaboration credit per comment on a one-day task. */
+    private static final BigDecimal COMMENT_CREDIT = BigDecimal.valueOf(-2);
+    /** Per reply — more than a comment, because a reply is the thread being answered. */
+    private static final BigDecimal REPLY_CREDIT = BigDecimal.valueOf(-3);
+    /** How many comments, and separately replies, earn credit on one task. */
+    private static final long DISCUSSION_COUNTED = 3;
+
     /** An overdue task cannot cost the sprint more than this, however large its estimate. */
     private static final BigDecimal OVERDUE_CAP = BigDecimal.valueOf(15);
 
@@ -304,6 +311,44 @@ public class TaskRiskReporter {
                 "Unanswered on %s for %s".formatted(task.getItemKey(), humanise(waitedMinutes)));
     }
 
+    /**
+     * Credits collaboration for the discussion on this task: its comments, and the
+     * replies to them.
+     *
+     * <p>Talking on the task is the behaviour the collaboration score exists to reward,
+     * and a ledger that could only charge silence drifted up for a team that was talking
+     * perfectly well. A reply is worth more than a comment, because it is the thread
+     * being answered rather than only opened.</p>
+     *
+     * <p>Recomputed from the thread's counts on every change rather than appended per
+     * comment, for the same reason as the reopen charge: deleting a comment gives its
+     * credit back, and the entry describes the thread rather than the clicks. Only the
+     * first {@value #DISCUSSION_COUNTED} of each count, or a task could be talked into a
+     * negative risk with a dozen "+1"s. Weighted like every other per-task entry.</p>
+     */
+    public void discussionChanged(Task task, long comments, long replies) {
+        discussionCredit(task, commentedKey(task), comments, COMMENT_CREDIT, "comment", "comments");
+        discussionCredit(task, repliedKey(task), replies, REPLY_CREDIT, "reply", "replies");
+        if (comments + replies > 0) {
+            // The sweep's "nobody has discussed this" charge, withdrawn now rather than at
+            // its next pass, so the comment visibly ends the silence it was charged for.
+            adjustments.clear(task.getSprintId(), "TASK_SILENT:" + task.getId());
+        }
+    }
+
+    private void discussionCredit(Task task, String key, long count, BigDecimal perItem,
+                                  String one, String many) {
+        if (count <= 0) {
+            adjustments.clear(task.getSprintId(), key);
+            return;
+        }
+        long counted = Math.min(count, DISCUSSION_COUNTED);
+        BigDecimal credit = weight(task).multiply(perItem).multiply(BigDecimal.valueOf(counted))
+                .setScale(2, RoundingMode.HALF_UP);
+        adjustments.revise(task.getSprintId(), RiskType.COMMUNICATION_COLLABORATION, key, credit,
+                "%d %s on %s".formatted(count, count == 1 ? one : many, task.getItemKey()));
+    }
+
     /** The question was answered, or the comment went away. Withdraw the charge. */
     public void commentAnswered(Task task) {
         adjustments.clear(task.getSprintId(), unansweredKey(task));
@@ -337,6 +382,8 @@ public class TaskRiskReporter {
         adjustments.clear(task.getSprintId(), reopenBudgetKey(task.getId()));
         adjustments.clear(task.getSprintId(), onTimeKey(task));
         adjustments.clear(task.getSprintId(), startedOnTimeKey(task));
+        adjustments.clear(task.getSprintId(), commentedKey(task));
+        adjustments.clear(task.getSprintId(), repliedKey(task));
         adjustments.clear(task.getSprintId(), unansweredKey(task));
         adjustments.clear(task.getSprintId(), blockedKey(task.getId()));
     }
@@ -373,6 +420,14 @@ public class TaskRiskReporter {
     /** A credit, scaled by the task's size and held above {@code floor}. */
     private static BigDecimal credit(Task task, BigDecimal base, BigDecimal floor) {
         return weight(task).multiply(base).max(floor).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String commentedKey(Task task) {
+        return "TASK_COMMENTED:" + task.getId();
+    }
+
+    private static String repliedKey(Task task) {
+        return "TASK_REPLIED:" + task.getId();
     }
 
     private static String startedOnTimeKey(Task task) {
