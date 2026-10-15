@@ -212,3 +212,75 @@ class TestHonesty:
             assert driver["label"]
             assert driver["detail"] not in (None, "")
             assert driver["direction"] in ("INCREASE", "DECREASE")
+
+
+def risky_sprint(**overrides):
+    return healthy_sprint(**{**dict(
+        team_size=5, base_velocity=18, complexity=3.2, hours_per_point=7.5,
+        sprint_capacity_hours=160, planned_hours=260, committed_story_points=34,
+        velocity_rolling_prev=16, velocity_trend=-1.5, prev_carry_over_points=6,
+        prev_carry_over_rate=0.3, prev_rework_score=9, prev_blocked_tasks=6,
+        prev_reopened_tasks=5, fatigue=0.7, scope_added=6), **overrides})
+
+
+class TestShapFixes:
+    """Every reading that raised over-budget risk carries a fix measured from SHAP.
+
+    The fix is a measurement, not text: a target value the model itself was re-run at,
+    and the probability it returned. These pin that it stays one.
+    """
+
+    def test_every_raising_reading_has_a_fix(self, over_budget):
+        drivers = over_budget.predict(risky_sprint())["drivers"]
+        raising = [d for d in drivers if d["direction"] == "INCREASE"]
+        assert raising
+        for driver in raising:
+            assert driver["fix"]["method"] == "shap"
+            assert driver["fix"]["summary"].startswith("SHAP:")
+
+    def test_lowering_readings_carry_no_fix(self, over_budget):
+        for driver in over_budget.predict(risky_sprint())["drivers"]:
+            if driver["direction"] == "DECREASE":
+                assert "fix" not in driver
+
+    def test_a_direct_fix_is_one_the_model_confirms(self, over_budget):
+        """Re-scoring the sprint at the fix's target gives the probability it quotes,
+        and the reading's own SHAP value there is no longer positive."""
+        drivers = over_budget.predict(risky_sprint())["drivers"]
+        fix = next(d["fix"] for d in drivers if d["feature"] == "complexity")
+        assert fix["kind"] == "direct" and fix["complete"]
+        assert fix["shap_after"] <= 0
+
+        moved = over_budget.predict(risky_sprint(complexity=fix["move"]["to"]))
+        assert moved["probability"] == pytest.approx(fix["probability_after"], abs=1e-3)
+        assert fix["probability_after"] < fix["probability_now"]
+
+    def test_history_is_offset_rather_than_moved(self, over_budget):
+        """Last sprint's rework cannot be undone, so its fix moves something that can
+        be, and takes at least the rework's own SHAP value off the log-odds."""
+        drivers = over_budget.predict(risky_sprint())["drivers"]
+        fix = next(d["fix"] for d in drivers if d["feature"] == "prev_rework_score")
+        assert fix["kind"] == "offset"
+        assert fix["move"]["feature"] != "prev_rework_score"
+        if fix["complete"]:
+            assert fix["removed"] >= fix["shap_now"]
+
+    def test_planned_hours_is_fixed_through_the_commitment(self, over_budget):
+        drivers = over_budget.predict(risky_sprint())["drivers"]
+        fix = next((d["fix"] for d in drivers if d["feature"] == "planned_hours"), None)
+        if fix is not None and fix["kind"] == "direct":
+            assert fix["move"]["feature"] == "committed_story_points"
+
+    def test_an_unsupplied_reading_is_not_given_a_target(self, over_budget):
+        """A reading filled with the training median is not this sprint's figure, and
+        a fix that told a team to move a number nobody recorded would be invented."""
+        drivers = over_budget.predict({"committed_story_points": 30, "complexity": 3})["drivers"]
+        for driver in drivers:
+            fix = driver.get("fix")
+            if fix and driver["feature"] not in ("committed_story_points", "complexity"):
+                assert fix["kind"] == "unsupplied"
+                assert fix["move"] is None
+
+    def test_the_requirement_change_model_is_untouched(self, requirement_change):
+        for driver in requirement_change.predict(well_specified())["drivers"]:
+            assert "fix" not in driver

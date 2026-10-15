@@ -214,3 +214,179 @@ describe("Why each risk is on this sprint · logged changes", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The over-budget tab: every reason the score moved, and a fix under each one raising it.
+ *
+ * <p>Two kinds of reason reach this score — the model's readings and the board's events —
+ * and before these the tab showed only the first, with "no step here" under most of
+ * them. These pin that both kinds are listed, split by direction, and that a reason
+ * raising the score never arrives without something to do about it.</p>
+ */
+describe("Why each risk is on this sprint · over budget", () => {
+  const SCORED_AT = "2026-08-30T09:00:00Z";
+
+  function overBudget(overrides: Partial<RiskAssessment> = {}): RiskAssessment {
+    return assessment({
+      riskType: "OVER_BUDGET",
+      riskScore: 0.5,
+      severity: "MEDIUM",
+      adjustmentDelta: 0,
+      adjustedScore: 0.5,
+      adjustedSeverity: "MEDIUM",
+      createdAt: SCORED_AT,
+      drivers: [
+        { feature: "fatigue", label: "team fatigue", detail: "0.7", contribution: 0.4, direction: "INCREASE" },
+        { feature: "scope_added", label: "scope added mid-sprint", detail: "6", contribution: 0.2, direction: "INCREASE" },
+        { feature: "base_velocity", label: "baseline velocity", detail: "40", contribution: -0.3, direction: "DECREASE" },
+      ],
+      ...overrides,
+    } as Partial<RiskAssessment>);
+  }
+
+  function openOverBudget(adjustments: RiskAdjustment[], overrides: Partial<RiskAssessment> = {}) {
+    render(
+      <RiskExplanations
+        risk={{ ...RISK, overBudget: overBudget(overrides), requirementChange: null } as unknown as SprintRisk}
+        adjustments={adjustments}
+        steps={[]}
+      />,
+    );
+    return screen.getByRole("tabpanel");
+  }
+
+  function boardEntry(overrides: Partial<RiskAdjustment>): RiskAdjustment {
+    return adjustment({
+      riskType: "OVER_BUDGET",
+      createdAt: "2026-08-30T10:00:00Z",
+      survivesScoring: false,
+      ...overrides,
+    });
+  }
+
+  it("splits the readings into what raised the risk and what lowered it", () => {
+    const panel = openOverBudget([]);
+
+    expect(within(panel).getByText("Raising the risk")).toBeInTheDocument();
+    expect(within(panel).getByText("Lowering the risk")).toBeInTheDocument();
+    expect(within(panel).getByText("baseline velocity")).toBeInTheDocument();
+  });
+
+  it("shows the SHAP fix the model measured under a reading that raised it", () => {
+    const panel = openOverBudget([], {
+      drivers: [
+        {
+          feature: "complexity",
+          label: "estimated complexity",
+          detail: "3.2",
+          contribution: 1.99,
+          direction: "INCREASE",
+          fix: {
+            method: "shap",
+            kind: "direct",
+            complete: true,
+            summary: "SHAP: estimated complexity adds +1.99. To fix it, lower estimated complexity from 3.2 to 2.24.",
+            shap_now: 1.99,
+            shap_after: -0.02,
+            probability_now: 0.959,
+            probability_after: 0.66,
+            move: { feature: "complexity", label: "estimated complexity", from: 3.2, to: 2.24 },
+          },
+        },
+      ],
+    } as Partial<RiskAssessment>);
+
+    expect(within(panel).getByText("Fix from SHAP")).toBeInTheDocument();
+    expect(within(panel).getByText(/estimated complexity: 3.2 → 2.24/)).toBeInTheDocument();
+    expect(within(panel).getByText(/96% → 66%/)).toBeInTheDocument();
+    expect(within(panel).getByText(/lower estimated complexity from 3.2 to 2.24/)).toBeInTheDocument();
+    // Measured one change at a time, so it is shown rather than credited with a tick.
+    expect(within(panel).queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("labels a fix for history as an offset", () => {
+    const panel = openOverBudget([], {
+      drivers: [
+        {
+          feature: "prev_rework_score",
+          label: "rework last sprint",
+          detail: "9",
+          contribution: 0.91,
+          direction: "INCREASE",
+          fix: {
+            method: "shap",
+            kind: "offset",
+            complete: true,
+            summary: "SHAP: rework last sprint adds +0.91 and cannot be changed this sprint.",
+            probability_now: 0.959,
+            probability_after: 0.85,
+            move: { feature: "complexity", label: "estimated complexity", from: 3.2, to: 2.56 },
+          },
+        },
+      ],
+    } as Partial<RiskAssessment>);
+
+    expect(within(panel).getByText("Offset from SHAP")).toBeInTheDocument();
+    expect(within(panel).getByText(/cannot be changed this sprint/)).toBeInTheDocument();
+  });
+
+  it("says plainly when a raising reading has no SHAP fix, instead of writing advice", () => {
+    const panel = openOverBudget([]);
+
+    // The default drivers carry no fix — what a model without SHAP values sends.
+    expect(within(panel).getAllByText(/No SHAP fix for this reading/)).toHaveLength(2);
+    expect(within(panel).queryByText(/No step here/)).not.toBeInTheDocument();
+  });
+
+  it("lists board charges with how to clear them, and credits with why they count", () => {
+    const panel = openOverBudget([
+      boardEntry({ delta: 8, reason: "Task blocked: PAY-14", sourceKey: "TASK_BLOCKED:a", code: "TASK_BLOCKED" }),
+      boardEntry({ delta: -6, reason: "Completed within estimate: PAY-9", sourceKey: "TASK_ON_TIME:b", code: "TASK_ON_TIME" }),
+    ]);
+
+    expect(within(panel).getByText("What the board has done to this score")).toBeInTheDocument();
+    expect(within(panel).getByText("Task blocked: PAY-14")).toBeInTheDocument();
+    expect(within(panel).getByText(/points come off as soon as the card leaves Blocked/)).toBeInTheDocument();
+    expect(within(panel).getByText("Completed within estimate: PAY-9")).toBeInTheDocument();
+    expect(within(panel).getByText(/Finished inside its estimate/)).toBeInTheDocument();
+  });
+
+  it("gives an older unkeyed charge the same fix as a keyed one", () => {
+    // Rows written before blocks were keyed still count, and the reason is all they carry.
+    const panel = openOverBudget([
+      boardEntry({ delta: 8, reason: "Task blocked: PAY-18", sourceKey: null, code: null }),
+    ]);
+
+    expect(within(panel).getByText(/points come off as soon as the card leaves Blocked/)).toBeInTheDocument();
+  });
+
+  it("leaves out board entries the current scoring already absorbed", () => {
+    const panel = openOverBudget([
+      boardEntry({
+        delta: 8,
+        reason: "Task blocked: OLD-1",
+        sourceKey: "TASK_BLOCKED:c",
+        code: "TASK_BLOCKED",
+        createdAt: "2026-08-29T10:00:00Z",
+      }),
+    ]);
+
+    expect(within(panel).queryByText("Task blocked: OLD-1")).not.toBeInTheDocument();
+    expect(within(panel).getByText(/No board activity is moving this score/)).toBeInTheDocument();
+  });
+
+  it("keeps entries that survive scoring, however old", () => {
+    const panel = openOverBudget([
+      boardEntry({
+        delta: 8,
+        reason: "Task blocked: STILL-2",
+        sourceKey: "TASK_BLOCKED:d",
+        code: "TASK_BLOCKED",
+        createdAt: "2026-08-29T10:00:00Z",
+        survivesScoring: true,
+      }),
+    ]);
+
+    expect(within(panel).getByText("Task blocked: STILL-2")).toBeInTheDocument();
+  });
+});
