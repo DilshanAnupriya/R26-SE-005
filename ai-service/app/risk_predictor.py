@@ -22,6 +22,7 @@ import pandas as pd
 
 from .risk_features import (OVERBUDGET_MEDIANS, REQUIREMENT_CHANGE_MEDIANS,
                             build_overbudget_row, build_requirement_change_row)
+from .risk_fixes import shap_fixes
 
 log = logging.getLogger(__name__)
 
@@ -86,11 +87,17 @@ class RiskPredictor:
         self.class_names: list[str] = list(bundle["class_names"])
         self.metadata: dict[str, Any] = bundle.get("metadata", {})
 
+        # How many readings the driver list may name. Over-budget sends every reading
+        # that moved the score: its tab answers "why did this go up or down" in full,
+        # with a fix under each reading that raised it, and a top five left a sprint's
+        # other reasons unexplained. The 0.01 floor in _drivers still drops the noise.
+        self.driver_limit = 5
         if kind == "over_budget":
             self._build: Callable = build_overbudget_row
             self.labels = OVERBUDGET_LABELS
             self.medians = OVERBUDGET_MEDIANS
             self.outcome = "going over budget"
+            self.driver_limit = len(OVERBUDGET_LABELS)
         else:
             self._build = build_requirement_change_row
             self.labels = REQUIREMENT_CHANGE_LABELS
@@ -178,7 +185,20 @@ class RiskPredictor:
         }
         probability = float(self.model_binary.predict_proba(frame)[0, 1])
 
-        drivers = self._drivers(frame, row)
+        drivers = self._drivers(frame, row, limit=self.driver_limit)
+        if self.kind == "over_budget" and drivers:
+            # Each raising reading gets the fix its own SHAP value points to. Attached to
+            # the driver it answers, so the reason and the remedy cannot drift apart.
+            try:
+                fixes = shap_fixes(self.model_binary, self.features, self.cat_features,
+                                   self.labels, row, drivers,
+                                   provenance.get("defaulted_to_training_median", []))
+            except Exception as error:  # noqa: BLE001 — a missing fix never fails a prediction
+                log.warning("Could not compute SHAP fixes: %s", error)
+                fixes = {}
+            for driver in drivers:
+                if driver["feature"] in fixes:
+                    driver["fix"] = fixes[driver["feature"]]
         provenance["model_test_auc"] = self.metadata.get("test_auc_binary")
         provenance["model_cv_auc"] = self.metadata.get("cv_mean_auc")
 
@@ -225,10 +245,12 @@ class RiskPredictor:
         if drivers:
             up = [d for d in drivers if d["direction"] == "INCREASE"][:2]
             down = [d for d in drivers if d["direction"] == "DECREASE"][:2]
+            # The readable label, not the trained column name: this sentence is shown
+            # to a planner as-is, and "prev_carry_over_rate" is not a reason anyone reads.
             if up:
-                sentence += "Raised by " + " and ".join(d["feature"] for d in up) + ". "
+                sentence += "Raised by " + " and ".join(d["label"] for d in up) + ". "
             if down:
-                sentence += "Lowered by " + " and ".join(d["feature"] for d in down) + ". "
+                sentence += "Lowered by " + " and ".join(d["label"] for d in down) + ". "
 
         if provenance.get("team_type_inferred"):
             sentence += (f"The team pattern '{provenance['team_type']}' was inferred from "

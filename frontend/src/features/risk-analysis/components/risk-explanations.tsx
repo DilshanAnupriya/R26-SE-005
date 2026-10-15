@@ -10,9 +10,11 @@ import type {
   RiskAssessment,
   RiskRemediationStep,
   RiskType,
+  ShapFix,
   SprintRisk,
 } from "@/lib/api/ai-schemas";
 import { cn } from "@/lib/utils";
+import { boardEventsFor, type BoardEvent } from "../over-budget-guidance";
 import { RISK_MODELS, RISK_TYPE_FOR_KEY, type RiskModelKey } from "../risk-models";
 import { asPercent, SEVERITY_COLOUR, SeverityBadge, type RiskSeverityLabel } from "./risk-gauge";
 
@@ -201,6 +203,21 @@ export function RiskExplanations({
                   (step) => step.riskType === RISK_TYPE_FOR_KEY[model.key],
                 )}
                 changes={loggedChangesFor(adjustments ?? [], RISK_TYPE_FOR_KEY[model.key])}
+                /*
+                  Over-budget only, for now: it is the risk the board charges most
+                  directly — blocked cards, reopens, tasks past their estimate — and the
+                  one whose readings had the most reasons with no remedy beside them.
+                */
+                boardEvents={
+                  RISK_TYPE_FOR_KEY[model.key] === "OVER_BUDGET"
+                    ? boardEventsFor(
+                        adjustments ?? [],
+                        RISK_TYPE_FOR_KEY[model.key],
+                        risk?.[model.key]?.createdAt,
+                      )
+                    : undefined
+                }
+                advise={RISK_TYPE_FOR_KEY[model.key] === "OVER_BUDGET"}
                 onToggleStep={onToggleStep}
                 togglingStepKey={togglingStepKey}
                 onAbsorb={onAbsorb}
@@ -238,6 +255,8 @@ function RiskExplanation({
   assessment,
   steps,
   changes,
+  boardEvents,
+  advise,
   onToggleStep,
   togglingStepKey,
   onAbsorb,
@@ -249,6 +268,10 @@ function RiskExplanation({
   assessment?: RiskAssessment | null;
   steps: RiskRemediationStep[];
   changes: { charge: RiskAdjustment; credit?: RiskAdjustment }[];
+  /** The board events counting toward this score, where the tab itemises them itself. */
+  boardEvents?: { raised: BoardEvent[]; lowered: BoardEvent[] };
+  /** Split the readings by direction and write a fix under every one raising the score. */
+  advise?: boolean;
   onToggleStep?: StepToggle;
   togglingStepKey?: string | null;
   onAbsorb?: AbsorbToggle;
@@ -323,9 +346,14 @@ function RiskExplanation({
             {delta} points
           </span>{" "}
           of board activity since then {delta > 0 ? "raised" : "lowered"} it to{" "}
-          {asPercent(displayed)}% — itemised under &ldquo;Since the last assessment&rdquo; below.
+          {asPercent(displayed)}% —{" "}
+          {boardEvents
+            ? "itemised just below."
+            : "itemised under “Since the last assessment” below."}
         </p>
       ) : null}
+
+      {boardEvents ? <BoardEvents {...boardEvents} /> : null}
 
       {/*
         Directly under the note about the adjustment, because for this risk these entries
@@ -370,21 +398,50 @@ function RiskExplanation({
           </p>
         ) : (
           <>
-            {drivers.length > 0 ? (
-              <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line">
-                {drivers.map((driver) => (
-                  <DriverRow
-                    key={driver.feature}
-                    driver={driver}
-                    strongest={strongest}
-                    riskType={riskType}
-                    steps={steps.filter((step) => step.driverFeature === driver.feature)}
-                    onToggleStep={onToggleStep}
-                    togglingStepKey={togglingStepKey}
-                  />
-                ))}
-              </ul>
-            ) : null}
+            {/*
+              Split by direction where the tab advises, so "what pushed it up" and "what
+              is holding it down" are two lists a reader can take in separately instead
+              of one ranked list with arrows to decode. The bars stay drawn against the
+              same strongest reading, so a short bar means the same in both.
+            */}
+            {(advise
+              ? [
+                  {
+                    heading: "Raising the risk",
+                    items: drivers.filter((driver) => driver.direction === "INCREASE"),
+                  },
+                  {
+                    heading: "Lowering the risk",
+                    items: drivers.filter((driver) => driver.direction !== "INCREASE"),
+                  },
+                ]
+              : [{ heading: null, items: drivers }]
+            )
+              .filter((group) => group.items.length > 0)
+              .map((group) => (
+                <div key={group.heading ?? "all"} className="mt-2">
+                  {group.heading ? (
+                    <p className="mb-1 text-[11px] font-medium text-ink-2">
+                      {group.heading}{" "}
+                      <span className="text-ink-3 tabular-nums">({group.items.length})</span>
+                    </p>
+                  ) : null}
+                  <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+                    {group.items.map((driver) => (
+                      <DriverRow
+                        key={driver.feature}
+                        driver={driver}
+                        strongest={strongest}
+                        riskType={riskType}
+                        steps={steps.filter((step) => step.driverFeature === driver.feature)}
+                        advise={advise}
+                        onToggleStep={onToggleStep}
+                        togglingStepKey={togglingStepKey}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
 
             {unplaced.length > 0 ? (
               <div className="mt-2 overflow-hidden rounded-xl border border-line">
@@ -415,6 +472,9 @@ function RiskExplanation({
               with no step is one the model does not reward changing. Ticking takes the points
               off straight away and they stay off: each assessment re-prices the claim against
               the fresh reading, and releases it once the model reports the fall on its own.
+              {advise
+                ? " A SHAP fix is measured with only its one change made, and several can name the same change — so their effects overlap rather than add up."
+                : null}
             </p>
           </>
         )}
@@ -437,6 +497,7 @@ function DriverRow({
   strongest,
   riskType,
   steps,
+  advise,
   onToggleStep,
   togglingStepKey,
 }: {
@@ -444,6 +505,8 @@ function DriverRow({
   strongest: number;
   riskType: RiskType;
   steps: RiskRemediationStep[];
+  /** Show the model's SHAP fix under a raising reading, or say why there is none. */
+  advise?: boolean;
   onToggleStep?: StepToggle;
   togglingStepKey?: string | null;
 }) {
@@ -515,6 +578,18 @@ function DriverRow({
             />
           ))}
         </ul>
+      ) : up && advise && driver.fix ? (
+        <ShapFixNote fix={driver.fix} />
+      ) : up && advise ? (
+        /*
+          Said rather than papered over with written advice: a fix on this tab is the
+          model's own measurement, and a score from a model with no SHAP values has none.
+        */
+        <p className="mt-1.5 ml-6 text-[11px] leading-relaxed text-ink-3">
+          No SHAP fix for this reading: this score came from a model that doesn&rsquo;t
+          report SHAP values, so no fix could be measured. Re-assess with the trained
+          over-budget model running to get one.
+        </p>
       ) : up ? (
         /*
           Only for a driver arguing the sprint is in trouble. Saying "nothing to do here"
@@ -525,6 +600,149 @@ function DriverRow({
           fact about the team — or the model was asked and moving it did not lower the score.
         </p>
       ) : null}
+    </li>
+  );
+}
+
+/**
+ * The fix the model measured for one raising reading, from its own SHAP values.
+ *
+ * <p>The move and the two probabilities sit on the first line because they are the
+ * measurement — what to change, to what, and what the model said when it was re-run with
+ * that change. The sentence under it is the service's own account of how it got there:
+ * whether the reading was moved itself, or was history and had to be offset by something
+ * the team can change.</p>
+ *
+ * <p>No tick. A step's checkbox takes points off the gauge, and these were measured one
+ * at a time — two fixes can name the same move — so crediting each would count one
+ * change twice. The next assessment is what says whether it was done.</p>
+ */
+function ShapFixNote({ fix }: { fix: ShapFix }) {
+  const move = fix.move;
+  const measured = move != null && fix.probability_now != null && fix.probability_after != null;
+
+  return (
+    <div className="mt-1.5 ml-6 rounded-lg border border-line bg-surface-2 px-2.5 py-2 text-[11px] leading-relaxed">
+      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="rounded bg-blue-soft px-1.5 py-0.5 text-[10px] font-semibold text-blue">
+          {fix.kind === "offset" ? "Offset from SHAP" : "Fix from SHAP"}
+        </span>
+        {measured ? (
+          <>
+            <span className="font-medium text-ink">
+              {move.label ?? move.feature}: {formatValue(move.from)} &rarr; {formatValue(move.to)}
+            </span>
+            <span className="text-[10px] text-ink-3 tabular-nums">
+              model: {asPercent(fix.probability_now)}% &rarr; {asPercent(fix.probability_after)}%
+            </span>
+          </>
+        ) : null}
+      </span>
+      <span className={cn("mt-1 block", measured ? "text-ink-2" : "text-ink-3")}>{fix.summary}</span>
+    </div>
+  );
+}
+
+/** A reading as the model saw it: whole numbers bare, the rest to two places. */
+function formatValue(value: number | string | null | undefined): string {
+  if (value == null) return "—";
+  if (typeof value === "string") return value;
+  return Number.isInteger(value) ? `${value}` : `${Math.round(value * 100) / 100}`;
+}
+
+/**
+ * What the board has done to this score: every charge and credit still counting.
+ *
+ * <p>The model's readings describe the sprint as it was planned. These describe what has
+ * happened on the board since — a card blocked, a task past its estimate, one finished
+ * on time — and they move the gauge just as much, so leaving them to a ledger at the foot
+ * of the page meant the tab explaining over-budget left out half of its own score.</p>
+ *
+ * <p>Charges and credits are listed apart. A charge carries how to clear it, because that
+ * is what somebody reading it wants next; a credit carries why it counts in the sprint's
+ * favour, because there is nothing to fix about a task finishing on time.</p>
+ */
+function BoardEvents({ raised, lowered }: { raised: BoardEvent[]; lowered: BoardEvent[] }) {
+  const sum = (events: BoardEvent[]) =>
+    Math.round(events.reduce((total, { entry }) => total + Math.abs(entry.delta), 0));
+
+  return (
+    <section>
+      <h4 className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">
+        What the board has done to this score
+      </h4>
+
+      {raised.length === 0 && lowered.length === 0 ? (
+        <p className="mt-2 rounded-xl border border-dashed border-line px-4 py-4 text-center text-xs leading-relaxed text-ink-3">
+          No board activity is moving this score right now. Blocked cards, reopens and tasks
+          past their estimate will show up here as they happen.
+        </p>
+      ) : (
+        <div className="mt-2 space-y-3">
+          {raised.length > 0 ? (
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-ink-2">
+                Raised it{" "}
+                <span className="font-semibold text-red tabular-nums">+{sum(raised)} pts</span>
+              </p>
+              <ul className="space-y-1.5">
+                {raised.map((event) => (
+                  <BoardEventRow key={event.entry.id} event={event} up />
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {lowered.length > 0 ? (
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-ink-2">
+                Lowered it{" "}
+                <span className="font-semibold text-green tabular-nums">
+                  {"−"}
+                  {sum(lowered)} pts
+                </span>
+              </p>
+              <ul className="space-y-1.5">
+                {lowered.map((event) => (
+                  <BoardEventRow key={event.entry.id} event={event} up={false} />
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BoardEventRow({ event, up }: { event: BoardEvent; up: boolean }) {
+  const points = Math.round(Math.abs(event.entry.delta) * 10) / 10;
+  const Icon = up ? ArrowUp : ArrowDown;
+
+  return (
+    <li className="flex items-start gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-2">
+      <Icon
+        className={cn("mt-0.5 size-3.5 shrink-0", up ? "text-red" : "text-green")}
+        aria-hidden
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-xs font-medium">{event.entry.reason}</span>
+          <span
+            className={cn(
+              "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+              up ? "bg-red-soft text-red" : "bg-green-soft text-green",
+            )}
+          >
+            {up ? "+" : "−"}
+            {points} pts
+          </span>
+        </span>
+        <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-2">
+          {up ? <span className="font-semibold text-ink-3">How to fix: </span> : null}
+          <span className={up ? undefined : "text-ink-3"}>{event.note}</span>
+        </span>
+      </span>
     </li>
   );
 }
