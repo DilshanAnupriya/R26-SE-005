@@ -16,6 +16,8 @@ import {
   Search,
   Wand2,
   ShieldAlert,
+  Scale,
+  CheckCircle2,
 } from "lucide-react";
 
 async function authFetch(url: string, options: RequestInit = {}) {
@@ -82,7 +84,11 @@ export default function SimulatorView() {
   const [simulationMetrics, setSimulationMetrics] = useState({
     totalAssignedPoints: 0,
     predictedVelocity: 0,
-    healthScore: 0
+    healthScore: 0,
+    giniIndex: 0,
+    giniStatus: "OPTIMAL",
+    overloadedDevelopersCount: 0,
+    developerLoads: [] as any[]
   });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -171,7 +177,15 @@ export default function SimulatorView() {
       }));
 
       if (assignmentList.length === 0) {
-        setSimulationMetrics({ totalAssignedPoints: 0, predictedVelocity: 0, healthScore: 0 });
+        setSimulationMetrics({
+          totalAssignedPoints: 0,
+          predictedVelocity: 0,
+          healthScore: 0,
+          giniIndex: 0,
+          giniStatus: "OPTIMAL",
+          overloadedDevelopersCount: 0,
+          developerLoads: []
+        });
         return;
       }
 
@@ -185,7 +199,11 @@ export default function SimulatorView() {
         setSimulationMetrics({
           totalAssignedPoints: data.totalStoryPoints || 0,
           predictedVelocity: data.predictedVelocity || 0,
-          healthScore: data.healthScore || 0
+          healthScore: data.healthScore || 0,
+          giniIndex: typeof data.giniIndex === "number" ? data.giniIndex : 0,
+          giniStatus: data.giniStatus || "OPTIMAL",
+          overloadedDevelopersCount: data.overloadedDevelopersCount || 0,
+          developerLoads: Array.isArray(data.developerLoads) ? data.developerLoads : []
         });
       } catch (err) {
         console.error("Simulation error:", err);
@@ -231,7 +249,7 @@ export default function SimulatorView() {
     if (task) devLoad[devId] = (devLoad[devId] || 0) + task.storyPoints;
   });
 
-  const { totalAssignedPoints, predictedVelocity, healthScore } = simulationMetrics;
+  const { totalAssignedPoints, predictedVelocity, healthScore, giniIndex, giniStatus, overloadedDevelopersCount } = simulationMetrics;
   const overallHealth = healthScore;
 
   const handleAssign = (taskId: number, devId: number) => {
@@ -430,6 +448,60 @@ export default function SimulatorView() {
                   </div>
                   <div className="text-xl font-bold text-foreground">{totalAssignedPoints} <span className="text-xs text-muted-foreground">SPs</span></div>
                 </div>
+
+                {/* Gini Workload Fairness Card */}
+                <div className="bg-card p-4 rounded-2xl border border-border space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                      <Scale className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Gini Workload Fairness</span>
+                    </div>
+                    <span className={cn(
+                      "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                      giniStatus === "OPTIMAL" 
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : (giniStatus === "MODERATE"
+                          ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          : "bg-rose-500/10 text-rose-400 border-rose-500/20")
+                    )}>
+                      {giniStatus === "OPTIMAL" ? "Optimal Equity" : (giniStatus === "MODERATE" ? "Moderate" : "High Disparity")}
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline justify-between">
+                    <div className="text-xl font-bold text-foreground font-mono">
+                      {giniIndex.toFixed(3)}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      Target: &le; 0.280
+                    </span>
+                  </div>
+
+                  {/* Horizontal Gini Visual Meter */}
+                  <div className="space-y-1">
+                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden flex">
+                      <div 
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          giniStatus === "OPTIMAL"
+                            ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                            : (giniStatus === "MODERATE"
+                              ? "bg-gradient-to-r from-amber-500 to-yellow-400"
+                              : "bg-gradient-to-r from-rose-500 to-red-500")
+                        )}
+                        style={{ width: `${Math.min(100, Math.max(8, giniIndex * 100))}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
+                      <span>0.00 (Equal)</span>
+                      <span>0.28</span>
+                      <span>1.00 (Unequal)</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-tight pt-1">
+                    Lorenz Gini index measures story point equality across team members to prevent individual developer burnout.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -461,30 +533,60 @@ export default function SimulatorView() {
         {/* Center: Developer Drop Zones */}
         <div className="lg:col-span-6 space-y-6 overflow-y-auto pr-2 scrollbar-hide pb-10">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {developers.map((dev) => (
-              <div 
-                key={dev.id} 
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => onDrop(e as any, dev.id)}
-                className={`glass p-5 rounded-3xl border ${devLoad[dev.id] > dev.capacity ? 'border-red-500/40' : 'border-border'} min-h-[200px] flex flex-col transition-all hover:bg-muted/30`}
-              >
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-primary font-bold">
-                      {dev.firstName[0]}{dev.lastName[0]}
+            {developers.map((dev) => {
+              const load = devLoad[dev.id] || 0;
+              const capacity = dev.capacity > 0 ? dev.capacity : 20;
+              const utilizationPct = Math.round((load / capacity) * 100);
+              const isOverloaded = load > capacity;
+
+              return (
+                <div 
+                  key={dev.id} 
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => onDrop(e as any, dev.id)}
+                  className={`glass p-5 rounded-3xl border ${isOverloaded ? 'border-red-500/50 shadow-lg shadow-red-500/10' : 'border-border'} min-h-[220px] flex flex-col transition-all hover:bg-muted/30`}
+                >
+                  <div className="flex items-center justify-between mb-2 pb-3 border-b border-border">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-primary font-bold">
+                        {dev.firstName[0]}{dev.lastName[0]}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-foreground">{dev.firstName} {dev.lastName}</div>
+                        <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{dev.specialization}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm font-bold text-foreground">{dev.firstName} {dev.lastName}</div>
-                      <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{dev.specialization}</div>
+                    <div className="text-right">
+                      <div className={`text-xs font-bold ${isOverloaded ? 'text-red-500' : (utilizationPct >= 85 ? 'text-amber-500' : 'text-emerald-500 dark:text-emerald-400')}`}>
+                        {load} / {dev.capacity} SPs
+                      </div>
+                      <div className="text-[10px] text-muted-foreground font-bold uppercase">{utilizationPct}% Utilized</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className={`text-xs font-bold ${devLoad[dev.id] > dev.capacity ? 'text-red-500' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                      {devLoad[dev.id] || 0} / {dev.capacity} SPs
+
+                  {/* Capacity Progress Bar with Micro-animation */}
+                  <div className="mb-3 space-y-1">
+                    <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                      <motion.div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-300",
+                          isOverloaded
+                            ? "bg-gradient-to-r from-amber-500 to-rose-500"
+                            : (utilizationPct >= 85
+                              ? "bg-gradient-to-r from-yellow-500 to-amber-500"
+                              : "bg-gradient-to-r from-emerald-500 to-teal-400")
+                        )}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, utilizationPct)}%` }}
+                      />
                     </div>
-                    <div className="text-[10px] text-muted-foreground font-bold uppercase">Load</div>
+                    {isOverloaded && (
+                      <div className="text-[10px] text-rose-400 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                        <span>+{load - dev.capacity} SP Over Capacity (Burnout Hazard)</span>
+                      </div>
+                    )}
                   </div>
-                </div>
 
                 <div className="flex-grow space-y-2">
                   {Object.entries(assignments)
@@ -536,7 +638,8 @@ export default function SimulatorView() {
                   )}
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         </div>
 
