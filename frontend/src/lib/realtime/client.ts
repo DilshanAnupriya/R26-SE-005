@@ -113,7 +113,14 @@ export class RealtimeClient {
       handlers.delete(handler as (event: RealtimeEvent) => void);
       if (handlers.size === 0) {
         this.subscriptions.delete(destination);
-        this.client?.unsubscribe(destination);
+        // Only over a live connection. stompjs throws "There is no underlying STOMP
+        // connection" otherwise, and from a component's cleanup that took the whole board
+        // page down to the error screen whenever the backend restarted. A dropped
+        // connection has no subscription left to cancel, and the reconnect only re-opens
+        // what is still in `subscriptions`.
+        if (this.client?.connected) {
+          this.client.unsubscribe(destination);
+        }
       }
     };
   }
