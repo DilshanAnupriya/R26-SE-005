@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RiskExplanations } from "./risk-explanations";
-import type { RiskAdjustment, RiskAssessment, SprintRisk } from "@/lib/api/ai-schemas";
+import type {
+  RiskAdjustment,
+  RiskAssessment,
+  RiskRemediationStep,
+  SprintRisk,
+} from "@/lib/api/ai-schemas";
 
 /**
  * The logged requirement changes, shown beside the score they moved.
@@ -244,12 +249,16 @@ describe("Why each risk is on this sprint · over budget", () => {
     } as Partial<RiskAssessment>);
   }
 
-  function openOverBudget(adjustments: RiskAdjustment[], overrides: Partial<RiskAssessment> = {}) {
+  function openOverBudget(
+    adjustments: RiskAdjustment[],
+    overrides: Partial<RiskAssessment> = {},
+    steps: RiskRemediationStep[] = [],
+  ) {
     render(
       <RiskExplanations
         risk={{ ...RISK, overBudget: overBudget(overrides), requirementChange: null } as unknown as SprintRisk}
         adjustments={adjustments}
-        steps={[]}
+        steps={steps}
       />,
     );
     return screen.getByRole("tabpanel");
@@ -349,6 +358,85 @@ describe("Why each risk is on this sprint · over budget", () => {
     expect(within(panel).getByText(/points come off as soon as the card leaves Blocked/)).toBeInTheDocument();
     expect(within(panel).getByText("Completed within estimate: PAY-9")).toBeInTheDocument();
     expect(within(panel).getByText(/Finished inside its estimate/)).toBeInTheDocument();
+  });
+
+  const BLOCKED_FIX = {
+    method: "shap",
+    kind: "direct",
+    complete: true,
+    summary: "SHAP: blocked tasks last sprint adds +0.40. To fix it, lower blocked tasks last sprint from 4 to 1.",
+    shap_now: 0.4,
+    shap_after: -0.01,
+    probability_now: 0.6,
+    probability_after: 0.45,
+    move: { feature: "prev_blocked_tasks", label: "blocked tasks last sprint", from: 4, to: 1 },
+  };
+
+  it("answers a blocked card with the SHAP fix of the blocked-count reading", () => {
+    // The backend feeds the live blocked count into prev_blocked_tasks, so the model has
+    // a SHAP value for blocked cards and the fix is its own, not the board rule's text.
+    const panel = openOverBudget(
+      [boardEntry({ delta: 8, reason: "Task blocked: PAY-14", sourceKey: "TASK_BLOCKED:a", code: "TASK_BLOCKED" })],
+      {
+        drivers: [
+          {
+            feature: "prev_blocked_tasks",
+            label: "blocked tasks last sprint",
+            detail: "4",
+            contribution: 0.4,
+            direction: "INCREASE",
+            fix: BLOCKED_FIX,
+          },
+        ],
+      } as Partial<RiskAssessment>,
+    );
+
+    expect(within(panel).getAllByText(/lower blocked tasks last sprint from 4 to 1/)).toHaveLength(2);
+    expect(within(panel).queryByText(/points come off as soon as the card leaves Blocked/)).not.toBeInTheDocument();
+  });
+
+  it("labels a charge the model cannot see as a board rule, not SHAP", () => {
+    const panel = openOverBudget([
+      boardEntry({ delta: 5, reason: "Estimate exceeded: PAY-3", sourceKey: "TASK_OVERDUE:e", code: "TASK_OVERDUE" }),
+    ]);
+
+    expect(within(panel).getByText(/board rule, not SHAP/)).toBeInTheDocument();
+  });
+
+  it("shows the SHAP fix rather than a step's written method, and keeps only its tick", () => {
+    const panel = openOverBudget(
+      [],
+      {
+        drivers: [
+          {
+            feature: "prev_blocked_tasks",
+            label: "blocked tasks last sprint",
+            detail: "4",
+            contribution: 0.4,
+            direction: "INCREASE",
+            fix: BLOCKED_FIX,
+          },
+        ],
+      } as Partial<RiskAssessment>,
+      [
+        {
+          riskType: "OVER_BUDGET",
+          driverFeature: "prev_blocked_tasks",
+          stepKey: "prev_blocked_tasks",
+          title: "Reduce blocked items from 4 to 0",
+          detail: "Re-running the model with blocked items at 0 lowers it.",
+          points: 12,
+          how: "For every stuck item, write down who will unstick it.",
+          done: false,
+        } as RiskRemediationStep,
+      ],
+    );
+
+    expect(within(panel).getByText("Fix from SHAP")).toBeInTheDocument();
+    expect(within(panel).queryByText(/For every stuck item/)).not.toBeInTheDocument();
+    expect(within(panel).queryByText("Reduce blocked items from 4 to 0")).not.toBeInTheDocument();
+    expect(within(panel).getByRole("checkbox")).not.toBeChecked();
+    expect(within(panel).getByText("−12 pts")).toBeInTheDocument();
   });
 
   it("gives an older unkeyed charge the same fix as a keyed one", () => {

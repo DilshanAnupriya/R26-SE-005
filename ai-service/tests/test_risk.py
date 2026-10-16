@@ -281,6 +281,20 @@ class TestShapFixes:
                 assert fix["kind"] == "unsupplied"
                 assert fix["move"] is None
 
+    def test_the_explanation_is_read_off_shap(self, over_budget):
+        """The sentence on the tab names each reason with its SHAP push, and its remedy
+        is the measured fix that lowers the model's probability the most."""
+        result = over_budget.predict(risky_sprint())
+        top = next(d for d in result["drivers"] if d["direction"] == "INCREASE")
+        assert "SHAP: raised most by" in result["explanation"]
+        assert f"{top['label']} ({top['contribution']:+.2f})" in result["explanation"]
+
+        fixes = [d["fix"] for d in result["drivers"]
+                 if d.get("fix") and d["fix"].get("probability_after") is not None]
+        best = min(fixes, key=lambda fix: fix["probability_after"])
+        assert "Biggest fix from SHAP" in result["explanation"]
+        assert f"to {best['probability_after'] * 100:.0f}%" in result["explanation"]
+
     def test_the_requirement_change_model_is_untouched(self, requirement_change):
         for driver in requirement_change.predict(well_specified())["drivers"]:
             assert "fix" not in driver
