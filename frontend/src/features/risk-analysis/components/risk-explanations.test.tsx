@@ -174,7 +174,7 @@ describe("Why each risk is on this sprint · logged changes", () => {
     expect(within(panel).queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
-  it("leaves board readings out — those clear themselves when the board changes", () => {
+  it("lists other board entries as board-rule charges, not as logged changes", () => {
     const panel = open([
       adjustment({
         delta: 8,
@@ -185,7 +185,11 @@ describe("Why each risk is on this sprint · logged changes", () => {
       }),
     ]);
 
-    expect(within(panel).queryByText("Task blocked: PAY-14")).not.toBeInTheDocument();
+    // Itemised in the board section, since it counts toward this score — but with the
+    // board rule's fix rather than a tick, because it is not a logged change.
+    expect(within(panel).getByText("Task blocked: PAY-14")).toBeInTheDocument();
+    expect(within(panel).getByText(/board rule, not SHAP/)).toBeInTheDocument();
+    expect(within(panel).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(
       within(panel).queryByText("Logged changes the model cannot see"),
     ).not.toBeInTheDocument();
@@ -217,6 +221,62 @@ describe("Why each risk is on this sprint · logged changes", () => {
     expect(
       within(panel).queryByText("Logged changes the model cannot see"),
     ).not.toBeInTheDocument();
+  });
+
+  it("puts logged changes inside the board section, with the board rule as their fix", () => {
+    const panel = open([adjustment()]);
+
+    expect(within(panel).getByText("What the board has done to this score")).toBeInTheDocument();
+    expect(within(panel).getByText(/not readings the model scores — SHAP has no value for them/)).toBeInTheDocument();
+    expect(within(panel).getByText("How to fix (board rule, not SHAP):")).toBeInTheDocument();
+  });
+
+  it("explains a withdrawn change as a credit", () => {
+    const panel = open([
+      adjustment({ delta: -4, reason: "Requirement change withdrawn: PRIORITY", sourceKey: null, code: null }),
+    ]);
+
+    expect(within(panel).getByText(/logged change was withdrawn/)).toBeInTheDocument();
+  });
+
+  it("splits the readings and shows the SHAP fix under one raising requirement-change risk", () => {
+    render(
+      <RiskExplanations
+        risk={{
+          ...RISK,
+          requirementChange: assessment({
+            drivers: [
+              {
+                feature: "ambiguity_marker_count",
+                label: "hedging words in the stories",
+                detail: "30",
+                contribution: 0.04,
+                direction: "INCREASE",
+                fix: {
+                  method: "shap",
+                  kind: "direct",
+                  complete: true,
+                  summary: "SHAP: hedging words in the stories adds +0.04. To fix it, lower hedging words in the stories from 30 to 2.",
+                  probability_now: 0.72,
+                  probability_after: 0.7,
+                  move: { feature: "ambiguity_marker_count", label: "hedging words in the stories", from: 30, to: 2 },
+                },
+              },
+              { feature: "baseline_story_count", label: "stories committed", detail: "14", contribution: -0.15, direction: "DECREASE" },
+            ],
+          } as Partial<RiskAssessment>),
+        } as unknown as SprintRisk}
+        adjustments={[]}
+        steps={[]}
+      />,
+    );
+    const panel = screen.getByRole("tabpanel");
+
+    expect(within(panel).getByText("Raising the risk")).toBeInTheDocument();
+    expect(within(panel).getByText("Lowering the risk")).toBeInTheDocument();
+    expect(within(panel).getByText("Fix from SHAP")).toBeInTheDocument();
+    expect(within(panel).getByText(/hedging words in the stories: 30 → 2/)).toBeInTheDocument();
+    expect(within(panel).getByText(/72% → 70%/)).toBeInTheDocument();
   });
 });
 
@@ -476,5 +536,106 @@ describe("Why each risk is on this sprint · over budget", () => {
     ]);
 
     expect(within(panel).getByText("Task blocked: STILL-2")).toBeInTheDocument();
+  });
+});
+
+/**
+ * The collaboration tab: the same two sections, with collaboration's own charges.
+ *
+ * <p>The collaboration composite is a sum of its five readings, so each reading's SHAP
+ * value is exact. A board charge read off the same task threads — an unanswered question,
+ * a silent card, a reopen — gets that reading's fix; one no reading carries, like a card
+ * nobody owns, gets the board rule's and is labelled as such.</p>
+ */
+describe("Why each risk is on this sprint · collaboration", () => {
+  const COMMENTS_FIX = {
+    method: "shap",
+    kind: "direct",
+    complete: true,
+    summary:
+      "SHAP: comments per task adds +0.17 (3 of the composite's 18 points). To fix it, raise comments per task from 0 to 3.",
+    shap_now: 0.167,
+    shap_after: 0,
+    probability_now: 0.9,
+    probability_after: 0.84,
+    move: { feature: "comments_per_task", label: "comments per task", from: 0, to: 3 },
+  };
+
+  function openCollaboration(adjustments: RiskAdjustment[]) {
+    render(
+      <RiskExplanations
+        risk={
+          {
+            ...RISK,
+            requirementChange: null,
+            communicationCollaboration: assessment({
+              riskType: "COMMUNICATION_COLLABORATION",
+              adjustmentDelta: 0,
+              drivers: [
+                {
+                  feature: "comments_per_task",
+                  label: "comments per task",
+                  detail: "0",
+                  contribution: 0.167,
+                  direction: "INCREASE",
+                  fix: COMMENTS_FIX,
+                },
+              ],
+            } as Partial<RiskAssessment>),
+          } as unknown as SprintRisk
+        }
+        adjustments={adjustments}
+        steps={[]}
+      />,
+    );
+    return screen.getByRole("tabpanel");
+  }
+
+  function collabEntry(overrides: Partial<RiskAdjustment>): RiskAdjustment {
+    return adjustment({
+      riskType: "COMMUNICATION_COLLABORATION",
+      survivesScoring: true,
+      ...overrides,
+    });
+  }
+
+  it("shows the SHAP fix under a raising reading", () => {
+    const panel = openCollaboration([]);
+
+    expect(within(panel).getByText("Raising the risk")).toBeInTheDocument();
+    expect(within(panel).getByText("Fix from SHAP")).toBeInTheDocument();
+    expect(within(panel).getByText(/comments per task: 0 → 3/)).toBeInTheDocument();
+  });
+
+  it("answers a silent card with the SHAP fix of the comments reading", () => {
+    const panel = openCollaboration([
+      collabEntry({
+        delta: 3,
+        reason: 'No discussion on "Enforce SSO" past half its estimate',
+        sourceKey: "TASK_SILENT:a",
+        code: "TASK_SILENT",
+      }),
+    ]);
+
+    expect(within(panel).getByText("What the board has done to this score")).toBeInTheDocument();
+    expect(within(panel).getAllByText(/raise comments per task from 0 to 3/)).toHaveLength(2);
+    expect(within(panel).queryByText(/One comment clears this charge/)).not.toBeInTheDocument();
+  });
+
+  it("labels an unowned card as a board rule, with how it clears", () => {
+    const panel = openCollaboration([
+      collabEntry({ delta: 4, reason: "Nobody assigned to PAY-7", sourceKey: "TASK_UNASSIGNED:b", code: "TASK_UNASSIGNED" }),
+    ]);
+
+    expect(within(panel).getByText(/board rule, not SHAP/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Give it an owner now/)).toBeInTheDocument();
+  });
+
+  it("explains discussion credits", () => {
+    const panel = openCollaboration([
+      collabEntry({ delta: -2, reason: "3 comments on PAY-7", sourceKey: "TASK_COMMENTED:c", code: "TASK_COMMENTED" }),
+    ]);
+
+    expect(within(panel).getByText(/the behaviour the collaboration score rewards/)).toBeInTheDocument();
   });
 });

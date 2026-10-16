@@ -295,6 +295,62 @@ class TestShapFixes:
         assert "Biggest fix from SHAP" in result["explanation"]
         assert f"to {best['probability_after'] * 100:.0f}%" in result["explanation"]
 
-    def test_the_requirement_change_model_is_untouched(self, requirement_change):
-        for driver in requirement_change.predict(well_specified())["drivers"]:
-            assert "fix" not in driver
+
+
+def vague_sprint(**overrides):
+    return well_specified(**{**dict(
+        project_phase="discovery", has_dedicated_BA=0, requirements_doc_quality=0.15,
+        n_stakeholders=12, ambiguity_marker_count=30, stories_without_AC=10,
+        avg_acceptance_criteria_per_story=0.3, prev_change_requests_count=25,
+        prev_story_change_ratio=0.6, prev_high_risk_flag=1,
+        prev_requirement_volatility_score=0.85), **overrides})
+
+
+class TestRequirementChangeShapFixes:
+    """The requirement-change tab gets the same: a SHAP fix under every raising reading,
+    measured by re-scoring the model, with the story text as what a team can change."""
+
+    def test_every_raising_reading_has_a_fix(self, requirement_change):
+        drivers = requirement_change.predict(vague_sprint())["drivers"]
+        raising = [d for d in drivers if d["direction"] == "INCREASE" and d["contribution"] > 0.01]
+        assert raising
+        for driver in raising:
+            assert driver["fix"]["method"] == "shap"
+            assert driver["fix"]["summary"].startswith("SHAP:")
+
+    def test_lowering_readings_carry_no_fix(self, requirement_change):
+        for driver in requirement_change.predict(vague_sprint())["drivers"]:
+            if driver["direction"] == "DECREASE":
+                assert "fix" not in driver
+
+    def test_a_fix_moves_only_what_the_story_text_controls(self, requirement_change):
+        """Domain, phase and last sprint's churn are history; any move a fix proposes is
+        one a team makes by editing its stories, and the model confirms the fall."""
+        from app.risk_fixes import LEVERS_BY_KIND
+
+        controllable = set(LEVERS_BY_KIND["requirement_change"])
+        for driver in requirement_change.predict(vague_sprint())["drivers"]:
+            fix = driver.get("fix")
+            if fix and fix.get("move"):
+                assert fix["move"]["feature"] in controllable
+                assert fix["probability_after"] < fix["probability_now"]
+
+    def test_criteria_per_story_is_fixed_by_raising_it(self, requirement_change):
+        drivers = requirement_change.predict(vague_sprint())["drivers"]
+        fix = next((d["fix"] for d in drivers
+                    if d["feature"] == "avg_acceptance_criteria_per_story" and d.get("fix")), None)
+        if fix is not None and fix["kind"] == "direct":
+            assert fix["move"]["to"] > fix["move"]["from"]
+            assert "raise" in fix["summary"]
+
+    def test_doc_quality_is_fixed_through_the_missing_criteria(self, requirement_change):
+        drivers = requirement_change.predict(vague_sprint())["drivers"]
+        fix = next((d["fix"] for d in drivers
+                    if d["feature"] == "requirements_doc_quality" and d.get("fix")), None)
+        if fix is not None and fix["kind"] == "direct":
+            assert fix["move"]["feature"] == "stories_without_AC"
+
+    def test_the_explanation_is_read_off_shap(self, requirement_change):
+        result = requirement_change.predict(vague_sprint())
+        assert "SHAP: raised most by" in result["explanation"]
+        assert "Biggest fix from SHAP" in result["explanation"]

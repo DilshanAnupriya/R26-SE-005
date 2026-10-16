@@ -244,3 +244,63 @@ def test_transformer_and_equation_agree_on_the_unambiguous_cases():
     assert predictor.predict(HEALTHY)["risk_level"] == "Low"
     assert predictor.predict(STRUGGLING)["risk_level"] == "High"
     assert predictor.scorer == "distilbert"
+
+
+# ------------------------------------------------------------------ SHAP fixes
+
+TROUBLED = dict(avg_response_time=60, comments_per_task=0, inactive_days=9,
+                blockers=6, reopened_tasks=5)
+
+
+def test_every_raising_reading_has_a_shap_fix(rules_only):
+    result = rules_only.predict(TROUBLED)
+    raising = [d for d in result["drivers"] if d["direction"] == "INCREASE"]
+    assert len(raising) == 5
+    for driver in raising:
+        assert driver["fix"]["method"] == "shap"
+        assert driver["fix"]["summary"].startswith("SHAP:")
+
+
+def test_a_controllable_reading_is_moved_to_where_it_scores_nothing(rules_only):
+    """The composite is a sum, so a reading's SHAP value is its own points: the fix is
+    the nearest value scoring none, and re-scoring there gives the quoted figure."""
+    drivers_ = rules_only.predict(TROUBLED)["drivers"]
+    fix = next(d["fix"] for d in drivers_ if d["feature"] == "avg_response_time")
+    assert fix["kind"] == "direct" and fix["complete"]
+    assert fix["move"]["to"] == 12 and fix["shap_after"] == 0
+
+    moved = rules_only.predict({**TROUBLED, "avg_response_time": 12})
+    assert moved["probability"] == pytest.approx(fix["probability_after"], abs=1e-4)
+    assert fix["probability_after"] < fix["probability_now"]
+
+
+def test_comments_are_fixed_by_raising_them(rules_only):
+    drivers_ = rules_only.predict(TROUBLED)["drivers"]
+    fix = next(d["fix"] for d in drivers_ if d["feature"] == "comments_per_task")
+    assert fix["move"]["to"] > fix["move"]["from"]
+    assert "raise" in fix["summary"]
+
+
+def test_history_is_offset_rather_than_moved(rules_only):
+    """Silent days already passed cannot be undone, so the fix moves a reading that can
+    be, by at least as many composite points as the silence scored."""
+    drivers_ = rules_only.predict(TROUBLED)["drivers"]
+    fix = next(d["fix"] for d in drivers_ if d["feature"] == "inactive_days")
+    assert fix["kind"] == "offset"
+    assert fix["move"]["feature"] in ("avg_response_time", "comments_per_task", "blockers")
+    if fix["complete"]:
+        assert fix["removed"] >= fix["shap_now"]
+
+
+def test_an_unrecorded_reading_is_not_given_a_target(rules_only):
+    """Missing comments read as nought, which scores 3 points — a fix telling a team to
+    write more on tasks nobody measured would be invented."""
+    drivers_ = rules_only.predict({"avg_response_time": 30})["drivers"]
+    fix = next(d["fix"] for d in drivers_ if d["feature"] == "comments_per_task")
+    assert fix["kind"] == "unsupplied" and fix["move"] is None
+
+
+def test_the_explanation_is_read_off_shap(rules_only):
+    explanation = rules_only.predict(TROUBLED)["explanation"]
+    assert "SHAP (exact" in explanation
+    assert "Biggest fix from SHAP" in explanation
