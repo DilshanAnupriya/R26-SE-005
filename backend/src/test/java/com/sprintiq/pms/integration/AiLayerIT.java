@@ -315,45 +315,45 @@ class AiLayerIT extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("requirement change is 0% until a requirement has actually moved")
-    void requirementChangeStartsAtZero() {
+    @DisplayName("requirement change is the model's full reading from the first assessment, plus the board")
+    void requirementChangeIsScoredFromTheStart() {
         ProjectResponse project = newProject("Mobile Banking");
         SprintResponse sprint = newSprintWithWork(project.id());
 
-        // A sprint with work on it and nothing changed: the model would have read its
-        // planning columns and handed back a standing 10-20%. Nothing has churned, so the
-        // figure is nought, and no model was asked for it.
+        // Scored by the model from the first assessment. It used to be held at nought until
+        // a change was logged, so the model's whole reading arrived with the first small
+        // change and looked like a 60-point jump.
         SprintRiskResponse fresh = riskService.assess(sprint.id());
-        assertThat(fresh.requirementChange()).isNotNull();
-        assertThat(fresh.requirementChange().riskScore()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(fresh.requirementChange().predictionId()).isNull();
-        assertThat(riskService.latest(sprint.id()).requirementChange().riskScore())
-                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(fresh.requirementChange().predictionId())
+                .as("the model is asked from the first assessment on")
+                .isNotNull();
+        BigDecimal model = fresh.requirementChange().riskScore();
+        assertThat(model).isPositive();
 
-        // A logged change moves the gauge by its own weight and nothing more. It used to
-        // bring the model in as well, and the model's planning-column baseline (50-60%)
-        // landed on top of the change's +8.
+        // Nothing changed, nothing moves.
+        assertThat(riskService.assess(sprint.id()).requirementChange().riskScore())
+                .isEqualByComparingTo(model);
+
+        // A logged change adds its own weight on top of the model's reading.
         requirementChangeService.log(project.id(), new LogRequirementChangeRequest(
                 RequirementChangeType.SCOPE_ADDED, ChangeImpactDirection.INCREASE,
                 sprint.id(), null, null, "A second payment provider", null, "Product owner"));
         SprintRiskResponse changed = riskService.assess(sprint.id());
-        assertThat(changed.requirementChange().predictionId())
-                .as("a logged change is priced by its weight, not by switching the model on")
-                .isNull();
-        assertThat(changed.requirementChange().riskScore()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(changed.requirementChange().adjustmentDelta())
                 .isEqualByComparingTo(BigDecimal.valueOf(8));
         assertThat(changed.requirementChange().adjustedScore())
-                .isEqualByComparingTo(new BigDecimal("0.08"));
+                .as("the model's reading plus the board's +8, not a jump from nought")
+                .isEqualByComparingTo(changed.requirementChange().riskScore()
+                        .add(new BigDecimal("0.08")).min(BigDecimal.ONE));
 
-        // Stories pulled into the sprint after it started are what bring the model in.
+        // Stories pulled in after the start move the model's own reading.
         sprintService.start(sprint.id());
         StoryResponse late = newStory(project.id(), "Pulled in late", "Detail.", "One",
-                BigDecimal.valueOf(3));
+                BigDecimal.valueOf(13));
         sprintService.addItems(sprint.id(), new AddSprintItemsRequest(List.of(late.id())));
-        assertThat(riskService.assess(sprint.id()).requirementChange().predictionId())
-                .as("once committed scope has moved, the model scores the sprint")
-                .isNotNull();
+        assertThat(riskService.assess(sprint.id()).requirementChange().riskScore())
+                .as("scope moving mid-sprint raises the model's reading")
+                .isGreaterThan(changed.requirementChange().riskScore());
     }
 
     @Test
@@ -469,14 +469,6 @@ class AiLayerIT extends AbstractIntegrationTest {
         // something ticking the box does not actually do, which is the case that broke:
         // the board is unchanged, so the next scoring reads exactly what it read before.
         SprintResponse sprint = newSprintWithoutAGoal(project.id());
-        // A sprint whose committed scope has never moved scores 0% on the requirement-change
-        // model without consulting it, and then has no step to offer. A story pulled in
-        // after the start brings the model in; it charges no ledger entry of its own, so
-        // the gauge moves by the step's own credit alone.
-        sprintService.start(sprint.id());
-        StoryResponse late = newStory(project.id(), "Pulled in late", "Detail.", "One",
-                BigDecimal.valueOf(3));
-        sprintService.addItems(sprint.id(), new AddSprintItemsRequest(List.of(late.id())));
         riskService.assess(sprint.id());
 
         List<RiskRemediationStepResponse> offered = remediationService.stepsFor(sprint.id());
