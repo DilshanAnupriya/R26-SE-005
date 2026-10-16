@@ -510,20 +510,12 @@ public class RiskService {
             }
         }
 
-        // Requirement change is zero until the sprint's committed scope has actually moved.
-        // The model reads planning columns — story length, missing criteria, the project's
-        // history — and from those alone it hands a sprint nobody has touched a standing
-        // 50-60%, which reads on the gauge as churn that has not happened. A logged change
-        // does not bring the model in either: it used to, and one extra acceptance
-        // criterion took the gauge from 0% to 63% — its own +5 plus the model's whole
-        // planning-column baseline. The register's entries stand on the ledger past every
-        // scoring, so on a nought baseline each change moves the gauge by its own weight.
-        if (riskType == RiskType.REQUIREMENT_CHANGE && !scopeHasMoved(sprint)) {
-            return baselineZero(RiskType.REQUIREMENT_CHANGE, sprint, ledger,
-                    "The sprint's committed scope has not moved since it started, so the model "
-                    + "was not asked. Each logged requirement change moves this by its own "
-                    + "weight.");
-        }
+        // Requirement change has no such gate, on purpose. It was held at nought until a
+        // change was logged, and then the model's whole planning-column reading (50-70%)
+        // arrived at once, so one extra acceptance criterion looked like a 60-point jump.
+        // Scored from the first assessment, the sprint shows the model's reading from the
+        // start; tasks are not among its inputs, and a logged change adds its own weight
+        // plus whatever the model actually moves.
 
         // A switch expression rather than a statement, so a fourth risk type is a
         // compile error here instead of a model that silently scores on the wrong
@@ -587,21 +579,8 @@ public class RiskService {
     }
 
     /**
-     * Whether stories have been added to or pulled from this sprint since it started.
-     *
-     * <p>Planning is not churn: {@code Sprint.recordScopeChange} ignores everything before
-     * the start. Logged requirement changes are deliberately not counted — they are priced
-     * on the ledger by their own weight, and letting one switch the model on stacked the
-     * model's planning-column baseline on top of that weight.</p>
-     */
-    private static boolean scopeHasMoved(SprintFeatureSource.SprintFeatures sprint) {
-        BigDecimal volatility = sprint.scopeVolatility();
-        return volatility != null && volatility.signum() > 0;
-    }
-
-    /**
-     * An assessment of nought, for a model with nothing yet to read — requirements that
-     * have not moved, or a team with no collaboration on record.
+     * An assessment of nought, for a model with nothing yet to read — a team with no
+     * collaboration on record.
      *
      * <p>Written as a real assessment rather than left blank, so the gauge says 0% —
      * which is the finding — instead of "not scored", the board's own readings have a
