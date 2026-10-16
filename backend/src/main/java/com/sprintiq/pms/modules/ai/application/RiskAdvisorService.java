@@ -236,7 +236,10 @@ public class RiskAdvisorService {
             return RiskAdvisorResponse.unavailable(switch (ex.getStatusCode().value()) {
                 case 400 -> "The provider rejected the request — check the configured model name.";
                 case 401, 403 -> "The provider rejected the API key.";
+                case 404 -> "The provider no longer serves the model \"" + config.getModel()
+                        + "\" — set ADVISOR_MODEL to a current one.";
                 case 429 -> "The provider is rate-limiting this key. Try again shortly.";
+                case 503 -> "The provider is overloaded right now. Try again in a minute.";
                 default -> "The advisor provider returned " + ex.getStatusCode() + ".";
             });
         } catch (RuntimeException ex) {
