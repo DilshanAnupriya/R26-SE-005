@@ -53,7 +53,7 @@ public class Allocation implements TenantScoped {
 
     private String status;
 
-    @Column(length = 2000)
+    @Column(columnDefinition = "TEXT")
     private String explanation;
 }
 

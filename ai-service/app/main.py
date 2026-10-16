@@ -364,6 +364,7 @@ def allocate_sprint_endpoint(data: dict) -> dict[str, Any]:
 
             explained_allocations.append({
                 "task_id": alloc["task_id"],
+                "dev_id": alloc["dev_id"],
                 "allocated_to": alloc["dev_id"],
                 "match_score": round(float(alloc["match_score"]), 2),
                 "skill_match": round(float(alloc["skill_match"]), 3),
