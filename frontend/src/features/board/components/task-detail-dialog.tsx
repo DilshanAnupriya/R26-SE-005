@@ -260,7 +260,6 @@ export function TaskDetailDialog({
   const clock = computeTaskClock(task);
   const timer = clockLabel(clock);
   const finished = task.status === "DONE" || task.status === "CANCELLED";
-  const reopens = task.reopenedCount ?? 0;
 
   const people = members
     .map((member) => ({
@@ -482,29 +481,6 @@ export function TaskDetailDialog({
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Over-budget Reopen Impact Banner */}
-            <div
-              className={cn(
-                "rounded-xl border p-4 text-xs",
-                reopens > 0 ? "border-amber-500/40 bg-amber-500/5" : "border-border bg-muted/40"
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
-                  <RotateCcw className="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden />
-                  Reopened Metrics
-                </span>
-                <span className="font-mono text-sm font-bold tabular-nums text-foreground">
-                  {reopens} time{reopens === 1 ? "" : "s"}
-                </span>
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                {reopens > 0
-                  ? "Taken back out of Done this many times. Every reopen raises this sprint's over-budget risk by the task's size, and each by more than the last — the estimate is already spent by then."
-                  : "Moving this task out of Done once it is finished counts as a reopen, and raises this sprint's over-budget risk by the task's size."}
-              </p>
             </div>
 
             {/* Conversation Thread */}
