@@ -31,6 +31,7 @@ from .collaboration_features import (HIGH_BAND, MAX_COMPOSITE, MEDIUM_BAND,
                                      compute_risk_score, detected_causes,
                                      drivers, features_to_text, mitigations,
                                      score_to_label)
+from .collaboration_fixes import LEVERS, collaboration_fixes
 
 log = logging.getLogger(__name__)
 
@@ -133,6 +134,20 @@ class CollaborationRiskPredictor:
         if self.uses_transformer and level != rule_level:
             provenance["disagrees_with_composite"] = True
 
+        ranked = drivers(row)
+        # Each raising reading gets the fix its exact SHAP value points to, re-scored by
+        # the model serving this prediction. Attached to the driver it answers, so the
+        # reason and the remedy cannot drift apart.
+        try:
+            fixes = collaboration_fixes(row, ranked, provenance.get("defaulted_to_zero", []),
+                                        self._probability_of)
+        except Exception as error:  # noqa: BLE001 — a missing fix never fails a prediction
+            log.warning("Could not compute collaboration fixes: %s", error)
+            fixes = {}
+        for driver in ranked:
+            if driver["feature"] in fixes:
+                driver["fix"] = fixes[driver["feature"]]
+
         return {
             "value": round(probability, 4),
             "label": SEVERITY.get(level, "LOW"),
@@ -140,13 +155,19 @@ class CollaborationRiskPredictor:
             "probability": round(probability, 4),
             "class_probabilities": class_probabilities,
             "confidence": self._confidence(class_probabilities, provenance),
-            "drivers": drivers(row),
+            "drivers": ranked,
             "detected_causes": detected_causes(row),
             "mitigations": mitigations(row, level),
             "explanation": self._explain(level, probability, class_probabilities,
-                                         row, composite, provenance),
+                                         ranked, composite, provenance),
             "provenance": provenance,
         }
+
+    def _probability_of(self, row: dict[str, int]) -> float:
+        """P(High) for a row, from whichever scorer is serving — what a fix is priced by."""
+        if self.uses_transformer:
+            return self._transformer_probabilities(row).get("High", 0.0)
+        return self._rule_probabilities(compute_risk_score(**row)).get("High", 0.0)
 
     def _transformer_probabilities(self, row: dict[str, int]) -> dict[str, float]:
         text = features_to_text(**row)
@@ -218,17 +239,12 @@ class CollaborationRiskPredictor:
         return round(max(0.0, min(1.0, confidence)), 2)
 
     def _explain(self, level: str, probability: float,
-                 class_probabilities: dict[str, float], row: dict[str, int],
+                 class_probabilities: dict[str, float], ranked: list[dict[str, Any]],
                  composite: int, provenance: dict) -> str:
         sentence = (f"{level} communication and collaboration risk — "
                     f"{probability * 100:.0f}% chance this sprint's coordination "
                     f"is the thing that costs it. ")
-
-        causes = detected_causes(row)
-        if causes:
-            sentence += causes[0] + ". "
-            if len(causes) > 2:
-                sentence += f"{len(causes) - 1} further signals were flagged. "
+        sentence += self._explain_from_shap(ranked)
 
         ordered = sorted(class_probabilities.items(), key=lambda kv: kv[1], reverse=True)
         if len(ordered) > 1 and ordered[0][1] - ordered[1][1] < 0.15:
@@ -251,3 +267,31 @@ class CollaborationRiskPredictor:
                          "on rather than from the model itself — the weights are not "
                          "loaded on this deployment.")
         return sentence.strip()
+
+    @staticmethod
+    def _explain_from_shap(ranked: list[dict[str, Any]]) -> str:
+        """The reasons and the remedy, read off the composite's exact SHAP values.
+
+        The composite is a sum, so each reading's SHAP value is its own points over the
+        ceiling. The remedy is the fix that lowers the model's probability the most —
+        the same one shown under that reading.
+        """
+        up = [d for d in ranked if d["direction"] == "INCREASE"][:3]
+        if not up:
+            return ("SHAP: no reading is adding to the risk — every one of the five sits "
+                    "at its healthy end. ")
+        sentence = ("SHAP (exact — the composite is a sum of its readings): raised most by "
+                    + ", ".join(f"{d['label']} ({d['contribution']:+.2f})" for d in up) + ". ")
+        measured = [d["fix"] for d in ranked
+                    if d.get("fix") and d["fix"].get("move")
+                    and d["fix"].get("probability_after") is not None]
+        if measured:
+            best = min(measured, key=lambda fix: fix["probability_after"])
+            move = best["move"]
+            verb = "raise" if move["to"] > move["from"] else "lower"
+            unit = LEVERS[move["feature"]].unit
+            sentence += (f"Biggest fix from SHAP: {verb} {move['label']} from "
+                         f"{move['from']}{unit} to {move['to']}{unit}, which takes the model's risk from "
+                         f"{best['probability_now'] * 100:.0f}% to "
+                         f"{best['probability_after'] * 100:.0f}%. ")
+        return sentence

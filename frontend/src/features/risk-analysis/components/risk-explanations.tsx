@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Check, Info, Loader2, OctagonAlert, TriangleAlert } from "lucide-react";
 import { Card, CardHeader } from "@/components/design/surfaces";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,7 +14,7 @@ import type {
   SprintRisk,
 } from "@/lib/api/ai-schemas";
 import { cn } from "@/lib/utils";
-import { boardEventsFor, type BoardEvent } from "../over-budget-guidance";
+import { boardEventsFor, boardSectionCopy, type BoardEvent } from "../board-guidance";
 import { RISK_MODELS, RISK_TYPE_FOR_KEY, type RiskModelKey } from "../risk-models";
 import { asPercent, SEVERITY_COLOUR, SeverityBadge, type RiskSeverityLabel } from "./risk-gauge";
 
@@ -23,6 +23,15 @@ export type StepToggle = (input: { riskType: RiskType; stepKey: string; done: bo
 
 /** The same, for the one finding that is a logged change rather than a board reading. */
 export type AbsorbToggle = (input: { adjustmentId: string; absorbed: boolean }) => void;
+
+/**
+ * The tabs that itemise the board's charges and show a SHAP fix under each raising reading.
+ *
+ * <p>All three: the two CatBoost services measure their fixes from tree SHAP, and the
+ * collaboration service from the composite its classifier was trained on, whose SHAP
+ * values are exact because the composite is a sum of its readings.</p>
+ */
+const ADVISED: RiskType[] = ["OVER_BUDGET", "REQUIREMENT_CHANGE", "COMMUNICATION_COLLABORATION"];
 
 /** The ledger key a logged requirement change is written under. Mirrors the server’s. */
 const REGISTER_PREFIX = "REQ_CHANGE:";
@@ -203,13 +212,9 @@ export function RiskExplanations({
                   (step) => step.riskType === RISK_TYPE_FOR_KEY[model.key],
                 )}
                 changes={loggedChangesFor(adjustments ?? [], RISK_TYPE_FOR_KEY[model.key])}
-                /*
-                  Over-budget only, for now: it is the risk the board charges most
-                  directly — blocked cards, reopens, tasks past their estimate — and the
-                  one whose readings had the most reasons with no remedy beside them.
-                */
+                /* Every tab: each risk service measures a SHAP fix per raising reading. */
                 boardEvents={
-                  RISK_TYPE_FOR_KEY[model.key] === "OVER_BUDGET"
+                  ADVISED.includes(RISK_TYPE_FOR_KEY[model.key])
                     ? boardEventsFor(
                         adjustments ?? [],
                         RISK_TYPE_FOR_KEY[model.key],
@@ -217,7 +222,7 @@ export function RiskExplanations({
                       )
                     : undefined
                 }
-                advise={RISK_TYPE_FOR_KEY[model.key] === "OVER_BUDGET"}
+                advise={ADVISED.includes(RISK_TYPE_FOR_KEY[model.key])}
                 onToggleStep={onToggleStep}
                 togglingStepKey={togglingStepKey}
                 onAbsorb={onAbsorb}
@@ -353,37 +358,23 @@ function RiskExplanation({
         </p>
       ) : null}
 
-      {boardEvents ? <BoardEvents {...boardEvents} drivers={drivers} /> : null}
-
       {/*
         Directly under the note about the adjustment, because for this risk these entries
         usually *are* the adjustment. They lived only in the ledger card at the foot of
         the page, which mixes all three risks together — so the one finding somebody had
         gone to the trouble of writing down was the one that never appeared beside the
-        score it moved.
+        score it moved. Where the tab itemises the board, they sit inside that section:
+        they are the board's charges against this score, and listing them apart would
+        leave the section saying "no board activity" above the entries that moved it.
       */}
-      {changes.length > 0 ? (
-        <section>
-          <h4 className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">
-            Logged changes the model cannot see
-          </h4>
-          <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
-            Written down by hand and charged to this sprint. No reading below carries a
-            logged change, so re-assessing cannot fold these away — ticking one is the only
-            thing that brings it down, and it never brings it down in full.
-          </p>
-          <ul className="mt-2 space-y-1.5">
-            {changes.map(({ charge, credit }) => (
-              <LoggedChangeRow
-                key={charge.id}
-                charge={charge}
-                credit={credit}
-                onAbsorb={onAbsorb}
-                busy={absorbingId === charge.id}
-              />
-            ))}
-          </ul>
-        </section>
+      {boardEvents ? (
+        <BoardEvents {...boardEvents} riskType={riskType} drivers={drivers}>
+          {changes.length > 0 ? (
+            <LoggedChanges changes={changes} onAbsorb={onAbsorb} absorbingId={absorbingId} nested />
+          ) : null}
+        </BoardEvents>
+      ) : changes.length > 0 ? (
+        <LoggedChanges changes={changes} onAbsorb={onAbsorb} absorbingId={absorbingId} />
       ) : null}
 
       <section>
@@ -584,7 +575,7 @@ function DriverRow({
             <p className="mt-1.5 ml-6 text-[11px] leading-relaxed text-ink-3">
               No SHAP fix for this reading: this score came from a model that doesn&rsquo;t
               report SHAP values, so no fix could be measured. Re-assess with the trained
-              over-budget model running to get one.
+              model running to get one.
             </p>
           ) : null}
           {steps.length > 0 ? (
@@ -694,12 +685,17 @@ function formatValue(value: number | string | null | undefined): string {
 function BoardEvents({
   raised,
   lowered,
+  riskType,
   drivers,
+  children,
 }: {
   raised: BoardEvent[];
   lowered: BoardEvent[];
+  riskType: RiskType;
   /** This scoring's SHAP readings, so a charge the model also counts gets their fix. */
   drivers: PredictionDriver[];
+  /** Entries this risk itemises in its own rows — requirement change's logged changes. */
+  children?: ReactNode;
 }) {
   const sum = (events: BoardEvent[]) =>
     Math.round(events.reduce((total, { entry }) => total + Math.abs(entry.delta), 0));
@@ -709,27 +705,26 @@ function BoardEvents({
           (driver) => driver.feature === event.reading && driver.direction === "INCREASE",
         )?.fix ?? null)
       : null;
+  const copy = boardSectionCopy(riskType);
+  const empty = raised.length === 0 && lowered.length === 0 && !children;
 
   return (
     <section>
       <h4 className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">
         What the board has done to this score
       </h4>
-      {raised.length > 0 ? (
-        <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
-          Blocked and reopened cards are counted in readings the model scores, so their fix is
-          the model&rsquo;s own SHAP fix. The other charges come from board rules the model
-          never sees — SHAP has no value for them, so their fix is the rule&rsquo;s.
-        </p>
+      {!empty ? (
+        <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{copy.intro}</p>
       ) : null}
 
-      {raised.length === 0 && lowered.length === 0 ? (
+      {empty ? (
         <p className="mt-2 rounded-xl border border-dashed border-line px-4 py-4 text-center text-xs leading-relaxed text-ink-3">
-          No board activity is moving this score right now. Blocked cards, reopens and tasks
-          past their estimate will show up here as they happen.
+          {copy.empty}
         </p>
       ) : (
         <div className="mt-2 space-y-3">
+          {children}
+
           {raised.length > 0 ? (
             <div>
               <p className="mb-1 text-[11px] font-medium text-ink-2">
@@ -763,6 +758,57 @@ function BoardEvents({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The logged requirement changes charged to this score, each with its tick.
+ *
+ * <p>Nested inside the board section on a tab that itemises the board, and a section of
+ * its own anywhere else. Either way the fix is the board rule's, not SHAP's: no reading
+ * the model scores carries a logged change, so there is no SHAP value to read one off.</p>
+ */
+function LoggedChanges({
+  changes,
+  onAbsorb,
+  absorbingId,
+  nested,
+}: {
+  changes: { charge: RiskAdjustment; credit?: RiskAdjustment }[];
+  onAbsorb?: AbsorbToggle;
+  absorbingId?: string | null;
+  nested?: boolean;
+}) {
+  const Wrapper = nested ? "div" : "section";
+  return (
+    <Wrapper>
+      {nested ? (
+        <p className="text-[11px] font-medium text-ink-2">Logged changes the model cannot see</p>
+      ) : (
+        <h4 className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">
+          Logged changes the model cannot see
+        </h4>
+      )}
+      <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
+        Written down by hand and charged to this sprint. No reading below carries a logged
+        change, so re-assessing cannot fold these away — ticking one is the only thing that
+        brings it down, and it never brings it down in full.{" "}
+        <span className="font-semibold">How to fix (board rule, not SHAP):</span> re-plan
+        around each change — move out work of the same size, or agree the new scope with
+        whoever asked for it — then tick it.
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {changes.map(({ charge, credit }) => (
+          <LoggedChangeRow
+            key={charge.id}
+            charge={charge}
+            credit={credit}
+            onAbsorb={onAbsorb}
+            busy={absorbingId === charge.id}
+          />
+        ))}
+      </ul>
+    </Wrapper>
   );
 }
 
