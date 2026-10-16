@@ -1,5 +1,6 @@
 package com.sprintiq.pms.modules.ai.application;
 
+import com.sprintiq.pms.modules.ai.web.dto.AiDtos.DailyRiskPoint;
 import com.sprintiq.pms.modules.ai.web.dto.AiDtos.RiskAdjustmentResponse;
 import com.sprintiq.pms.modules.ai.web.dto.AiDtos.RiskAdvisorResponse;
 import com.sprintiq.pms.modules.ai.web.dto.AiDtos.RiskAssessmentResponse;
@@ -49,6 +50,13 @@ public class RiskAdvisorService {
     private static final String QA_PROMPT_PATH = "prompts/risk-advisor-qa.txt";
 
     /**
+     * What each tab and panel of the Risk Analysis page is for, appended to the question
+     * path's instructions. Optional: without it the advisor still answers from the figures,
+     * it just cannot explain the screen.
+     */
+    private static final String PAGE_GUIDE_PATH = "prompts/risk-page-guide.txt";
+
+    /**
      * How many prior turns are replayed to the provider.
      *
      * <p>The brief is re-sent in full on every question, so the history is only needed
@@ -62,12 +70,14 @@ public class RiskAdvisorService {
     private final AppProperties properties;
     private final String systemPrompt;
     private final String qaPrompt;
+    private final String pageGuide;
 
     public RiskAdvisorService(WebClient.Builder builder, AppProperties properties) {
         this.builder = builder;
         this.properties = properties;
         this.systemPrompt = loadPrompt(SYSTEM_PROMPT_PATH);
         this.qaPrompt = loadPrompt(QA_PROMPT_PATH);
+        this.pageGuide = loadPrompt(PAGE_GUIDE_PATH);
     }
 
     /** One turn of a conversation. Only the two roles a client is allowed to send. */
@@ -132,6 +142,19 @@ public class RiskAdvisorService {
      */
     public RiskAdvisorResponse ask(SprintRiskResponse risk, List<RiskAdjustmentResponse> findings,
                                    String question, List<Turn> history) {
+        return ask(risk, findings, List.of(), question, history);
+    }
+
+    /**
+     * The same, with the sprint's day-by-day trend in the brief.
+     *
+     * <p>The question path also carries a guide to the page itself. Without it the model
+     * knew the numbers but not the screen they sit on, and "what is the trend chart for?"
+     * got "I cannot see a trends chart" — true of the brief, useless to the person
+     * looking at the chart.</p>
+     */
+    public RiskAdvisorResponse ask(SprintRiskResponse risk, List<RiskAdjustmentResponse> findings,
+                                   List<DailyRiskPoint> trend, String question, List<Turn> history) {
         RiskAdvisorResponse refusal = unavailableReason(risk, qaPrompt);
         if (refusal != null) {
             return refusal;
@@ -141,12 +164,13 @@ public class RiskAdvisorService {
         }
 
         List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", systemPrompt + "\n\n" + qaPrompt));
+        messages.add(Map.of("role", "system", "content", systemPrompt + "\n\n" + qaPrompt
+                + (pageGuide == null ? "" : "\n\n" + pageGuide)));
         // The grounding, as an exchange the model has already had. Sending it as the
         // opening turn rather than folding it into the system prompt keeps instructions
         // and data separable, which is the whole basis for telling the model that the
         // brief is evidence and not orders.
-        messages.add(Map.of("role", "user", "content", brief(risk, findings)));
+        messages.add(Map.of("role", "user", "content", brief(risk, findings) + trendSection(trend)));
         messages.add(Map.of("role", "assistant", "content",
                 "I have this sprint's figures. What would you like to know?"));
 
@@ -279,6 +303,33 @@ public class RiskAdvisorService {
         } else {
             sb.append("BOARD FINDINGS: none standing.\n");
         }
+        return sb.toString();
+    }
+
+    /**
+     * The Trend tab's numbers, one line per scored day.
+     *
+     * <p>Unscored days are counted rather than listed: the chart shows them as gaps, and a
+     * line of blanks per day would only invite the model to read them as zeros.</p>
+     */
+    private String trendSection(List<DailyRiskPoint> trend) {
+        if (trend == null || trend.isEmpty()) {
+            return "\nDAILY TREND: this sprint has no date range, so there is no daily trend.\n";
+        }
+        List<DailyRiskPoint> scored = trend.stream().filter(DailyRiskPoint::hasData).toList();
+        StringBuilder sb = new StringBuilder("\nDAILY TREND (overall / over-budget / "
+                + "requirement change / collaboration, read at 17:00 UTC; today is live)\n");
+        if (scored.isEmpty()) {
+            sb.append("- No day has been scored yet.\n");
+        }
+        scored.forEach(point -> sb.append("- ").append(point.date())
+                .append(point.current() ? " (today)" : "").append(": ")
+                .append(pct(point.overallScore())).append(" / ")
+                .append(pct(point.overBudgetScore())).append(" / ")
+                .append(pct(point.requirementChangeScore())).append(" / ")
+                .append(pct(point.communicationCollaborationScore())).append('\n'));
+        sb.append("- ").append(scored.size()).append(" of ").append(trend.size())
+                .append(" days scored; the rest are before the first assessment or still to come.\n");
         return sb.toString();
     }
 

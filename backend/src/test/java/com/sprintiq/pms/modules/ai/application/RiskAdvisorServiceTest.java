@@ -80,6 +80,31 @@ class RiskAdvisorServiceTest {
     }
 
     @Test
+    @DisplayName("a question carries the page guide and the sprint's daily trend")
+    void questionKnowsThePage() {
+        stub(200, """
+                {"model":"gemini-3.5-flash","choices":[{"message":{"role":"assistant","content":"ok"}}]}
+                """);
+
+        List<com.sprintiq.pms.modules.ai.web.dto.AiDtos.DailyRiskPoint> trend = List.of(
+                new com.sprintiq.pms.modules.ai.web.dto.AiDtos.DailyRiskPoint("2026-10-15",
+                        new java.math.BigDecimal("0.20"), null, new java.math.BigDecimal("0.30"),
+                        java.math.BigDecimal.ZERO, new java.math.BigDecimal("0.10"), true, false),
+                new com.sprintiq.pms.modules.ai.web.dto.AiDtos.DailyRiskPoint("2026-10-16",
+                        null, null, null, null, null, false, true));
+
+        service.ask(risk(), List.of(finding()), trend, "What is the trends chart for?", List.of());
+
+        // "I cannot see a trends chart" was the answer when neither of these went along.
+        assertThat(lastBody.get())
+                .contains("Risk over the sprint")
+                .contains("DAILY TREND")
+                .contains("2026-10-15: 20% / 30% / 0% / 10%")
+                .contains("1 of 2 days scored")
+                .doesNotContain("2026-10-16:");
+    }
+
+    @Test
     @DisplayName("reads the advice out of an OpenAI-shaped reply")
     void happyPath() {
         // Gemini's compatibility layer sends more than the four fields this parses.
