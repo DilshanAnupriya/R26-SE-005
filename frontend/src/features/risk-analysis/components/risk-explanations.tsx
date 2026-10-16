@@ -353,7 +353,7 @@ function RiskExplanation({
         </p>
       ) : null}
 
-      {boardEvents ? <BoardEvents {...boardEvents} /> : null}
+      {boardEvents ? <BoardEvents {...boardEvents} drivers={drivers} /> : null}
 
       {/*
         Directly under the note about the adjustment, because for this risk these entries
@@ -566,7 +566,43 @@ function DriverRow({
         </span>
       </div>
 
-      {steps.length > 0 ? (
+      {advise ? (
+        /*
+          On this tab the fix is always SHAP's, even where a recourse step exists for the
+          same reading: the step's hand-written "How" and its own target would otherwise
+          sit where the model's measured fix belongs. The step stays only as its tick, so
+          a team can still take the points off once the fix is done.
+        */
+        <>
+          {up && driver.fix ? (
+            <ShapFixNote fix={driver.fix} />
+          ) : up ? (
+            /*
+              Said rather than papered over with written advice: a fix on this tab is the
+              model's own measurement, and a score from a model with no SHAP values has none.
+            */
+            <p className="mt-1.5 ml-6 text-[11px] leading-relaxed text-ink-3">
+              No SHAP fix for this reading: this score came from a model that doesn&rsquo;t
+              report SHAP values, so no fix could be measured. Re-assess with the trained
+              over-budget model running to get one.
+            </p>
+          ) : null}
+          {steps.length > 0 ? (
+            <ul className="mt-1.5 ml-6 space-y-1.5">
+              {steps.map((step) => (
+                <StepRow
+                  key={step.stepKey}
+                  step={step}
+                  riskType={riskType}
+                  onToggle={onToggleStep}
+                  busy={togglingStepKey === step.stepKey}
+                  tickOnly={up && driver.fix != null}
+                />
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : steps.length > 0 ? (
         <ul className="mt-2 ml-6 space-y-1.5">
           {steps.map((step) => (
             <StepRow
@@ -578,18 +614,6 @@ function DriverRow({
             />
           ))}
         </ul>
-      ) : up && advise && driver.fix ? (
-        <ShapFixNote fix={driver.fix} />
-      ) : up && advise ? (
-        /*
-          Said rather than papered over with written advice: a fix on this tab is the
-          model's own measurement, and a score from a model with no SHAP values has none.
-        */
-        <p className="mt-1.5 ml-6 text-[11px] leading-relaxed text-ink-3">
-          No SHAP fix for this reading: this score came from a model that doesn&rsquo;t
-          report SHAP values, so no fix could be measured. Re-assess with the trained
-          over-budget model running to get one.
-        </p>
       ) : up ? (
         /*
           Only for a driver arguing the sprint is in trouble. Saying "nothing to do here"
@@ -617,12 +641,17 @@ function DriverRow({
  * at a time — two fixes can name the same move — so crediting each would count one
  * change twice. The next assessment is what says whether it was done.</p>
  */
-function ShapFixNote({ fix }: { fix: ShapFix }) {
+function ShapFixNote({ fix, flush }: { fix: ShapFix; /** No indent, inside a board row. */ flush?: boolean }) {
   const move = fix.move;
   const measured = move != null && fix.probability_now != null && fix.probability_after != null;
 
   return (
-    <div className="mt-1.5 ml-6 rounded-lg border border-line bg-surface-2 px-2.5 py-2 text-[11px] leading-relaxed">
+    <div
+      className={cn(
+        "mt-1.5 rounded-lg border border-line bg-surface-2 px-2.5 py-2 text-[11px] leading-relaxed",
+        flush ? "bg-surface" : "ml-6",
+      )}
+    >
       <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="rounded bg-blue-soft px-1.5 py-0.5 text-[10px] font-semibold text-blue">
           {fix.kind === "offset" ? "Offset from SHAP" : "Fix from SHAP"}
@@ -662,15 +691,37 @@ function formatValue(value: number | string | null | undefined): string {
  * is what somebody reading it wants next; a credit carries why it counts in the sprint's
  * favour, because there is nothing to fix about a task finishing on time.</p>
  */
-function BoardEvents({ raised, lowered }: { raised: BoardEvent[]; lowered: BoardEvent[] }) {
+function BoardEvents({
+  raised,
+  lowered,
+  drivers,
+}: {
+  raised: BoardEvent[];
+  lowered: BoardEvent[];
+  /** This scoring's SHAP readings, so a charge the model also counts gets their fix. */
+  drivers: PredictionDriver[];
+}) {
   const sum = (events: BoardEvent[]) =>
     Math.round(events.reduce((total, { entry }) => total + Math.abs(entry.delta), 0));
+  const fixFor = (event: BoardEvent) =>
+    event.reading
+      ? (drivers.find(
+          (driver) => driver.feature === event.reading && driver.direction === "INCREASE",
+        )?.fix ?? null)
+      : null;
 
   return (
     <section>
       <h4 className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">
         What the board has done to this score
       </h4>
+      {raised.length > 0 ? (
+        <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
+          Blocked and reopened cards are counted in readings the model scores, so their fix is
+          the model&rsquo;s own SHAP fix. The other charges come from board rules the model
+          never sees — SHAP has no value for them, so their fix is the rule&rsquo;s.
+        </p>
+      ) : null}
 
       {raised.length === 0 && lowered.length === 0 ? (
         <p className="mt-2 rounded-xl border border-dashed border-line px-4 py-4 text-center text-xs leading-relaxed text-ink-3">
@@ -687,7 +738,7 @@ function BoardEvents({ raised, lowered }: { raised: BoardEvent[]; lowered: Board
               </p>
               <ul className="space-y-1.5">
                 {raised.map((event) => (
-                  <BoardEventRow key={event.entry.id} event={event} up />
+                  <BoardEventRow key={event.entry.id} event={event} fix={fixFor(event)} up />
                 ))}
               </ul>
             </div>
@@ -715,7 +766,16 @@ function BoardEvents({ raised, lowered }: { raised: BoardEvent[]; lowered: Board
   );
 }
 
-function BoardEventRow({ event, up }: { event: BoardEvent; up: boolean }) {
+function BoardEventRow({
+  event,
+  fix,
+  up,
+}: {
+  event: BoardEvent;
+  /** The SHAP fix of the model reading this charge is counted in, where there is one. */
+  fix?: ShapFix | null;
+  up: boolean;
+}) {
   const points = Math.round(Math.abs(event.entry.delta) * 10) / 10;
   const Icon = up ? ArrowUp : ArrowDown;
 
@@ -738,10 +798,16 @@ function BoardEventRow({ event, up }: { event: BoardEvent; up: boolean }) {
             {points} pts
           </span>
         </span>
-        <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-2">
-          {up ? <span className="font-semibold text-ink-3">How to fix: </span> : null}
-          <span className={up ? undefined : "text-ink-3"}>{event.note}</span>
-        </span>
+        {up && fix ? (
+          <ShapFixNote fix={fix} flush />
+        ) : (
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-2">
+            {up ? (
+              <span className="font-semibold text-ink-3">How to fix (board rule, not SHAP): </span>
+            ) : null}
+            <span className={up ? undefined : "text-ink-3"}>{event.note}</span>
+          </span>
+        )}
       </span>
     </li>
   );
@@ -857,13 +923,58 @@ function StepRow({
   riskType,
   onToggle,
   busy,
+  tickOnly,
 }: {
   step: RiskRemediationStep;
   riskType: RiskType;
   onToggle?: StepToggle;
   busy?: boolean;
+  /**
+   * Under a SHAP fix: the checkbox and its points only. The step's own title, target
+   * and hand-written method would restate the fix above with different numbers.
+   */
+  tickOnly?: boolean;
 }) {
   const points = Math.round(step.points);
+
+  if (tickOnly) {
+    return (
+      <li>
+        <label
+          title={step.title}
+          className={cn(
+            "flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-colors",
+            step.done
+              ? "border-green/30 bg-green-soft/60"
+              : "border-line bg-surface-2 hover:border-line-strong",
+            (busy || !onToggle) && "cursor-default opacity-70",
+          )}
+        >
+          <input
+            type="checkbox"
+            className="size-3.5 shrink-0 accent-[var(--green)]"
+            checked={step.done}
+            disabled={busy || !onToggle}
+            onChange={(event) =>
+              onToggle?.({ riskType, stepKey: step.stepKey, done: event.target.checked })
+            }
+          />
+          <span className={cn("min-w-0 flex-1 text-[11px]", step.done ? "text-ink-2" : "text-ink")}>
+            {step.done ? "Marked done" : "Done the SHAP fix above? Tick to take its points off now"}
+          </span>
+          <span
+            className={cn(
+              "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+              step.done ? "bg-green-soft text-green" : "bg-surface-3 text-ink-3",
+            )}
+          >
+            {step.done ? `−${points} pts applied` : `−${points} pts`}
+          </span>
+          {busy ? <Loader2 className="size-3 animate-spin text-ink-3" aria-hidden /> : null}
+        </label>
+      </li>
+    );
+  }
 
   return (
     <li>

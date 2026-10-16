@@ -1,10 +1,12 @@
 package com.sprintiq.pms.modules.ai.domain;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sprintiq.pms.modules.ai.web.dto.AiDtos.PredictionDriverResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -54,5 +56,20 @@ class PredictionDriverJsonTest {
                 BigDecimal.ONE, "2 blocked");
 
         assertThat(driver.fix()).isNull();
+    }
+
+    @Test
+    @DisplayName("the API response carries the SHAP fix to the panel, and omits it when there is none")
+    void responseCarriesTheFix() throws Exception {
+        PredictionDriver withFix = new PredictionDriver("complexity", "estimated complexity",
+                BigDecimal.ONE, PredictionDriver.INCREASE, "3.2",
+                Map.of("method", "shap", "summary", "SHAP: estimated complexity adds +1.00."));
+
+        String sent = json.writeValueAsString(PredictionDriverResponse.from(withFix));
+        String plain = json.writeValueAsString(PredictionDriverResponse.from(
+                PredictionDriver.up("blocked_count", "Blocked work", BigDecimal.ONE, "2 blocked")));
+
+        assertThat(json.readTree(sent).path("fix").path("method").asText()).isEqualTo("shap");
+        assertThat(json.readTree(plain).has("fix")).isFalse();
     }
 }

@@ -5,9 +5,11 @@ import type { RiskAdjustment, RiskType } from "@/lib/api/ai-schemas";
  *
  * <p>The model's own readings get their fix from the model: the over-budget service
  * measures one from SHAP for every reading that raised the score, and the panel shows
- * that. A board event — a blocked card, a reopen, a task past its estimate — is not a
- * reading the model scores, so SHAP has nothing to say about it. What clears it is a
- * fact about the backend rule that charged it, and that is what this file records.</p>
+ * that. Two board charges — a blocked card and a reopen — are also counted in a reading
+ * the model scores, so the panel answers those with that reading's SHAP fix. The rest —
+ * a task past its estimate, a story over its points — are not readings the model scores,
+ * so SHAP has nothing to say about them. What clears one of those is a fact about the
+ * backend rule that charged it, and that is what this file records.</p>
  *
  * <p><strong>Nothing here moves a number.</strong> Where a charge withdraws itself once
  * the problem is gone, the text says so, because that is the part that makes the fix
@@ -77,11 +79,39 @@ function creditNote(entry: RiskAdjustment): string {
   return match ? match[1] : GENERIC_CREDIT_NOTE;
 }
 
+/**
+ * The model reading a board charge is also counted in, where there is one.
+ *
+ * <p>RiskService feeds the sprint's live blocked count into {@code prev_blocked_tasks}
+ * and its live reopens into {@code prev_reopened_tasks}, so for those two charges the
+ * model has a SHAP value — and a measured fix — of its own. Every other charge is a
+ * backend rule the model never sees, and has no SHAP value to read.</p>
+ */
+const SHAP_READING: Record<string, string> = {
+  TASK_BLOCKED: "prev_blocked_tasks",
+  TASK_REOPEN_BUDGET: "prev_reopened_tasks",
+};
+
+const SHAP_READING_BY_REASON: [RegExp, string][] = [
+  [/^Task blocked/i, SHAP_READING.TASK_BLOCKED],
+  [/^Rework on/i, SHAP_READING.TASK_REOPEN_BUDGET],
+];
+
+function shapReading(entry: RiskAdjustment): string | null {
+  if (entry.code && SHAP_READING[entry.code]) {
+    return SHAP_READING[entry.code];
+  }
+  const match = SHAP_READING_BY_REASON.find(([pattern]) => pattern.test(entry.reason));
+  return match ? match[1] : null;
+}
+
 /** One board event behind the score, with what it means and what to do about it. */
 export type BoardEvent = {
   entry: RiskAdjustment;
   /** For a charge, how to clear it; for a credit, why it counts in the sprint's favour. */
   note: string;
+  /** The model reading whose SHAP fix answers this charge, or null for a rule-only one. */
+  reading: string | null;
 };
 
 /**
@@ -119,11 +149,11 @@ export function boardEventsFor(
   return {
     raised: counting
       .filter((entry) => entry.delta > 0)
-      .map((entry) => ({ entry, note: chargeAdvice(entry) }))
+      .map((entry) => ({ entry, note: chargeAdvice(entry), reading: shapReading(entry) }))
       .sort(biggestFirst),
     lowered: counting
       .filter((entry) => entry.delta < 0)
-      .map((entry) => ({ entry, note: creditNote(entry) }))
+      .map((entry) => ({ entry, note: creditNote(entry), reading: null }))
       .sort(biggestFirst),
   };
 }

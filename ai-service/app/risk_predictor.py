@@ -242,7 +242,9 @@ class RiskPredictor:
             sentence += (f"It is close between {ordered[0][0]} and {ordered[1][0]}, so treat "
                          f"the level as a leaning rather than a verdict. ")
 
-        if drivers:
+        if drivers and self.kind == "over_budget":
+            sentence += self._explain_from_shap(drivers)
+        elif drivers:
             up = [d for d in drivers if d["direction"] == "INCREASE"][:2]
             down = [d for d in drivers if d["direction"] == "DECREASE"][:2]
             # The readable label, not the trained column name: this sentence is shown
@@ -263,3 +265,40 @@ class RiskPredictor:
                          f"values, so this says more about sprints in general than about "
                          f"this one.")
         return sentence.strip()
+
+    @staticmethod
+    def _explain_from_shap(drivers: list[dict[str, Any]]) -> str:
+        """The reasons and the remedy, both read off this prediction's SHAP values.
+
+        Each reason carries its SHAP contribution in log-odds, so the sentence states
+        how hard a reading pushed rather than only that it did. The remedy is the
+        measured fix that lowers the model's probability the most — the same fix shown
+        under that reading, so the summary and the list cannot disagree.
+        """
+        up = [d for d in drivers if d["direction"] == "INCREASE"][:3]
+        down = [d for d in drivers if d["direction"] == "DECREASE"][:2]
+
+        def pushes(items: list[dict[str, Any]]) -> str:
+            return ", ".join(f"{d['label']} ({d['contribution']:+.2f})" for d in items)
+
+        sentence = ""
+        if up:
+            sentence += f"SHAP: raised most by {pushes(up)}. "
+        if down:
+            sentence += f"{'Lowered' if up else 'SHAP: lowered'} most by {pushes(down)}. "
+
+        measured = [d["fix"] for d in drivers
+                    if d.get("fix") and d["fix"].get("move")
+                    and d["fix"].get("probability_after") is not None]
+        if measured:
+            best = min(measured, key=lambda fix: fix["probability_after"])
+            move = best["move"]
+
+            def shown(value: Any) -> str:
+                return f"{value:g}" if isinstance(value, (int, float)) else f"{value}"
+
+            sentence += (f"Biggest fix from SHAP: lower {move['label'] or move['feature']} "
+                         f"from {shown(move['from'])} to {shown(move['to'])}, which takes the "
+                         f"model's risk from {best['probability_now'] * 100:.0f}% to "
+                         f"{best['probability_after'] * 100:.0f}%. ")
+        return sentence
