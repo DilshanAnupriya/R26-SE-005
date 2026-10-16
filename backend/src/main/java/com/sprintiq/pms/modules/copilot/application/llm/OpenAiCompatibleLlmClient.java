@@ -77,7 +77,10 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
                 case 400 -> "The provider rejected the request — check the configured model name "
                         + "and that it supports tool calling.";
                 case 401, 403 -> "The provider rejected the API key.";
+                case 404 -> "The provider no longer serves the model \"" + config.getModel()
+                        + "\" — set ADVISOR_MODEL to a current one.";
                 case 429 -> "The provider is rate-limiting this key. Try again shortly.";
+                case 503 -> "The provider is overloaded right now. Try again in a minute.";
                 default -> "The AI provider returned " + ex.getStatusCode() + ".";
             }, ex);
         } catch (RuntimeException ex) {
@@ -94,14 +97,24 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         // Null content is legal (and expected) on an assistant turn that only calls tools.
         wire.put("content", message.content());
         if (message.toolCalls() != null && !message.toolCalls().isEmpty()) {
-            wire.put("tool_calls", message.toolCalls().stream().map(call -> Map.of(
-                    "id", call.id(),
-                    "type", "function",
-                    "function", Map.of("name", call.name(), "arguments", call.argumentsJson())))
+            wire.put("tool_calls", message.toolCalls().stream().map(OpenAiCompatibleLlmClient::toWire)
                     .toList());
         }
         if (message.toolCallId() != null) {
             wire.put("tool_call_id", message.toolCallId());
+        }
+        return wire;
+    }
+
+    private static Map<String, Object> toWire(ToolCall call) {
+        Map<String, Object> wire = new LinkedHashMap<>();
+        wire.put("id", call.id());
+        wire.put("type", "function");
+        wire.put("function", Map.of("name", call.name(), "arguments", call.argumentsJson()));
+        // Echoed exactly as received. Gemini 3 keeps each call's thought signature here and
+        // answers 400 to a conversation whose earlier calls come back without it.
+        if (call.extraContent() != null) {
+            wire.put("extra_content", call.extraContent());
         }
         return wire;
     }
@@ -129,7 +142,9 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             JsonNode arguments = function.path("arguments");
             String argumentsJson = arguments.isTextual() ? arguments.asText()
                     : arguments.isMissingNode() || arguments.isNull() ? "{}" : arguments.toString();
-            calls.add(new ToolCall(id, function.path("name").asText(), argumentsJson));
+            JsonNode extra = call.path("extra_content");
+            calls.add(new ToolCall(id, function.path("name").asText(), argumentsJson,
+                    extra.isMissingNode() || extra.isNull() ? null : extra));
         }
 
         JsonNode contentNode = message.path("content");

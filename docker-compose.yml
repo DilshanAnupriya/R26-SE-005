@@ -56,7 +56,7 @@ services:
       # operator who sets ADVISOR_API_KEY and never sees advice appear has no way to
       # tell a missing key from a passthrough that was never wired.
       ADVISOR_API_KEY: ${ADVISOR_API_KEY:-}
-      ADVISOR_MODEL: ${ADVISOR_MODEL:-gemini-2.0-flash}
+      ADVISOR_MODEL: ${ADVISOR_MODEL:-gemini-3.5-flash}
     ports: ["8080:8080"]
     volumes: ["attachment-data:/app/data/attachments"]
 

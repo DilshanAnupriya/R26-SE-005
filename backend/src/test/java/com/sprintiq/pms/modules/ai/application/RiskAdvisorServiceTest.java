@@ -89,7 +89,7 @@ class RiskAdvisorServiceTest {
                   "id": "chatcmpl-abc",
                   "object": "chat.completion",
                   "created": 1735689600,
-                  "model": "gemini-2.0-flash",
+                  "model": "gemini-3.5-flash",
                   "choices": [
                     {
                       "index": 0,
@@ -108,13 +108,13 @@ class RiskAdvisorServiceTest {
 
         assertThat(response.available()).isTrue();
         assertThat(response.report()).contains("in trouble");
-        assertThat(response.model()).isEqualTo("gemini-2.0-flash");
+        assertThat(response.model()).isEqualTo("gemini-3.5-flash");
         assertThat(response.reason()).isNull();
 
         assertThat(lastPath.get()).isEqualTo("/v1beta/openai/chat/completions");
         assertThat(lastAuth.get()).isEqualTo("Bearer test-key");
         assertThat(lastBody.get())
-                .contains("\"model\":\"gemini-2.0-flash\"")
+                .contains("\"model\":\"gemini-3.5-flash\"")
                 .contains("\"max_tokens\":2048")
                 .contains("SPRINT RISK ADVISOR")       // the system prompt went with it
                 .contains("OVERALL RISK")              // and so did the brief
@@ -181,7 +181,7 @@ class RiskAdvisorServiceTest {
     @Test
     @DisplayName("treats an empty completion as no advice rather than empty advice")
     void emptyCompletion() {
-        stub(200, "{\"model\":\"gemini-2.0-flash\",\"choices\":[]}");
+        stub(200, "{\"model\":\"gemini-3.5-flash\",\"choices\":[]}");
 
         RiskAdvisorResponse response = service.advise(risk(), List.of());
 
