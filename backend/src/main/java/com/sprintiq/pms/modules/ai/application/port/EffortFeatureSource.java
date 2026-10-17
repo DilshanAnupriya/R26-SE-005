@@ -35,6 +35,9 @@ public interface EffortFeatureSource {
     /** Tasks currently attached to the sprint. */
     long sprintTaskCount(UUID sprintId);
 
+    /** Sprint tasks whose estimate is missing or zero, which cannot support a cost forecast. */
+    long sprintUnestimatedTaskCount(UUID sprintId);
+
     /** Required skill names across tasks in the sprint. */
     List<String> sprintRequiredSkills(UUID sprintId);
 
