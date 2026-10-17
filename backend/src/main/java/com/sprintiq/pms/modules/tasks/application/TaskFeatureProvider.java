@@ -106,6 +106,14 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
 
     @Override
     @Transactional(readOnly = true)
+    public long sprintUnestimatedTaskCount(UUID sprintId) {
+        return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).stream()
+                .filter(task -> task.getEstimateMinutes() == null || task.getEstimateMinutes() <= 0)
+                .count();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<String> sprintRequiredSkills(UUID sprintId) {
         return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).stream()
                 .flatMap(task -> task.getRequiredSkills().stream())

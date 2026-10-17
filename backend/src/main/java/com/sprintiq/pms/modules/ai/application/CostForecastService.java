@@ -1,6 +1,7 @@
 package com.sprintiq.pms.modules.ai.application;
 
 import com.sprintiq.pms.common.domain.EntityType;
+import com.sprintiq.pms.common.error.BusinessRuleException;
 import com.sprintiq.pms.modules.ai.application.port.DeveloperFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.EffortFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.ProjectContextSource;
@@ -44,14 +45,25 @@ public class CostForecastService {
     @Transactional
     public CostForecastResponse forecast(UUID sprintId, CostStage stage) {
         SprintFeatureSource.SprintFeatures sprint = sprints.featuresFor(sprintId);
+        long sprintTaskCount = effort.sprintTaskCount(sprintId);
+        if (sprintTaskCount == 0) {
+            throw new BusinessRuleException("Add at least one estimated task before forecasting sprint cost.");
+        }
+        long unestimatedTaskCount = effort.sprintUnestimatedTaskCount(sprintId);
+        if (unestimatedTaskCount > 0) {
+            throw new BusinessRuleException("Estimate all sprint tasks before forecasting cost ("
+                    + unestimatedTaskCount + " missing or zero).");
+        }
+        long plannedEffortMinutes = effort.sprintPlannedEstimateMinutes(sprintId);
+        if (plannedEffortMinutes <= 0) {
+            throw new BusinessRuleException("Sprint task estimates must total more than zero before forecasting cost.");
+        }
         ProjectContextSource.ProjectContext project = projects.contextFor(sprint.projectId());
 
         BigDecimal blendedRate = developers.averageHourlyRate(sprint.projectId());
         List<DeveloperFeatureSource.DeveloperFeatures> team = developers.candidatesFor(sprint.projectId());
         long effortMinutes = effort.sprintEffortMinutes(sprintId);
         long overtimeMinutes = effort.sprintOvertimeMinutes(sprintId);
-        long plannedEffortMinutes = effort.sprintPlannedEstimateMinutes(sprintId);
-        long sprintTaskCount = effort.sprintTaskCount(sprintId);
         long totalTasks = sprintTaskCount > 0 ? sprintTaskCount : Math.max(sprint.storyCount(), 1L);
         long concurrentAssignments = effort.concurrentAssignments(sprint.projectId());
         BigDecimal budget = sprint.budgetAmount() != null ? sprint.budgetAmount() : project.budgetAmount();
@@ -246,7 +258,7 @@ public class CostForecastService {
         boolean accuracyEligible = "COMPLETED".equalsIgnoreCase(sprint.status());
         BigDecimal estimatedRemainingCost = accuracyEligible
                 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
-                : actualCost(effort.sprintRemainingEstimateMinutes(sprintId), BigDecimal.ZERO, blendedRate);
+                : actualCost(effort.sprintRemainingEstimateMinutes(sprintId), 0L, blendedRate);
         BigDecimal projectedFinalCost = actualCostSoFar.add(estimatedRemainingCost)
                 .setScale(2, RoundingMode.HALF_UP);
 
@@ -330,12 +342,17 @@ public class CostForecastService {
         return value == null ? null : value.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal actualCost(long effortMinutes, BigDecimal overtimeHours, BigDecimal hourlyRate) {
-        BigDecimal hours = BigDecimal.valueOf(effortMinutes)
+    private BigDecimal actualCost(long effortMinutes, long overtimeMinutes, BigDecimal hourlyRate) {
+        return weightedDollarMinutes(effortMinutes, overtimeMinutes, hourlyRate)
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
-        BigDecimal base = hours.multiply(hourlyRate);
-        BigDecimal overtimePremium = overtimeHours.multiply(hourlyRate).multiply(BigDecimal.valueOf(0.5));
-        return base.add(overtimePremium).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal weightedDollarMinutes(long effortMinutes, long overtimeMinutes,
+                                             BigDecimal hourlyRate) {
+        // An overtime minute already appears in effortMinutes; add only its 0.5x premium.
+        BigDecimal billableMinutes = BigDecimal.valueOf(effortMinutes)
+                .add(BigDecimal.valueOf(overtimeMinutes).multiply(BigDecimal.valueOf(0.5)));
+        return billableMinutes.multiply(hourlyRate);
     }
 
     private BigDecimal actualCost(
@@ -351,12 +368,10 @@ public class CostForecastService {
                                     && candidate.compareTo(BigDecimal.ZERO) > 0)
                             .findFirst()
                             .orElse(fallbackRate);
-                    BigDecimal overtimeHours = BigDecimal.valueOf(row.overtimeMinutes())
-                            .divide(BigDecimal.valueOf(60), 4, RoundingMode.HALF_UP);
-                    return actualCost(row.minutes(), overtimeHours, rate);
+                    return weightedDollarMinutes(row.minutes(), row.overtimeMinutes(), rate);
                 })
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
     }
 
     private CostPredictionAccuracy accuracy(CostForecast forecast, BigDecimal actualCost) {
