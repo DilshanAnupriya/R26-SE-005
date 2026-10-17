@@ -384,6 +384,16 @@ export default function CostDashboard() {
   });
 
   const sprintTasks = taskBoard.data?.columns.flatMap((column) => column.tasks) ?? [];
+  const unestimatedTaskCount = sprintTasks.filter(
+    (task) => task.estimateMinutes == null || task.estimateMinutes <= 0,
+  ).length;
+  const planIssue = taskBoard.isSuccess
+    ? sprintTasks.length === 0
+      ? "Add at least one task with a positive effort estimate before forecasting cost."
+      : unestimatedTaskCount > 0
+        ? `Estimate all sprint tasks before forecasting cost (${unestimatedTaskCount} missing or zero).`
+        : null
+    : null;
   const capacityByUser = new Map(
     (capacity.data?.members ?? []).map((entry) => [entry.userId, entry]),
   );
@@ -621,7 +631,7 @@ export default function CostDashboard() {
               <Button
                 type="button"
                 variant="secondary"
-                disabled={!selectedSprint || forecast.isPending}
+                disabled={!selectedSprint || forecast.isPending || Boolean(planIssue)}
                 onClick={() => runForecast("initial")}
               >
                 {pendingStage === "initial" ? (
@@ -636,7 +646,7 @@ export default function CostDashboard() {
             <div className="flex items-center gap-1">
               <Button
                 type="button"
-                disabled={!selectedSprint || forecast.isPending}
+                disabled={!selectedSprint || forecast.isPending || Boolean(planIssue)}
                 onClick={() => runForecast("mid-sprint")}
               >
                 {pendingStage === "mid-sprint" ? (
@@ -650,6 +660,11 @@ export default function CostDashboard() {
             </div>
           </div>
         </div>
+        {planIssue ? (
+          <p role="status" className="mt-3 rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+            {planIssue}
+          </p>
+        ) : null}
       </section>
 
       {status === "anonymous" ? (
@@ -719,8 +734,8 @@ export default function CostDashboard() {
               />
               <MetricCard
                 label="Planned sprint cost"
-                value={money(plannedLaborCost, currency)}
-                hint={`${hours(plannedEffortMinutes)} estimated effort`}
+                value={planIssue ? "-" : money(plannedLaborCost, currency)}
+                hint={planIssue ? "Estimate sprint tasks to calculate a plan" : `${hours(plannedEffortMinutes)} estimated effort`}
               />
               <MetricCard
                 label={actualCostLabel}
@@ -730,7 +745,7 @@ export default function CostDashboard() {
               <MetricCard
                 label="Sprint budget"
                 value={money(sprintBudget, currency)}
-                hint={latestHistory ? `${money(latestHistory.forecastAmount, currency)} latest forecast` : "No forecast yet"}
+                hint={planIssue ? "Forecast unavailable until tasks are estimated" : latestHistory ? `${money(latestHistory.forecastAmount, currency)} latest forecast` : "No forecast yet"}
               />
             </div>
 
@@ -743,7 +758,11 @@ export default function CostDashboard() {
                   <p className="text-xs text-muted-foreground">Planning estimate, not an invoice.</p>
                 </div>
 
-                {forecast.isError ? (
+                {planIssue ? (
+                  <p role="status" className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+                    {planIssue} Any earlier forecast in History reflects an older plan.
+                  </p>
+                ) : forecast.isError ? (
                   <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                     {forecastError(forecast.error)}
                   </p>
@@ -795,7 +814,16 @@ export default function CostDashboard() {
                   model already reads, and this is the one reading on the page that
                   comes from somewhere the cost model cannot see. */}
               <div className="space-y-5">
-                <CostRiskCrossCheckPanel sprintId={selectedSprint.id} />
+                {planIssue ? (
+                  <section className="rounded-lg border bg-card p-4 shadow-card" aria-label="Cost vs risk">
+                    <h3 className="font-semibold">Cost vs risk</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Estimate sprint tasks before comparing cost and risk.
+                    </p>
+                  </section>
+                ) : (
+                  <CostRiskCrossCheckPanel sprintId={selectedSprint.id} />
+                )}
 
                 <section className="rounded-lg border bg-card p-4 shadow-card" aria-labelledby="planning-signals">
                 <h3 id="planning-signals" className="font-semibold">
@@ -892,6 +920,11 @@ export default function CostDashboard() {
                   Refresh
                 </Button>
               </div>
+              {planIssue ? (
+                <p className="mt-3 text-sm text-amber-800 dark:text-amber-300">
+                  Current plan is incomplete. Earlier forecast rows are retained for audit and should not be used as the current cost estimate.
+                </p>
+              ) : null}
               <HistoryTable
                 history={history.data ?? []}
                 currency={currency}
