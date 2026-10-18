@@ -1,5 +1,5 @@
 -- =====================================================================
--- V34 · Bump M1 story points after changing how a small Story is read
+-- V36 · Bump M1 story points after changing how a small Story is read
 --
 -- The weights are unchanged. What changed is how SprintIQ's Story (and Task)
 -- type reaches the model. The dataset splits work into "feature" (a new
