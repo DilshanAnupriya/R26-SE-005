@@ -138,7 +138,7 @@ public class AppProperties {
         private String apiKey = "";
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
         private String path = "/chat/completions";
-        private String model = "gemini-2.0-flash";
+        private String model = "gemini-3.5-flash";
         private int maxTokens = 2048;
         private int timeoutMs = 60000;
 

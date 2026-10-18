@@ -136,6 +136,28 @@ class OpenAiCompatibleLlmClientTest {
     }
 
     @Test
+    @DisplayName("hands a tool call's thought signature back to the provider untouched")
+    void echoesThoughtSignature() throws Exception {
+        // Gemini 3 answers 400 to the follow-up request if the call it made comes back
+        // without the signature it attached.
+        OpenAiCompatibleLlmClient client = clientAnswering(200, """
+                {"model":"gemini-x","choices":[{"message":{"role":"assistant","content":null,
+                  "tool_calls":[{"id":"abc","type":"function",
+                    "function":{"name":"get_sprint_risk","arguments":"{}"},
+                    "extra_content":{"google":{"thought_signature":"sig-123"}}}]}}]}
+                """);
+
+        LlmReply reply = client.chat(List.of(LlmMessage.user("risk?")), List.of(RISK_TOOL));
+        client.chat(List.of(LlmMessage.user("risk?"),
+                LlmMessage.assistantToolCalls(null, reply.toolCalls()),
+                LlmMessage.toolResult("abc", "{}")), List.of(RISK_TOOL));
+
+        JsonNode echoed = mapper.readTree(lastBody.get()).path("messages").get(1).path("tool_calls").get(0);
+        assertThat(echoed.path("extra_content").path("google").path("thought_signature").asText())
+                .isEqualTo("sig-123");
+    }
+
+    @Test
     @DisplayName("invents an id when the provider leaves a tool call unnamed")
     void missingToolCallId() throws Exception {
         OpenAiCompatibleLlmClient client = clientAnswering(200, """
@@ -162,6 +184,10 @@ class OpenAiCompatibleLlmClientTest {
         assertThatThrownBy(() -> clientAnswering(400, "{}").chat(List.of(LlmMessage.user("x")), List.of()))
                 .isInstanceOf(LlmUnavailableException.class)
                 .hasMessageContaining("model name");
+        stop();
+        assertThatThrownBy(() -> clientAnswering(404, "{}").chat(List.of(LlmMessage.user("x")), List.of()))
+                .isInstanceOf(LlmUnavailableException.class)
+                .hasMessageContaining("ADVISOR_MODEL");
     }
 
     @Test
@@ -179,6 +205,6 @@ class OpenAiCompatibleLlmClientTest {
         OpenAiCompatibleLlmClient client =
                 new OpenAiCompatibleLlmClient(WebClient.builder(), properties, mapper);
         assertThat(client.isConfigured()).isFalse();
-        assertThat(client.modelName()).isEqualTo("gemini-2.0-flash");
+        assertThat(client.modelName()).isEqualTo("gemini-3.5-flash");
     }
 }

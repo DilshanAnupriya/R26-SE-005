@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Plus, Radio } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,9 @@ export default function BoardPage({
   params: Promise<{ orgSlug: string; projectId: string }>;
 }) {
   const { orgSlug, projectId } = use(params);
-  const [sprintFilter, setSprintFilter] = useState<string>("");
+  // Null until somebody picks from the dropdown; "" is their explicit "All work". The two
+  // must differ, or choosing All work would be overridden by the default straight away.
+  const [chosenSprint, setChosenSprint] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [addTaskOpen, setAddTaskOpen] = useState(false);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
@@ -42,16 +44,11 @@ export default function BoardPage({
   const sprints = useSprints(projectId);
   const members = useMembers();
 
-  useEffect(() => {
-    if (!sprintFilter && sprints.data?.content) {
-      const active = sprints.data.content.find((s) => s.status === "ACTIVE");
-      if (active) {
-        setSprintFilter(active.id);
-      }
-    }
-  }, [sprints.data, sprintFilter]);
+  const sprintFilter = chosenSprint ?? defaultSprintId(sprints.data?.content ?? []);
 
-  const board = useTaskBoard(projectId, sprintFilter || undefined);
+  // Held back until the sprints are known, so the board opens on the right sprint instead
+  // of flashing every sprint's work and then narrowing.
+  const board = useTaskBoard(sprints.isPending ? undefined : projectId, sprintFilter || undefined);
   const move = useMoveTask(projectId);
   const assign = useAssignTask(projectId);
   const reopen = useReopenTask(projectId);
@@ -118,7 +115,7 @@ export default function BoardPage({
             <select
               className="h-8 rounded-md border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               value={sprintFilter}
-              onChange={(event) => setSprintFilter(event.target.value)}
+              onChange={(event) => setChosenSprint(event.target.value)}
             >
               <option value="">All work</option>
               {(sprints.data?.content ?? []).map((sprint) => (
@@ -229,4 +226,17 @@ export default function BoardPage({
       />
     </div>
   );
+}
+
+/**
+ * The sprint the board opens on: the one in progress, else the next one planned, else the
+ * most recent. "All work" stays one pick away in the dropdown, but opening on it buried
+ * the current sprint under every finished and future one.
+ */
+function defaultSprintId(sprints: { id: string; status: string; sequenceNo?: number | null }[]): string {
+  const bySequence = [...sprints].sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0));
+  const active = bySequence.find((sprint) => sprint.status === "ACTIVE");
+  const next = bySequence.find((sprint) => sprint.status === "PLANNED");
+  const latest = bySequence.at(-1);
+  return (active ?? next ?? latest)?.id ?? "";
 }

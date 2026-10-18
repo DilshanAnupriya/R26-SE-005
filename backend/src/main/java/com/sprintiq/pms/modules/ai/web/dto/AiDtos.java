@@ -1,5 +1,6 @@
 package com.sprintiq.pms.modules.ai.web.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.sprintiq.pms.common.domain.EntityType;
 import com.sprintiq.pms.modules.ai.domain.*;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -36,11 +37,16 @@ public final class AiDtos {
                                            String label,
                                            BigDecimal contribution,
                                            String direction,
-                                           String detail) {
+                                           String detail,
+                                           // The over-budget model's SHAP fix, passed through
+                                           // whole. Left off the wire when there is none, so
+                                           // every other model's drivers read as before.
+                                           @JsonInclude(JsonInclude.Include.NON_NULL)
+                                           Map<String, Object> fix) {
 
         public static PredictionDriverResponse from(PredictionDriver driver) {
             return new PredictionDriverResponse(driver.feature(), driver.label(),
-                    driver.contribution(), driver.direction(), driver.detail());
+                    driver.contribution(), driver.direction(), driver.detail(), driver.fix());
         }
     }
 

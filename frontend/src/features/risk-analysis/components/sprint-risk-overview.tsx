@@ -230,8 +230,7 @@ function ModelPanel({
 }) {
   const scored = assessment != null;
   // The adjusted score is what the badge and the gauge read: it is the number the board
-  // currently supports. The model's own figure stays visible underneath, because a
-  // dashboard that cannot be reconciled with the prediction record gets distrusted.
+  // currently supports.
   const displayed = assessment?.adjustedScore ?? assessment?.riskScore ?? null;
   const delta = assessment?.adjustmentDelta ?? 0;
 
@@ -246,17 +245,11 @@ function ModelPanel({
 
       {scored ? (
         <>
-          {delta !== 0 ? (
-            <p className="mt-1 text-xs text-ink-3">
-              Model said {asPercent(assessment?.riskScore)}%
-              <span className={delta > 0 ? "ml-1 font-semibold text-red" : "ml-1 font-semibold text-green"}>
-                {delta > 0 ? "+" : ""}
-                {delta} from the board
-              </span>
-            </p>
-          ) : (
+          {/* The model-versus-board split is not repeated here; the explanations below
+              still break the adjusted figure down. */}
+          {delta === 0 ? (
             <p className="mt-1 text-xs text-ink-3">Scored {formatWhen(assessment?.createdAt)}</p>
-          )}
+          ) : null}
 
           {assessment?.explanation ? (
             <p className="mt-2 text-xs leading-relaxed text-ink-2">{assessment.explanation}</p>

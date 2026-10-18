@@ -215,7 +215,7 @@ public class AiController {
                 .map(turn -> new RiskAdvisorService.Turn(turn.role(), turn.content()))
                 .toList();
         return advisor.ask(risk.latest(sprintId), risk.adjustments(sprintId),
-                request.question(), history);
+                riskTrend.dailyTrend(sprintId), request.question(), history);
     }
 
     @Operation(summary = "Compare the risk profile of several sprints",
