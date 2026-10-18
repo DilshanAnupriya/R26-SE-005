@@ -71,6 +71,15 @@ public class SprintWatchService {
      */
     private static final BigDecimal SILENT_BASE = BigDecimal.valueOf(6);
     private static final BigDecimal SILENT_CAP = BigDecimal.valueOf(10);
+
+    /**
+     * What a silent task still costs once it is finished, as a share of its charge.
+     *
+     * <p>Finishing earns back half: the work got done. The other half stays, because it
+     * was done with nobody discussing it, and that is the collaboration gap the charge
+     * recorded. A comment on the task still clears it entirely.</p>
+     */
+    private static final BigDecimal SILENT_DONE_SHARE = new BigDecimal("0.5");
     private static final BigDecimal NOT_STARTED_BUDGET_BASE = BigDecimal.valueOf(6);
     private static final BigDecimal NOT_STARTED_BUDGET_CAP = BigDecimal.valueOf(10);
     private static final BigDecimal NOT_STARTED_COLLAB_BASE = BigDecimal.valueOf(4);
@@ -154,8 +163,9 @@ public class SprintWatchService {
         }
 
         Instant now = Instant.now();
+        java.util.Set<String> silentCharged = chargedKeys(sprintId, KEY_TASK_SILENT);
         for (WatchedTask task : tasks) {
-            silentTask(sprintId, task, now);
+            silentTask(sprintId, task, now, silentCharged);
             unansweredComment(sprintId, task, now);
             notStartedByHalfTime(sprintId, task, now);
             overdue(sprintId, task, now);
@@ -300,23 +310,47 @@ public class SprintWatchService {
      * A task half its estimate old that nobody has commented on once.
      *
      * <p>Cleared as soon as anyone says anything — the condition is "nobody has spoken",
-     * and one comment ends it.</p>
+     * and one comment ends it. Finishing the task without a word only halves it (see
+     * {@link #SILENT_DONE_SHARE}); a task finished before it was ever charged owes
+     * nothing.</p>
      */
-    private void silentTask(java.util.UUID sprintId, WatchedTask task, Instant now) {
+    private void silentTask(java.util.UUID sprintId, WatchedTask task, Instant now,
+                            java.util.Set<String> charged) {
         String key = KEY_TASK_SILENT + task.taskId();
         Instant halfTime = task.halfTimeMark();
 
-        if (task.commentCount() > 0 || task.isFinished() || halfTime == null) {
+        if (task.commentCount() > 0 || halfTime == null) {
             adjustments.clear(sprintId, key);
+            return;
+        }
+        BigDecimal charge = TaskRiskWeight.charge(task.estimateMinutes(), SILENT_BASE, SILENT_CAP);
+        if (task.isFinished()) {
+            // Only a task the rule had already charged keeps a residual. Its half-time mark
+            // keeps moving with the wall clock after it is done, so reading that instead
+            // would bill a task finished well inside its estimate.
+            if (!charged.contains(key)) {
+                adjustments.clear(sprintId, key);
+                return;
+            }
+            adjustments.revise(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
+                    charge.multiply(SILENT_DONE_SHARE).setScale(2, java.math.RoundingMode.HALF_UP),
+                    "\"" + task.title() + "\" finished with no discussion on it");
             return;
         }
         if (now.isBefore(halfTime)) {
             return;
         }
         // Revised rather than recorded once, so re-estimating the task re-prices it.
-        adjustments.revise(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
-                TaskRiskWeight.charge(task.estimateMinutes(), SILENT_BASE, SILENT_CAP),
+        adjustments.revise(sprintId, RiskType.COMMUNICATION_COLLABORATION, key, charge,
                 "No discussion on \"" + task.title() + "\" past half its estimate");
+    }
+
+    /** The source keys under this prefix the sprint's ledger currently holds. */
+    private java.util.Set<String> chargedKeys(java.util.UUID sprintId, String prefix) {
+        return adjustments.ledgerFor(sprintId).entries().stream()
+                .map(entry -> entry.getSourceKey())
+                .filter(key -> key != null && key.startsWith(prefix))
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     /**

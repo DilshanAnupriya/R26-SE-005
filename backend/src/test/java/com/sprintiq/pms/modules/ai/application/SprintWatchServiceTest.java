@@ -178,10 +178,54 @@ class SprintWatchServiceTest {
                 eq(SprintWatchService.KEY_NOT_DONE_OVERDUE + TASK), any(), any());
     }
 
+    /** A ledger already holding the sweep's silence charge for {@link #TASK}. */
+    private void givenSilenceAlreadyCharged(BigDecimal delta) {
+        com.sprintiq.pms.modules.ai.domain.SprintRiskAdjustment entry =
+                com.sprintiq.pms.modules.ai.domain.SprintRiskAdjustment.builder()
+                        .sprintId(SPRINT)
+                        .riskType(RiskType.COMMUNICATION_COLLABORATION)
+                        .delta(delta)
+                        .reason("silent")
+                        .sourceKey(SprintWatchService.KEY_TASK_SILENT + TASK)
+                        .build();
+        when(adjustments.ledgerFor(SPRINT)).thenReturn(
+                new SprintRiskAdjustmentService.Ledger(List.of(entry)));
+    }
+
+    @Test
+    @DisplayName("finishing a silent task halves its charge rather than clearing it")
+    void finishingSilentTaskKeepsHalf() {
+        givenTask(task("DONE", Instant.now().minus(Duration.ofHours(6)), 0, null));
+        givenSilenceAlreadyCharged(BigDecimal.valueOf(6));
+
+        service.watch(SPRINT);
+
+        ArgumentCaptor<BigDecimal> delta = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(adjustments).revise(eq(SPRINT), eq(RiskType.COMMUNICATION_COLLABORATION),
+                eq(SprintWatchService.KEY_TASK_SILENT + TASK), delta.capture(), any());
+        // An 8-hour task is charged 6; done, 3 of it stays.
+        assertThat(delta.getValue()).isEqualByComparingTo(BigDecimal.valueOf(3));
+        verify(adjustments, never()).clear(SPRINT, SprintWatchService.KEY_TASK_SILENT + TASK);
+    }
+
+    @Test
+    @DisplayName("a finished task that was discussed owes nothing for silence")
+    void finishedAndDiscussedIsCleared() {
+        givenTask(task("DONE", Instant.now().minus(Duration.ofHours(6)), 1, Instant.now()));
+        givenSilenceAlreadyCharged(BigDecimal.valueOf(6));
+
+        service.watch(SPRINT);
+
+        verify(adjustments).clear(SPRINT, SprintWatchService.KEY_TASK_SILENT + TASK);
+        verify(adjustments, never()).revise(any(), eq(RiskType.COMMUNICATION_COLLABORATION),
+                eq(SprintWatchService.KEY_TASK_SILENT + TASK), any(), any());
+    }
+
     @Test
     @DisplayName("finishing a task clears every penalty against it")
     void finishingClearsEverything() {
-        // Late, silent and long overdue — but done. Nothing should still be charged.
+        // Late, silent and long overdue — but done, and never charged for its silence
+        // (the ledger is empty), so nothing should still be charged.
         givenTask(task("DONE", Instant.now().minus(Duration.ofHours(40)), 0, null));
 
         service.watch(SPRINT);
