@@ -544,9 +544,12 @@ export default function SimulatorView() {
               {Object.entries(devLoad).map(([devId, load]) => {
                 const dev = developers.find(d => d.id === Number(devId));
                 if (dev && load > dev.capacity) {
+                  const excess = Math.round((load - dev.capacity) * 10) / 10;
+                  const devCap = Math.round(dev.capacity * 10) / 10;
+                  const formattedLoad = Math.round(load * 10) / 10;
                   return (
                     <div key={devId} className="text-xs text-muted-foreground border-l-2 border-red-500 pl-2.5 py-1 bg-red-500/5 rounded-r">
-                      <span className="font-bold text-red-500 dark:text-red-400">{dev.firstName} {dev.lastName}</span> is overloaded ({load}/{dev.capacity} SPs, +{load - dev.capacity} SP excess).
+                      <span className="font-bold text-red-500 dark:text-red-400">{dev.firstName} {dev.lastName}</span> is overloaded ({formattedLoad}/{devCap} SPs, +{excess} SP excess).
                     </div>
                   );
                 }
@@ -570,8 +573,11 @@ export default function SimulatorView() {
             {developers.map((dev) => {
               const load = devLoad[dev.id] || 0;
               const capacity = dev.capacity > 0 ? dev.capacity : 20;
+              const formattedCapacity = Math.round(capacity * 10) / 10;
+              const formattedLoad = Math.round(load * 10) / 10;
               const utilizationPct = Math.round((load / capacity) * 100);
               const isOverloaded = load > capacity;
+              const excess = Math.round((load - capacity) * 10) / 10;
 
               return (
                 <div 
@@ -592,7 +598,7 @@ export default function SimulatorView() {
                     </div>
                     <div className="text-right">
                       <div className={`text-xs font-bold ${isOverloaded ? 'text-red-500' : (utilizationPct >= 85 ? 'text-amber-500' : 'text-emerald-500 dark:text-emerald-400')}`}>
-                        {load} / {dev.capacity} SPs
+                        {formattedLoad} / {formattedCapacity} SPs
                       </div>
                       <div className="text-[10px] text-muted-foreground font-bold uppercase">{utilizationPct}% Utilized</div>
                     </div>
@@ -617,7 +623,7 @@ export default function SimulatorView() {
                     {isOverloaded && (
                       <div className="text-[10px] text-rose-400 font-semibold flex items-center gap-1">
                         <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
-                        <span>+{load - dev.capacity} SP Over Capacity (Burnout Hazard)</span>
+                        <span>+{excess} SP Over Capacity (Burnout Hazard)</span>
                       </div>
                     )}
                   </div>
