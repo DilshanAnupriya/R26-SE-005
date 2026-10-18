@@ -79,6 +79,15 @@ public class OptimizerRankingService {
             Optional<Developer> devOpt = developerRepository.findByDev_id(dev_id);
 
             if (devOpt.isPresent()) {
+                String explanationJson = "AI Recommended";
+                if (rank.containsKey("explanation") && rank.get("explanation") != null) {
+                    try {
+                        explanationJson = mapper.writeValueAsString(rank.get("explanation"));
+                    } catch (Exception ex) {
+                        explanationJson = rank.get("explanation").toString();
+                    }
+                }
+
                 Allocation allocation = Allocation.builder()
                         .developer(devOpt.get())
                         .sprint(sprintOpt.orElse(null))
@@ -89,7 +98,7 @@ public class OptimizerRankingService {
                         .finalScore(Double.valueOf(rank.get("final_score").toString()))
                         .rankPosition(Integer.valueOf(rank.get("rank").toString()))
                         .status("RECOMMENDED")
-                        .explanation("AI Recommended")
+                        .explanation(explanationJson)
                         .build();
 
                 allocationRepository.save(allocation);
@@ -145,12 +154,23 @@ public class OptimizerRankingService {
             // 4. SAVE ALLOCATIONS
             for (Map<String, Object> allocData : allocationsRaw) {
                 Long taskId = Long.valueOf(allocData.get("task_id").toString());
-                String devIdStr = allocData.get("dev_id").toString();
+                Object devIdObj = allocData.get("dev_id") != null ? allocData.get("dev_id") : allocData.get("allocated_to");
+                if (devIdObj == null) continue;
+                String devIdStr = devIdObj.toString();
                 
                 Optional<Task> taskOpt = taskRepository.findById(taskId);
                 Optional<Developer> devOpt = developerRepository.findByDev_id(devIdStr);
 
                 if (taskOpt.isPresent() && devOpt.isPresent()) {
+                    String explanationJson = "Bulk AI Recommendation";
+                    if (allocData.containsKey("explanation") && allocData.get("explanation") != null) {
+                        try {
+                            explanationJson = new ObjectMapper().writeValueAsString(allocData.get("explanation"));
+                        } catch (Exception ex) {
+                            explanationJson = allocData.get("explanation").toString();
+                        }
+                    }
+
                     Allocation allocation = Allocation.builder()
                             .developer(devOpt.get())
                             .sprint(sprint)
@@ -159,7 +179,7 @@ public class OptimizerRankingService {
                             .finalScore(Double.valueOf(allocData.get("match_score").toString()))
                             .skillMatchScore(Double.valueOf(allocData.get("skill_match").toString()))
                             .status("AUTO_ALLOCATED")
-                            .explanation("Bulk AI Recommendation")
+                            .explanation(explanationJson)
                             .build();
 
                     allocationRepository.save(allocation);

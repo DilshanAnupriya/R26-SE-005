@@ -47,9 +47,9 @@ COST_INITIAL_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_INITIAL_MODEL_DIR",
 COST_MID_MODEL_DIR = Path(os.getenv("SPRINTIQ_COST_MID_MODEL_DIR",
                                     MODELS / "SprintCost-mid_model"))
 ALLOCATION_MODEL_PATH = Path(os.getenv("SPRINTIQ_ALLOCATION_MODEL_PATH",
-                                       MODELS / "best_model.pkl"))
+                                       MODELS / "real_allocation_model.pkl" if (MODELS / "real_allocation_model.pkl").exists() else MODELS / "best_model.pkl"))
 ALLOCATION_FEATURES_PATH = Path(os.getenv("SPRINTIQ_ALLOCATION_FEATURES_PATH",
-                                          MODELS / "feature_columns.pkl"))
+                                          MODELS / "real_feature_columns.pkl" if (MODELS / "real_feature_columns.pkl").exists() else MODELS / "feature_columns.pkl"))
 CONSISTENCY_MODEL_PATH = Path(os.getenv("SPRINTIQ_CONSISTENCY_MODEL_PATH",
                                         MODELS / "consistency_model.pkl"))
 LEARNING_RATE_MODEL_PATH = Path(os.getenv("SPRINTIQ_LEARNING_RATE_MODEL_PATH",
@@ -116,13 +116,21 @@ def load_model() -> None:
                     VELOCITY_MODEL_PATH)
 
     if OVERBUDGET_MODEL_PATH.exists():
-        over_budget = RiskPredictor(OVERBUDGET_MODEL_PATH, "over_budget")
+        try:
+            over_budget = RiskPredictor(OVERBUDGET_MODEL_PATH, "over_budget")
+        except Exception as e:
+            log.warning("Could not load over_budget model bundle: %s", e)
+            over_budget = None
     else:
         log.warning("No over-budget bundle at %s — /predict/risk/over-budget will answer 503.",
                     OVERBUDGET_MODEL_PATH)
 
     if REQCHANGE_MODEL_PATH.exists():
-        requirement_change = RiskPredictor(REQCHANGE_MODEL_PATH, "requirement_change")
+        try:
+            requirement_change = RiskPredictor(REQCHANGE_MODEL_PATH, "requirement_change")
+        except Exception as e:
+            log.warning("Could not load requirement_change model bundle: %s", e)
+            requirement_change = None
     else:
         log.warning("No requirement-change bundle at %s — /predict/risk/requirement-change will answer 503",
                     REQCHANGE_MODEL_PATH)
@@ -144,10 +152,16 @@ def load_model() -> None:
     # Load Resource Allocation & Developer Ranking ML Model
     if ALLOCATION_MODEL_PATH.exists() and ALLOCATION_FEATURES_PATH.exists():
         try:
-            allocation_model = joblib.load(ALLOCATION_MODEL_PATH)
+            loaded_bundle = joblib.load(ALLOCATION_MODEL_PATH)
+            if isinstance(loaded_bundle, dict) and "model" in loaded_bundle:
+                allocation_model = loaded_bundle["model"]
+                shap_model = loaded_bundle.get("constituent_models", {}).get("rf", allocation_model)
+            else:
+                allocation_model = loaded_bundle
+                shap_model = allocation_model
             allocation_feature_columns = joblib.load(ALLOCATION_FEATURES_PATH)
             explainability_engine = ExplainabilityEngine(
-                model=allocation_model,
+                model=shap_model,
                 feature_columns=allocation_feature_columns
             )
             log.info("✓ Resource Allocation ML model and Explainability engine loaded successfully!")
@@ -350,6 +364,7 @@ def allocate_sprint_endpoint(data: dict) -> dict[str, Any]:
 
             explained_allocations.append({
                 "task_id": alloc["task_id"],
+                "dev_id": alloc["dev_id"],
                 "allocated_to": alloc["dev_id"],
                 "match_score": round(float(alloc["match_score"]), 2),
                 "skill_match": round(float(alloc["skill_match"]), 3),
