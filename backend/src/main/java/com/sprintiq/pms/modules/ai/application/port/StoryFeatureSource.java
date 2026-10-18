@@ -84,7 +84,11 @@ public interface StoryFeatureSource {
         // story with no labels is no worse off than it was.
         private static final java.util.regex.Pattern INTEGRATION_HINTS =
                 java.util.regex.Pattern.compile(
-                        "\\b(integrat\\w*|webhook|sync|import|export|third[- ]party|api|sso|oauth)\\b",
+                        // No bare "import" or "export": in a sentence they are usually
+                        // the system's own feature — an Export button, a CSV export —
+                        // and "Add a tooltip to the Export button" was being sized as
+                        // integration work. A person's "import"/"export" label still counts.
+                        "\\b(integrat\\w*|webhook|sync|third[- ]party|api|sso|oauth)\\b",
                         java.util.regex.Pattern.CASE_INSENSITIVE);
         private static final java.util.regex.Pattern SECURITY_HINTS =
                 java.util.regex.Pattern.compile(

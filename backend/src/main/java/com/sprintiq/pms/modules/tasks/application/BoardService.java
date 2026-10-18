@@ -96,7 +96,8 @@ public class BoardService {
                 default -> com.sprintiq.pms.modules.tasks.domain.TaskStatus.TODO;
             };
 
-            int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+            int estimateMins = story.getStoryPoints() != null
+                    ? TaskService.storyPointMinutes(story.getStoryPoints()) : 0;
             var assignee = story.getAssigneeId() != null ? userSummaries.get(story.getAssigneeId()) : null;
 
             TaskResponse response = new TaskResponse(

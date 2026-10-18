@@ -36,10 +36,17 @@ import java.util.Map;
 @ConditionalOnProperty(name = "app.ai.provider", havingValue = "mock", matchIfMissing = true)
 public class MockAiModelClient implements AiModelClient {
 
-    /** The estimation scale teams actually use; predictions snap to it. */
-    private static final BigDecimal[] FIBONACCI = {
-            BigDecimal.ONE, BigDecimal.valueOf(2), BigDecimal.valueOf(3), BigDecimal.valueOf(5),
-            BigDecimal.valueOf(8), BigDecimal.valueOf(13), BigDecimal.valueOf(21)};
+    /**
+     * The estimation scale teams actually use; predictions snap to it.
+     *
+     * <p>The Planning Poker deck, 0 to 100 — the one scale SprintIQ uses for the picker, the
+     * model service and this, so the mock and the real model answer on the same cards.</p>
+     */
+    private static final BigDecimal[] SCALE = {
+            BigDecimal.ZERO, new BigDecimal("0.5"), BigDecimal.ONE, BigDecimal.valueOf(2),
+            BigDecimal.valueOf(3), BigDecimal.valueOf(5), BigDecimal.valueOf(8),
+            BigDecimal.valueOf(13), BigDecimal.valueOf(20), BigDecimal.valueOf(40),
+            BigDecimal.valueOf(100)};
 
     @Override
     public String providerName() {
@@ -711,11 +718,11 @@ public class MockAiModelClient implements AiModelClient {
                 : PredictionDriver.down(feature, label, rounded, detail);
     }
 
-    /** Nearest Fibonacci point, because that is the only scale a team can act on. */
+    /** Nearest card on the deck, because that is the only scale a team can act on. */
     private BigDecimal snapToScale(BigDecimal raw) {
-        BigDecimal best = FIBONACCI[0];
+        BigDecimal best = SCALE[0];
         BigDecimal bestDistance = raw.subtract(best).abs();
-        for (BigDecimal candidate : FIBONACCI) {
+        for (BigDecimal candidate : SCALE) {
             BigDecimal distance = raw.subtract(candidate).abs();
             if (distance.compareTo(bestDistance) < 0) {
                 best = candidate;
