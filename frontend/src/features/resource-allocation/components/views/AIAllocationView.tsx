@@ -204,8 +204,8 @@ function buildGroups(data: any[]): TaskGroup[] {
 
   map.forEach((group) => {
     group.recommendations.sort((a, b) => a.rankPosition - b.rankPosition);
-    if (group.recommendations.length > 3) {
-      group.recommendations = group.recommendations.slice(0, 3);
+    if (group.recommendations.length > 5) {
+      group.recommendations = group.recommendations.slice(0, 5);
     }
     if (group.recommendations.some((r) => r.status === "ALLOCATED")) {
       group.overallStatus = "Approved";
@@ -1295,9 +1295,10 @@ export default function AIAllocationView() {
               onClick={handleApproveAll}
               disabled={approvingAll || !selectedSprintId}
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm cursor-pointer"
+              title="Runs Global Hungarian Optimization to balance sprint workload across all developers and eliminate idle capacity"
             >
               {approvingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              <span>Approve All (#1)</span>
+              <span>AI Auto-Allocate (Global Optimal)</span>
             </button>
           )}
 

@@ -80,6 +80,7 @@ interface DeveloperData {
   current_tasks: number;
   consistency: number;
   learning_rate: number;
+  base_velocity?: number;
   profile?: DeveloperProfile;
 }
 
@@ -105,6 +106,8 @@ interface UIDeveloper {
   avatar: string;
   skills: string[];
   workload: number;
+  capacity: number;
+  capacitySource: "empirical" | "cold-start";
   availability: number;
   performance: number;
   status: string;
@@ -165,6 +168,10 @@ export default function DevelopersView() {
             ? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim()
             : dev.dev_id;
 
+          const empiricalVel = (dev.base_velocity && dev.base_velocity > 0) ? dev.base_velocity : 0;
+          const capacity = empiricalVel > 0 ? empiricalVel : (dev.experience_level || 2) * 10;
+          const capacitySource: "empirical" | "cold-start" = empiricalVel > 0 ? "empirical" : "cold-start";
+
           return {
             id: dev.id,
             raw: dev,
@@ -173,6 +180,8 @@ export default function DevelopersView() {
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || dev.dev_id)}&background=random`,
             skills,
             workload: dev.current_workload,
+            capacity: Math.round(capacity * 10) / 10,
+            capacitySource,
             availability: dev.availability ?? 100,
             performance: Math.round(dev.consistency * 100),
             status: dev.availability > 40 ? "Available" : "Busy",
@@ -339,16 +348,28 @@ export default function DevelopersView() {
                   {/* Workload & Availability Progress */}
                   <div className="pt-3 border-t border-border space-y-3">
                     <div>
-                      <div className="flex justify-between text-xs mb-1.5">
+                      <div className="flex justify-between items-center text-xs mb-1.5">
                         <span className="text-muted-foreground font-medium">Sprint Workload</span>
-                        <span className="font-bold text-foreground">{dev.workload} SPs</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-foreground">{dev.workload} / {Math.round(dev.capacity)} SPs</span>
+                          <span
+                            className={`text-[9px] font-mono px-1 py-0.5 rounded border ${
+                              dev.capacitySource === 'empirical'
+                                ? 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20'
+                                : 'text-muted-foreground bg-muted border-border'
+                            }`}
+                            title={dev.capacitySource === 'empirical' ? 'Empirical historical velocity' : 'Cold-start prior baseline'}
+                          >
+                            {dev.capacitySource === 'empirical' ? 'velocity' : 'prior'}
+                          </span>
+                        </div>
                       </div>
                       <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                         <div 
                           className={`h-full rounded-full transition-all duration-500 ${
-                            dev.workload > 30 ? 'bg-red-500' : dev.workload > 20 ? 'bg-amber-500' : 'bg-primary'
+                            dev.workload > dev.capacity ? 'bg-red-500' : dev.workload >= dev.capacity * 0.85 ? 'bg-amber-500' : 'bg-primary'
                           }`}
-                          style={{ width: `${Math.min((dev.workload / ((dev.raw.experience_level || 2) * 10)) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((dev.workload / Math.max(1, dev.capacity)) * 100, 100)}%` }}
                         />
                       </div>
                     </div>
@@ -372,7 +393,7 @@ export default function DevelopersView() {
                 <div className="mt-5 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
                   <span className="flex items-center gap-1 font-mono text-[11px]">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-                    Level {dev.raw.experience_level || 2} ({((dev.raw.experience_level || 2) * 10)} SPs)
+                    Level {dev.raw.experience_level || 2} • {Math.round(dev.capacity)} SP cap
                   </span>
                   <span className="font-semibold text-primary group-hover:underline flex items-center gap-1 text-[11px]">
                     View Metrics →
@@ -467,8 +488,10 @@ export default function DevelopersView() {
                       <span className="text-[11px] font-bold text-muted-foreground uppercase">Workload</span>
                       <Briefcase className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
                     </div>
-                    <div className="text-xl font-bold text-foreground">{selectedDev.workload} <span className="text-xs text-muted-foreground">/ {(selectedDev.raw.experience_level || 2) * 10} SPs</span></div>
-                    <div className="text-[10px] text-muted-foreground mt-1">Sprint capacity utilization</div>
+                    <div className="text-xl font-bold text-foreground">{selectedDev.workload} <span className="text-xs text-muted-foreground">/ {Math.round(selectedDev.capacity)} SPs</span></div>
+                    <div className="text-[10px] text-muted-foreground mt-1">
+                      {selectedDev.capacitySource === 'empirical' ? 'Empirical sprint capacity' : 'Cold-start prior baseline'}
+                    </div>
                   </div>
 
                   <div className="bg-muted/40 p-4 rounded-2xl border border-border">

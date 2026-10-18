@@ -205,9 +205,11 @@ public class OptimizerDeveloperService {
                     hasData = true;
                     for (UUID userId : userIds) {
                         List<Map<String, Object>> storyStats = jdbcTemplate.queryForList(
-                                "SELECT COALESCE(SUM(COALESCE(story_points, 3)), 0) AS total_pts, COUNT(id) AS total_cnt " +
-                                "FROM stories " +
-                                "WHERE assignee_id = ? AND status NOT IN ('DONE', 'ACCEPTED', 'CANCELLED') AND deleted_at IS NULL",
+                                "SELECT COALESCE(SUM(COALESCE(s.story_points, 3)), 0) AS total_pts, COUNT(s.id) AS total_cnt " +
+                                "FROM stories s " +
+                                "LEFT JOIN sprints sp ON s.sprint_id = sp.id " +
+                                "WHERE s.assignee_id = ? AND s.status NOT IN ('DONE', 'ACCEPTED', 'CANCELLED') " +
+                                "AND (s.sprint_id IS NULL OR sp.status = 'ACTIVE') AND s.deleted_at IS NULL",
                                 userId
                         );
                         if (!storyStats.isEmpty()) {
@@ -237,8 +239,8 @@ public class OptimizerDeveloperService {
             if (hasData) {
                 dev.setCurrent_workload(activePoints);
                 dev.setCurrent_tasks(activeTasks);
-                int capacity = (dev.getExperience_level() > 0 ? dev.getExperience_level() : 2) * 10;
-                double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0, capacity - activePoints) / capacity) * 100.0));
+                double capacity = dev.getEffectiveCapacity();
+                double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0.0, capacity - activePoints) / capacity) * 100.0));
                 dev.setAvailability(availPct);
                 developerRepository.save(dev);
             }
