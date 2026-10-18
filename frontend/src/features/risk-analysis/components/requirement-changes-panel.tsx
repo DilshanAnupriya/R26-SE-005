@@ -348,37 +348,6 @@ function LogChangeDialog({
   // A priority set on a story is read the same way: raised is harder, lowered is easier.
   const directionFixed =
     (info?.directionFixed ?? false) || descriptionEdit || priorityEdit || criteriaEdit;
-  const effectiveDirection: ImpactDirection | null = descriptionEdit
-    ? descriptionDirection
-    : criteriaEdit && criteriaNet === 0
-      ? criteriaSwapDirection
-      : priorityEdit || criteriaEdit
-      ? levels > 0
-        ? "INCREASE"
-        : levels < 0
-          ? "DECREASE"
-          : null
-      : directionFixed
-      ? (info && info.increaseDelta < 0 ? "DECREASE" : "INCREASE")
-      : direction;
-  const perLevel =
-    info && effectiveDirection
-      ? effectiveDirection === "DECREASE"
-        ? info.decreaseDelta
-        : info.increaseDelta
-      : null;
-  const delta =
-    perLevel == null
-      ? null
-      : priorityEdit || criteriaEdit
-        ? perLevel * Math.max(1, Math.abs(levels))
-        : perLevel;
-  const hint =
-    info && effectiveDirection
-      ? effectiveDirection === "DECREASE"
-        ? info.decreaseHint
-        : info.increaseHint
-      : null;
 
   // Scope is recorded against the story's points, and has to move the way the type says
   // — the server refuses anything else, so the form says so before it is sent.
@@ -689,32 +658,10 @@ function LogChangeDialog({
           ) : null}
 
           {/*
-            The consequence is stated before the change is logged, using the weights the
-            server serves. A form that surprised you with the number afterwards would
-            teach people to stop logging the changes that look expensive — which are
-            exactly the ones worth having on the record.
+            The charge itself is not previewed: the server works it out when the change is
+            logged, and the register below shows it once it is on the record.
           */}
-          {delta != null ? (
-            <div
-              className={
-                delta >= 0
-                  ? "rounded-lg border border-line bg-red-soft/40 px-3 py-2 text-sm"
-                  : "rounded-lg border border-line bg-green-soft/40 px-3 py-2 text-sm"
-              }
-            >
-              <span className="font-semibold tabular-nums">{formatDelta(delta)}</span>
-              {priorityEdit && Math.abs(levels) > 1 ? (
-                <span className="text-ink-3 tabular-nums"> ({Math.abs(levels)} levels)</span>
-              ) : null}
-              {criteriaEdit && Math.abs(levels) > 1 ? (
-                <span className="text-ink-3 tabular-nums">
-                  {" "}
-                  ({Math.abs(levels)} criteria {levels > 0 ? "added" : "deleted"})
-                </span>
-              ) : null}
-              <span className="text-ink-2"> — {hint}</span>
-            </div>
-          ) : descriptionUnchanged ? (
+          {descriptionUnchanged ? (
             <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-3">
               {priorityEdit
                 ? "Pick a different priority to log a change."
