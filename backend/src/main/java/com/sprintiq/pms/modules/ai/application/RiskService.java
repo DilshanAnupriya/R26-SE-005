@@ -510,19 +510,12 @@ public class RiskService {
             }
         }
 
-        // Requirement change is zero until a requirement has actually moved. The model
-        // reads planning columns — story length, missing criteria, the project's history —
-        // and from those alone it hands a sprint nobody has touched a standing 10-20%,
-        // which reads on the gauge as churn that has not happened. So until the register
-        // holds a change for this sprint, or its scope has moved since it started, the
-        // honest figure is nought and the model is not asked. The first logged change
-        // brings the model in, on top of that change's own charge.
-        if (riskType == RiskType.REQUIREMENT_CHANGE && !requirementsHaveMoved(sprint, ledger)) {
-            return baselineZero(RiskType.REQUIREMENT_CHANGE, sprint, ledger,
-                    "No requirement has changed in this sprint yet, so there is no "
-                    + "requirement-change risk. Log a change when one happens and this "
-                    + "will move.");
-        }
+        // Requirement change has no such gate, on purpose. It was held at nought until a
+        // change was logged, and then the model's whole planning-column reading (50-70%)
+        // arrived at once, so one extra acceptance criterion looked like a 60-point jump.
+        // Scored from the first assessment, the sprint shows the model's reading from the
+        // start; tasks are not among its inputs, and a logged change adds its own weight
+        // plus whatever the model actually moves.
 
         // A switch expression rather than a statement, so a fourth risk type is a
         // compile error here instead of a model that silently scores on the wrong
@@ -586,24 +579,8 @@ public class RiskService {
     }
 
     /**
-     * Whether anything about this sprint's requirements has moved yet.
-     *
-     * <p>Either a change in the register — every logged change writes a requirement-change
-     * entry to the sprint's ledger, so the ledger is the record that one exists — or scope
-     * added to or pulled from the sprint after it started. Planning is not churn:
-     * {@code Sprint.recordScopeChange} ignores everything before the start.</p>
-     */
-    private static boolean requirementsHaveMoved(SprintFeatureSource.SprintFeatures sprint,
-                                                 SprintRiskAdjustmentService.Ledger ledger) {
-        boolean logged = ledger.entries().stream()
-                .anyMatch(entry -> entry.getRiskType() == RiskType.REQUIREMENT_CHANGE);
-        BigDecimal volatility = sprint.scopeVolatility();
-        return logged || (volatility != null && volatility.signum() > 0);
-    }
-
-    /**
-     * An assessment of nought, for a model with nothing yet to read — requirements that
-     * have not moved, or a team with no collaboration on record.
+     * An assessment of nought, for a model with nothing yet to read — a team with no
+     * collaboration on record.
      *
      * <p>Written as a real assessment rather than left blank, so the gauge says 0% —
      * which is the finding — instead of "not scored", the board's own readings have a

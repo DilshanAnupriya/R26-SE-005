@@ -22,6 +22,7 @@ import pandas as pd
 
 from .risk_features import (OVERBUDGET_MEDIANS, REQUIREMENT_CHANGE_MEDIANS,
                             build_overbudget_row, build_requirement_change_row)
+from .risk_fixes import shap_fixes
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +87,12 @@ class RiskPredictor:
         self.class_names: list[str] = list(bundle["class_names"])
         self.metadata: dict[str, Any] = bundle.get("metadata", {})
 
+        # How many readings the driver list may name. Both models send every reading
+        # that moved the score: its tab answers "why did this go up or down" in full,
+        # with a fix under each reading that raised it, and a top five left a sprint's
+        # other reasons unexplained. The 0.01 floor in _drivers still drops the noise.
+        self.driver_limit = len(OVERBUDGET_LABELS if kind == "over_budget"
+                                else REQUIREMENT_CHANGE_LABELS)
         if kind == "over_budget":
             self._build: Callable = build_overbudget_row
             self.labels = OVERBUDGET_LABELS
@@ -178,7 +185,21 @@ class RiskPredictor:
         }
         probability = float(self.model_binary.predict_proba(frame)[0, 1])
 
-        drivers = self._drivers(frame, row)
+        drivers = self._drivers(frame, row, limit=self.driver_limit)
+        if drivers:
+            # Each raising reading gets the fix its own SHAP value points to. Attached to
+            # the driver it answers, so the reason and the remedy cannot drift apart.
+            try:
+                fixes = shap_fixes(self.model_binary, self.features, self.cat_features,
+                                   self.labels, row, drivers,
+                                   provenance.get("defaulted_to_training_median", []),
+                                   kind=self.kind)
+            except Exception as error:  # noqa: BLE001 — a missing fix never fails a prediction
+                log.warning("Could not compute SHAP fixes: %s", error)
+                fixes = {}
+            for driver in drivers:
+                if driver["feature"] in fixes:
+                    driver["fix"] = fixes[driver["feature"]]
         provenance["model_test_auc"] = self.metadata.get("test_auc_binary")
         provenance["model_cv_auc"] = self.metadata.get("cv_mean_auc")
 
@@ -223,12 +244,7 @@ class RiskPredictor:
                          f"the level as a leaning rather than a verdict. ")
 
         if drivers:
-            up = [d for d in drivers if d["direction"] == "INCREASE"][:2]
-            down = [d for d in drivers if d["direction"] == "DECREASE"][:2]
-            if up:
-                sentence += "Raised by " + " and ".join(d["feature"] for d in up) + ". "
-            if down:
-                sentence += "Lowered by " + " and ".join(d["feature"] for d in down) + ". "
+            sentence += self._explain_from_shap(drivers)
 
         if provenance.get("team_type_inferred"):
             sentence += (f"The team pattern '{provenance['team_type']}' was inferred from "
@@ -241,3 +257,42 @@ class RiskPredictor:
                          f"values, so this says more about sprints in general than about "
                          f"this one.")
         return sentence.strip()
+
+    @staticmethod
+    def _explain_from_shap(drivers: list[dict[str, Any]]) -> str:
+        """The reasons and the remedy, both read off this prediction's SHAP values.
+
+        Each reason carries its SHAP contribution in log-odds, so the sentence states
+        how hard a reading pushed rather than only that it did. The remedy is the
+        measured fix that lowers the model's probability the most — the same fix shown
+        under that reading, so the summary and the list cannot disagree.
+        """
+        up = [d for d in drivers if d["direction"] == "INCREASE"][:3]
+        down = [d for d in drivers if d["direction"] == "DECREASE"][:2]
+
+        def pushes(items: list[dict[str, Any]]) -> str:
+            return ", ".join(f"{d['label']} ({d['contribution']:+.2f})" for d in items)
+
+        sentence = ""
+        if up:
+            sentence += f"SHAP: raised most by {pushes(up)}. "
+        if down:
+            sentence += f"{'Lowered' if up else 'SHAP: lowered'} most by {pushes(down)}. "
+
+        measured = [d["fix"] for d in drivers
+                    if d.get("fix") and d["fix"].get("move")
+                    and d["fix"].get("probability_after") is not None]
+        if measured:
+            best = min(measured, key=lambda fix: fix["probability_after"])
+            move = best["move"]
+
+            def shown(value: Any) -> str:
+                return f"{value:g}" if isinstance(value, (int, float)) else f"{value}"
+
+            numeric = all(isinstance(move.get(end), (int, float)) for end in ("from", "to"))
+            verb = "raise" if numeric and move["to"] > move["from"] else "lower"
+            sentence += (f"Biggest fix from SHAP: {verb} {move['label'] or move['feature']} "
+                         f"from {shown(move['from'])} to {shown(move['to'])}, which takes the "
+                         f"model's risk from {best['probability_now'] * 100:.0f}% to "
+                         f"{best['probability_after'] * 100:.0f}%. ")
+        return sentence
