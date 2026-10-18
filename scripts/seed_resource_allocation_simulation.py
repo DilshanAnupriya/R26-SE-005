@@ -418,6 +418,27 @@ def seed_test_environment() -> Dict[str, Any]:
     proj_id = execute_psql(proj_sql)
     print(f"   ✓ Created Project: {PROJECT_NAME} [{PROJECT_KEY}] (ID: {proj_id})")
 
+    # 2b. Workflow States (Kanban Board Columns)
+    wf_sql = f"""
+    INSERT INTO workflow_states (id, organization_id, project_id, name, code, category, position, color, created_at, updated_at, version)
+    VALUES
+        (gen_random_uuid(), '{org_id}', '{proj_id}', 'To Do', 'TODO', 'TODO', 0, '#94a3b8', NOW(), NOW(), 0),
+        (gen_random_uuid(), '{org_id}', '{proj_id}', 'In Progress', 'IN_PROGRESS', 'IN_PROGRESS', 1, '#3b82f6', NOW(), NOW(), 0),
+        (gen_random_uuid(), '{org_id}', '{proj_id}', 'In Review', 'IN_REVIEW', 'IN_PROGRESS', 2, '#a855f7', NOW(), NOW(), 0),
+        (gen_random_uuid(), '{org_id}', '{proj_id}', 'Done', 'DONE', 'DONE', 3, '#22c55e', NOW(), NOW(), 0),
+        (gen_random_uuid(), '{org_id}', '{proj_id}', 'Blocked', 'BLOCKED', 'IN_PROGRESS', 4, '#ef4444', NOW(), NOW(), 0);
+    """
+    execute_psql(wf_sql)
+    print("   ✓ Seeded Kanban Board Workflow States (To Do, In Progress, In Review, Done, Blocked)")
+
+    # Retrieve workflow state IDs
+    states_rows = execute_psql(f"SELECT code, id FROM workflow_states WHERE project_id = '{proj_id}';").splitlines()
+    state_id_map = {}
+    for row in states_rows:
+        if "|" in row:
+            c, sid = row.split("|")
+            state_id_map[c.strip()] = sid.strip()
+
     # 3. Developers (Core Users + Developer Profiles + Optimizer Developers)
     dev_map = {}
     for dev in DEVELOPERS:
@@ -645,15 +666,18 @@ def seed_test_environment() -> Dict[str, Any]:
                 started_at = "NULL"
                 completed_at = "NULL"
 
+            target_wf_code = 'DONE' if story_status == 'DONE' else ('BLOCKED' if is_blocked else 'TODO')
+            wf_state_uuid = state_id_map.get(target_wf_code, 'NULL')
+
             task_sql = f"""
             WITH new_story AS (
                 INSERT INTO stories (
-                    id, organization_id, project_id, sprint_id, item_key, title, description,
+                    id, organization_id, project_id, sprint_id, workflow_state_id, item_key, title, description,
                     acceptance_criteria, type, priority, status, story_points, assignee_id,
                     blocked, started_at, completed_at, created_at, updated_at, version
                 )
                 VALUES (
-                    gen_random_uuid(), '{org_id}', '{proj_id}', '{s_info['core_sprint_id']}', '{item_key}',
+                    gen_random_uuid(), '{org_id}', '{proj_id}', '{s_info['core_sprint_id']}', '{wf_state_uuid}', '{item_key}',
                     '{template['title']}', 'Implementation for {template['title']} in {template['domain']} layer.',
                     'Verify unit test coverage, API contract, and performance requirements.',
                     '{template['type']}', 'HIGH', '{story_status}', {sp}, {assigned_user_uuid},
