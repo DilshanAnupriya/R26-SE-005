@@ -45,6 +45,10 @@ public class CostForecastService {
     @Transactional
     public CostForecastResponse forecast(UUID sprintId, CostStage stage) {
         SprintFeatureSource.SprintFeatures sprint = sprints.featuresFor(sprintId);
+        if ("COMPLETED".equalsIgnoreCase(sprint.status())
+                || "CANCELLED".equalsIgnoreCase(sprint.status())) {
+            throw new BusinessRuleException("Cost forecasts are available only for planned or active sprints.");
+        }
         long sprintTaskCount = effort.sprintTaskCount(sprintId);
         if (sprintTaskCount == 0) {
             throw new BusinessRuleException("Add at least one estimated task before forecasting sprint cost.");
@@ -271,7 +275,10 @@ public class CostForecastService {
                 : projectedFinalCost.subtract(latestForecastAmount).setScale(2, RoundingMode.HALF_UP);
 
         List<CostPredictionAccuracy> rows = accuracyEligible
-                ? storedForecasts.stream().map(forecast -> accuracy(forecast, actualCostSoFar)).toList()
+                ? storedForecasts.stream()
+                    .filter(forecast -> sprint.completedAt() == null
+                            || forecast.getSnapshotAt().isBefore(sprint.completedAt()))
+                    .map(forecast -> accuracy(forecast, actualCostSoFar)).toList()
                 : List.of();
 
         CostPredictionAccuracy initial = latestOf(rows, CostStage.INITIAL);

@@ -7,10 +7,12 @@ import { BoundsLabel, ConfidenceBar, DriverList } from "./prediction-explanation
 import { cn } from "@/lib/utils";
 
 function money(amount: number, currency: string) {
+  const fractionDigits = Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2;
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
@@ -44,7 +46,7 @@ export function CostWidget({ forecast }: { forecast: CostForecast }) {
           <p className="text-[11px] text-muted-foreground">
             {forecast.stage === "MID_SPRINT"
               ? "Extrapolated from effort logged so far"
-              : "Priced from planned capacity"}
+              : "Priced from estimated task effort"}
           </p>
         </div>
         <Badge variant="outline" className="gap-1 shrink-0">
@@ -66,6 +68,7 @@ export function CostWidget({ forecast }: { forecast: CostForecast }) {
           lower={forecast.lowerBound}
           upper={forecast.upperBound}
           format={(value) => money(value, forecast.currency)}
+          prefix="Estimated range"
         />
       </div>
 

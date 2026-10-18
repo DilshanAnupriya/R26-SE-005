@@ -17,15 +17,13 @@ import { cn } from "@/lib/utils";
 /**
  * Two independent readings of the same question, side by side.
  *
- * <p>SprintIQ predicts a sprint going over budget twice. The risk model reads how the
- * team is working and never sees money; the cost model reads hours against a rate and
- * never sees the team. Neither is told the other's answer.</p>
+ * <p>SprintIQ provides two readings of budget pressure. The risk model scores delivery
+ * signals while the cost model estimates final labor cost from effort and rates.
+ * Mid-sprint cost forecasts also use delivery signals, so agreement is contextual
+ * evidence rather than an independent validation.</p>
  *
- * <p>Which makes the comparison the interesting part, and the reason this panel exists
- * as its own thing rather than another number on the cost dashboard. Agreement between
- * two models with no shared inputs is corroboration. Disagreement is a diagnosis: money
- * over with a healthy team is a pricing failure, a struggling team inside budget is a
- * process one, and the two call for opposite responses.</p>
+ * <p>The comparison helps reviewers inspect disagreement without assigning a cause from
+ * model output alone.</p>
  */
 
 const PRESENTATION: Record<
@@ -42,19 +40,19 @@ const PRESENTATION: Record<
     icon: CheckCircle2,
     tone: "border-emerald-500/40 bg-emerald-500/5",
     badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-    label: "Models agree · on track",
+    label: "No budget alert",
   },
   COST_ONLY: {
     icon: Coins,
     tone: "border-amber-500/40 bg-amber-500/5",
     badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-    label: "Plan, not execution",
+    label: "Cost forecast flagged",
   },
   RISK_ONLY: {
     icon: Users,
     tone: "border-orange-500/40 bg-orange-500/5",
     badge: "bg-orange-500/10 text-orange-700 dark:text-orange-400",
-    label: "Execution, not plan",
+    label: "Risk score flagged",
   },
   UNKNOWN: {
     icon: CircleDashed,
@@ -66,10 +64,12 @@ const PRESENTATION: Record<
 
 function money(amount: number | null | undefined, currency: string | null | undefined) {
   if (amount == null) return "—";
+  const fractionDigits = Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2;
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: currency ?? "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 

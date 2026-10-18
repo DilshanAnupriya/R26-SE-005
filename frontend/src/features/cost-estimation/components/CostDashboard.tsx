@@ -87,30 +87,30 @@ const HELP_TEXT: Record<string, string> = {
   "Story points": "Total points committed to the sprint, with completed and remaining points shown underneath.",
   "Team capacity": "Sum of effective developer hours after allocation and planned absence adjustments.",
   "Average rate": "Blended hourly rate calculated from delivery members who have an hourly rate in their developer profile.",
-  "Planned sprint cost": "The original task-estimate baseline: estimated minutes multiplied by assignee rates, with the blended rate used when needed.",
+  "Planned sprint cost": "The current task-estimate total: estimated minutes multiplied by assignee rates, with the blended rate used when needed. The initial forecast uses the team's blended rate, so the two amounts can differ.",
   "Cost incurred so far": "Labor cost recorded to date from logged time. Overtime entries are priced at 1.5 times the normal rate.",
   "Final recorded cost": "The completed sprint's recorded labor cost from logged time and developer rates, including overtime.",
   "Sprint budget": "The spending limit stored for the sprint, or the project budget when the sprint has no separate value.",
   "Forecast result": "The selected initial or mid-sprint model's predicted final labor cost, including its estimated range.",
   "Planning signals": "Live sprint inputs that provide context for the forecast and help explain delivery pressure.",
   "Sprint completion": "Completed story points divided by committed story points.",
-  "Developer availability": "Average profile availability across delivery members, alongside planned absence days.",
-  "Capacity utilisation": "Planned sprint points divided by the team's available point capacity. Values above 100% indicate overcommitment.",
+  "Profile availability": "Average baseline availability across delivery members. Planned absence is counted separately in effective team capacity.",
+  "Story-point utilisation": "Planned sprint points divided by the team's available point capacity. This is separate from the team's available hours. Values above 100% indicate overcommitment.",
   "Skill coverage": "Required task skills covered by at least one delivery member with proficiency level 3 or higher.",
   "Average velocity": "Average story points completed in the project's recent completed sprints.",
   "Sprint number": "The sprint's sequence number, used to give the model delivery-history context.",
   Tasks: "Number of tasks currently assigned to the selected sprint.",
   "Cost explanation": "Shows the financial and human-aware signals supplied with the forecast so the result can be reviewed rather than treated as a black box.",
-  "Forecast final cost": "The predicted total labor cost when the sprint finishes; it is not the original plan or the amount already recorded.",
+  "Forecast final cost": "The predicted total labor cost when the sprint finishes; it is separate from the current task plan and the amount already recorded.",
   "Overtime signal": "Total logged overtime hours. Overtime contributes at 1.5 times the normal hourly rate.",
   "Availability signal": "Average developer availability used to represent reduced capacity from planned absence.",
   "Workload pressure": "The highest individual developer load: open estimated hours divided by that developer's effective capacity.",
   "Budget variance": "Forecast final cost minus sprint budget. A positive value means the forecast is over budget.",
-  "Prediction interval": "A heuristic likely range based on held-out model error; it is not a probability confidence interval.",
-  "Cost comparison": "Places the forecast beside the original plan, sprint budget, and recorded labor cost using the same visual scale.",
+  "Prediction interval": "A heuristic estimated range based on held-out model error; it is not a probability confidence interval.",
+  "Cost comparison": "Places the saved forecast beside the current task plan, sprint budget, and recorded labor cost using the same visual scale.",
   "Budget position": "Shows how much of the sprint budget the forecast is expected to use and whether it remains within the limit.",
   "Planning context": "Human-aware delivery signals that provide context for the forecast. They are not presented as direct monetary contributions.",
-  Availability: "Average developer availability used to represent reduced capacity from planned absence.",
+  Availability: "Average baseline developer availability. Planned absence is a separate signal that reduces effective team capacity.",
   "Cost drivers": "Initial forecasts show exact formula components. Mid-sprint forecasts add signed local Shapley influences that reconcile to the final amount.",
   "Latest stored forecast": "Most recently saved forecast for this sprint, loaded from forecast history.",
   "Team cost and workload": "Developer rates, availability, effective capacity, allocation, skills, and assigned workload used by sprint planning.",
@@ -122,14 +122,14 @@ const HELP_TEXT: Record<string, string> = {
   "Projected final cost": "Actual cost so far plus the estimated cost of remaining work. This is live tracking, not final accuracy.",
   "Latest forecast": "The newest stored initial or mid-sprint model prediction.",
   "Live variance": "Projected final cost minus the latest forecast. Positive means the live projection is higher.",
-  "Final accuracy validation": "Evaluates stored forecasts only after sprint completion, when final actual labor cost is available.",
+  "Final accuracy validation": "After completion, compares forecasts saved before the sprint closed with final logged labor cost.",
   "Actual cost": "Final completed-sprint labor cost calculated from logged minutes, developer rates, and overtime.",
   MAE: "Mean Absolute Error: the average monetary distance between forecasts and final actual cost. Lower is better.",
   RMSE: "Root Mean Squared Error: similar to MAE but penalizes large forecasting errors more strongly. Lower is better.",
   MAPE: "Mean Absolute Percentage Error: average forecast error as a percentage of final actual cost. Lower is better.",
   "Mid-sprint error": "Percentage difference between the latest mid-sprint prediction and the completed sprint's final actual cost.",
   "Accuracy pending sprint completion": "Accuracy is intentionally withheld until the sprint is completed, preventing a total-cost forecast from being compared with partial actual cost.",
-  "Prediction accuracy": "Forecast-by-forecast comparison against final actual labor cost for this completed sprint.",
+  "Prediction accuracy": "Pre-completion forecast snapshots compared with final actual labor cost for this completed sprint.",
 };
 
 type TeamRow = {
@@ -176,11 +176,15 @@ function LabelWithHelp({ label }: { label: string }) {
   );
 }
 
-function money(amount?: number | null, currency = "USD", maximumFractionDigits = 0) {
+function money(amount?: number | null, currency = "USD", maximumFractionDigits = 2) {
   if (amount == null || !Number.isFinite(amount)) return "-";
+  const fractionDigits = Math.round(Math.abs(amount) * 100) % 100 === 0
+    ? 0
+    : maximumFractionDigits;
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
+    minimumFractionDigits: fractionDigits,
     maximumFractionDigits,
   }).format(amount);
 }
@@ -244,6 +248,7 @@ function costForMinutes(minutes: number, rate?: number | null, overtime = false)
 function buildLocalValidation(
   sprintId: string,
   sprintStatus: Sprint["status"],
+  completedAt: string | null | undefined,
   history: CostTrendPoint[],
   actualCost?: number | null,
   estimatedRemainingCost?: number | null,
@@ -259,7 +264,10 @@ function buildLocalValidation(
   const liveVariance = latestForecastAmount == null
     ? null
     : projectedFinalCost - latestForecastAmount;
-  const predictions: CostPredictionAccuracy[] = accuracyEligible ? history.map((point, index) => {
+  const eligibleHistory = completedAt
+    ? history.filter((point) => Date.parse(point.snapshotAt) < Date.parse(completedAt))
+    : history;
+  const predictions: CostPredictionAccuracy[] = accuracyEligible ? eligibleHistory.map((point, index) => {
     const errorAmount = actualCost - point.forecastAmount;
     const absoluteError = Math.abs(errorAmount);
 
@@ -394,6 +402,8 @@ export default function CostDashboard() {
         ? `Estimate all sprint tasks before forecasting cost (${unestimatedTaskCount} missing or zero).`
         : null
     : null;
+  const closedSprint = selectedSprint?.status === "COMPLETED"
+    || selectedSprint?.status === "CANCELLED";
   const capacityByUser = new Map(
     (capacity.data?.members ?? []).map((entry) => [entry.userId, entry]),
   );
@@ -528,6 +538,10 @@ export default function CostDashboard() {
     0,
   );
   const latestHistory = history.data?.at(-1) ?? null;
+  const latestSnapshotAfterCompletion = Boolean(
+    latestHistory && selectedSprint?.completedAt
+      && Date.parse(latestHistory.snapshotAt) >= Date.parse(selectedSprint.completedAt),
+  );
   const sprintBudget = selectedSprint?.budgetAmount ?? selectedProject?.budgetAmount ?? null;
   const pendingStage = forecast.isPending ? forecast.variables?.stage : null;
   const completedSprintCycles = sprintList.filter((sprint) => sprint.status === "COMPLETED").length;
@@ -539,6 +553,7 @@ export default function CostDashboard() {
     ? buildLocalValidation(
         selectedSprint.id,
         selectedSprint.status,
+        selectedSprint.completedAt,
         history.data ?? [],
         actualLaborCost,
         estimatedRemainingLaborCost,
@@ -631,7 +646,7 @@ export default function CostDashboard() {
               <Button
                 type="button"
                 variant="secondary"
-                disabled={!selectedSprint || forecast.isPending || Boolean(planIssue)}
+                disabled={!selectedSprint || forecast.isPending || Boolean(planIssue) || closedSprint}
                 onClick={() => runForecast("initial")}
               >
                 {pendingStage === "initial" ? (
@@ -646,7 +661,7 @@ export default function CostDashboard() {
             <div className="flex items-center gap-1">
               <Button
                 type="button"
-                disabled={!selectedSprint || forecast.isPending || Boolean(planIssue)}
+                disabled={!selectedSprint || forecast.isPending || Boolean(planIssue) || closedSprint}
                 onClick={() => runForecast("mid-sprint")}
               >
                 {pendingStage === "mid-sprint" ? (
@@ -663,6 +678,10 @@ export default function CostDashboard() {
         {planIssue ? (
           <p role="status" className="mt-3 rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
             {planIssue}
+          </p>
+        ) : closedSprint ? (
+          <p role="status" className="mt-3 text-sm text-muted-foreground">
+            This sprint is closed. Review its saved forecasts in History.
           </p>
         ) : null}
       </section>
@@ -745,7 +764,7 @@ export default function CostDashboard() {
               <MetricCard
                 label="Sprint budget"
                 value={money(sprintBudget, currency)}
-                hint={planIssue ? "Forecast unavailable until tasks are estimated" : latestHistory ? `${money(latestHistory.forecastAmount, currency)} latest forecast` : "No forecast yet"}
+                hint={planIssue ? "Forecast unavailable until tasks are estimated" : latestHistory ? `${money(latestHistory.forecastAmount, currency)} latest saved snapshot` : "No forecast yet"}
               />
             </div>
 
@@ -788,6 +807,14 @@ export default function CostDashboard() {
                 ) : latestHistory ? (
                   <div className="space-y-4">
                     <StoredForecast forecast={latestHistory} currency={currency} />
+                    {latestSnapshotAfterCompletion ? (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        This snapshot was saved after sprint completion and is excluded from final accuracy.
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Forecast drivers reflect the saved snapshot; task plan, recorded cost, and planning context show current data.
+                    </p>
                     <CostExplanationPanel
                       forecast={latestHistory}
                       plannedLaborCost={plannedLaborCost}
@@ -837,13 +864,13 @@ export default function CostDashboard() {
                     tone="bg-blue-500"
                   />
                   <SignalRow
-                    label="Developer availability"
+                    label="Profile availability"
                     value={availabilityPct}
-                    detail={`${number(totalAbsenceDays)} planned absence days`}
+                    detail={`${number(totalAbsenceDays)} planned absence days counted in capacity`}
                     tone="bg-emerald-500"
                   />
                   <SignalRow
-                    label="Capacity utilisation"
+                    label="Story-point utilisation"
                     value={capacity.data?.utilisationPct}
                     detail={`${number(capacity.data?.plannedPoints)} of ${number(capacity.data?.capacityPoints)} points`}
                     tone={(capacity.data?.utilisationPct ?? 0) > 100 ? "bg-destructive" : "bg-amber-500"}
@@ -1074,7 +1101,7 @@ function CostExplanationPanel({
               tone="bg-primary"
             />
             <CostComparisonBar
-              label="Original plan"
+              label="Current task plan"
               amount={plannedLaborCost}
               maximum={comparisonMaximum}
               currency={currency}
@@ -1107,9 +1134,9 @@ function CostExplanationPanel({
         </p>
         <div className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
           <ContextSignal
-            label="Availability"
+            label="Profile availability"
             value={availabilityPct}
-            detail={`${number(totalAbsenceDays)} planned absence days`}
+            detail={`${number(totalAbsenceDays)} planned absence days counted in capacity`}
             tone="bg-emerald-500"
           />
           <ContextSignal
@@ -1438,7 +1465,7 @@ function StoredForecast({ forecast, currency }: { forecast: CostTrendPoint; curr
       </div>
       <p className="mt-2 text-xs text-muted-foreground tabular-nums">
         {forecast.lowerBound != null && forecast.upperBound != null
-          ? `Likely ${money(forecast.lowerBound, currency)} to ${money(forecast.upperBound, currency)}`
+          ? `Estimated range ${money(forecast.lowerBound, currency)} to ${money(forecast.upperBound, currency)}`
           : "No prediction interval stored"}
       </p>
       <p className="mt-1 text-[11px] text-muted-foreground">
@@ -1629,7 +1656,7 @@ function DeveloperProfileSheet({
                 <h3 id="developer-current-sprint" className="mb-3 text-sm font-semibold">Current sprint</h3>
                 <dl className="grid grid-cols-2 overflow-hidden rounded-md border">
                   <ProfileMetric
-                    label="Availability"
+                    label="Profile availability"
                     value={profile ? `${number(profile.availabilityRate * 100)}%` : "Not set"}
                   />
                   <ProfileMetric label="Project allocation" value={`${number(member.allocationPct)}%`} />
@@ -1895,7 +1922,7 @@ function ValidationSummary({
             <LabelWithHelp label="Final accuracy validation" />
           </h3>
           <p className="text-xs text-muted-foreground">
-            Stored predictions compared with the completed sprint&apos;s final logged labor cost.
+            Predictions saved before completion compared with the sprint&apos;s final logged labor cost.
           </p>
           {isFallback ? (
             <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">

@@ -1,6 +1,7 @@
 package com.sprintiq.pms.modules.ai.application.port;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +30,7 @@ public interface SprintFeatureSource {
                           String goal,
                           int sequenceNo,
                           String status,
+                          Instant completedAt,
                           LocalDate startDate,
                           LocalDate endDate,
                           Integer durationDays,

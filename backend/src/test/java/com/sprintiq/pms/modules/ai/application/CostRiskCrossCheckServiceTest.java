@@ -28,10 +28,8 @@ import static org.mockito.Mockito.when;
 /**
  * Two models, read against each other.
  *
- * <p>The cases that matter here are the disagreements. Agreement is easy and mostly
- * reassuring; a delivery lead does not need help interpreting "both say trouble". The
- * work this panel does is telling a pricing failure from an execution one, and getting
- * that backwards would send someone to chase a team over a gap that opened at planning.</p>
+ * <p>The comparison reports both readings without treating agreement as independent
+ * validation or diagnosing the cause of a disagreement.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -74,7 +72,7 @@ class CostRiskCrossCheckServiceTest {
     }
 
     @Test
-    @DisplayName("calls it corroboration when both models say the sprint is in trouble")
+    @DisplayName("reports both readings without claiming independent validation")
     void bothHigh() {
         givenRisk(RiskSeverity.HIGH, 0.72);
         givenForecast(4000.0, 2500.0, 60.0);
@@ -83,12 +81,12 @@ class CostRiskCrossCheckServiceTest {
 
         assertThat(response.agreement()).isEqualTo(CostRiskAgreement.BOTH_HIGH);
         assertThat(response.costCharged()).isTrue();
-        // The claim the panel exists to make, in the text a person actually reads.
-        assertThat(response.detail()).contains("share no inputs");
+        assertThat(response.detail()).contains("Review actual cost");
+        assertThat(response.detail()).doesNotContain("share no inputs");
     }
 
     @Test
-    @DisplayName("money over but team fine reads as a pricing failure, not an execution one")
+    @DisplayName("cost-only warning does not assign a cause")
     void costOnlyPointsAtThePlan() {
         givenRisk(RiskSeverity.LOW, 0.2);
         givenForecast(4000.0, 2500.0, 60.0);
@@ -96,13 +94,12 @@ class CostRiskCrossCheckServiceTest {
         CostRiskCrossCheckResponse response = service().crossCheck(SPRINT);
 
         assertThat(response.agreement()).isEqualTo(CostRiskAgreement.COST_ONLY);
-        assertThat(response.detail()).contains("priced too low");
-        // The point of separating the two: chasing the team would be the wrong move.
-        assertThat(response.detail()).contains("will not close a gap");
+        assertThat(response.detail()).contains("Review the budget");
+        assertThat(response.detail()).contains("before assigning a cause");
     }
 
     @Test
-    @DisplayName("team struggling but money fine reads as a process problem")
+    @DisplayName("risk-only warning does not diagnose execution")
     void riskOnlyPointsAtTheTeam() {
         givenRisk(RiskSeverity.HIGH, 0.8);
         givenForecast(2000.0, 2500.0, -20.0);
@@ -110,7 +107,7 @@ class CostRiskCrossCheckServiceTest {
         CostRiskCrossCheckResponse response = service().crossCheck(SPRINT);
 
         assertThat(response.agreement()).isEqualTo(CostRiskAgreement.RISK_ONLY);
-        assertThat(response.detail()).contains("Re-budgeting will not fix this");
+        assertThat(response.detail()).contains("Review delivery signals and data freshness");
     }
 
     @Test
@@ -128,7 +125,7 @@ class CostRiskCrossCheckServiceTest {
         assertThat(response.variancePct()).isEqualByComparingTo(BigDecimal.valueOf(22.37));
         assertThat(response.marginPct()).isEqualByComparingTo(BigDecimal.valueOf(23.5));
         // And says so, rather than rounding an in-margin overrun down to "on track".
-        assertThat(response.detail()).contains("22.37% over budget").contains("not counted");
+        assertThat(response.detail()).contains("cost forecast is 22.37% over budget").contains("not counted");
     }
 
     @Test
@@ -196,7 +193,7 @@ class CostRiskCrossCheckServiceTest {
 
         assertThat(response.agreement()).isEqualTo(CostRiskAgreement.BOTH_LOW);
         assertThat(response.headline()).doesNotContain("on track");
-        assertThat(response.headline()).contains("Neither model is flagging");
+        assertThat(response.headline()).contains("Neither reading currently raises a budget alert");
         assertThat(response.detail()).contains("medium at 46%");
     }
 }

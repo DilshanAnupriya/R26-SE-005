@@ -261,6 +261,7 @@ export const sprintSchema = z.object({
   budgetAmount: z.coerce.number().nullish(),
   daysRemaining: z.number().int().nullish(),
   storyCount: z.number().int().nullish(),
+  completedAt: z.string().nullish(),
 });
 export type Sprint = z.infer<typeof sprintSchema>;
 

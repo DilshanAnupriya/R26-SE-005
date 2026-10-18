@@ -5,6 +5,7 @@ import com.sprintiq.pms.modules.ai.application.port.DeveloperFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.EffortFeatureSource;
 import com.sprintiq.pms.modules.ai.application.port.ProjectContextSource;
 import com.sprintiq.pms.modules.ai.application.port.SprintFeatureSource;
+import com.sprintiq.pms.modules.ai.domain.CostForecast;
 import com.sprintiq.pms.modules.ai.domain.CostForecastRepository;
 import com.sprintiq.pms.modules.ai.domain.CostStage;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -50,6 +52,17 @@ class CostForecastServiceTest {
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("Add at least one estimated task");
         verifyNoInteractions(inference, forecasts);
+    }
+
+    @Test
+    void completedSprintCannotCreateAForecastAfterTheOutcomeIsKnown() {
+        when(sprints.featuresFor(SPRINT)).thenReturn(sprint);
+        when(sprint.status()).thenReturn("COMPLETED");
+
+        assertThatThrownBy(() -> service.forecast(SPRINT, CostStage.INITIAL))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("planned or active sprints");
+        verifyNoInteractions(inference, forecasts, effort);
     }
 
     @Test
@@ -106,5 +119,41 @@ class CostForecastServiceTest {
                 new EffortFeatureSource.UserEffort(OWNER, 61, 61)));
 
         assertThat(service.validateSprint(SPRINT).actualCost()).isEqualByComparingTo("99.13");
+    }
+
+    @Test
+    void forecastsCreatedAfterCompletionDoNotCountTowardAccuracy() {
+        Instant completedAt = Instant.parse("2026-10-17T10:25:32Z");
+        when(sprints.featuresFor(SPRINT)).thenReturn(sprint);
+        when(sprint.projectId()).thenReturn(PROJECT);
+        when(sprint.status()).thenReturn("COMPLETED");
+        when(sprint.completedAt()).thenReturn(completedAt);
+        when(developers.averageHourlyRate(PROJECT)).thenReturn(BigDecimal.valueOf(65));
+        when(developers.candidatesFor(PROJECT)).thenReturn(List.of(owner));
+        when(owner.userId()).thenReturn(OWNER);
+        when(owner.hourlyRate()).thenReturn(BigDecimal.valueOf(65));
+        when(effort.sprintEffortByUser(SPRINT)).thenReturn(List.of(
+                new EffortFeatureSource.UserEffort(OWNER, 750, 0)));
+        when(forecasts.findBySprintIdOrderBySnapshotAtAsc(SPRINT)).thenReturn(List.of(
+                savedForecast("1040.00", CostStage.INITIAL, "2026-10-17T10:23:15Z"),
+                savedForecast("665.68", CostStage.MID_SPRINT, "2026-10-17T10:24:00Z"),
+                savedForecast("1040.00", CostStage.INITIAL, "2026-10-17T10:34:03Z"),
+                savedForecast("1040.00", CostStage.INITIAL, "2026-10-17T10:35:06Z")));
+
+        var result = service.validateSprint(SPRINT);
+
+        assertThat(result.actualCost()).isEqualByComparingTo("812.50");
+        assertThat(result.predictions()).hasSize(2);
+        assertThat(result.mae()).isEqualByComparingTo("187.16");
+        assertThat(result.initial().predictedCost()).isEqualByComparingTo("1040.00");
+        assertThat(result.midSprint().predictedCost()).isEqualByComparingTo("665.68");
+    }
+
+    private static CostForecast savedForecast(String amount, CostStage stage, String snapshotAt) {
+        return CostForecast.builder()
+                .forecastAmount(new BigDecimal(amount))
+                .stage(stage)
+                .snapshotAt(Instant.parse(snapshotAt))
+                .build();
     }
 }

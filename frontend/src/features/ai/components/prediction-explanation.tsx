@@ -99,15 +99,17 @@ export function BoundsLabel({
   lower,
   upper,
   format = (value: number) => String(value),
+  prefix = "likely",
 }: {
   lower?: number | null;
   upper?: number | null;
   format?: (value: number) => string;
+  prefix?: string;
 }) {
   if (lower == null || upper == null) return null;
   return (
     <span className="text-xs text-muted-foreground tabular-nums">
-      likely {format(lower)}–{format(upper)}
+      {prefix} {format(lower)}–{format(upper)}
     </span>
   );
 }

@@ -71,6 +71,7 @@ public class SprintFeatureProvider implements SprintFeatureSource {
 
         return new SprintFeatures(sprint.getId(), sprint.getProjectId(), sprint.getName(),
                 sprint.getGoal(), sprint.getSequenceNo(), sprint.getStatus().name(),
+                sprint.getCompletedAt(),
                 sprint.getStartDate(), sprint.getEndDate(),
                 sprint.getDurationDays() == null ? null : (int) sprint.getDurationDays(),
                 elapsed, remaining, sprint.getTeamSize(), sprint.getCapacityPoints(),

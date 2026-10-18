@@ -18,18 +18,12 @@ import java.util.UUID;
 /**
  * Reads the two over-budget verdicts against each other.
  *
- * <p>SprintIQ predicts a sprint going over budget twice, by routes that share no inputs.
- * {@code M2_OVER_BUDGET} reads behaviour — velocity, carry-over, rework, blocked time —
- * and never sees money. {@code M4_COST_*} reads effort hours against a blended rate and
- * never sees how the team is coping. Neither is told the other's answer, and that is
- * deliberate: feeding cost into the risk features would need a retrain and would risk
- * leaking the outcome into its own predictor.</p>
+ * <p>SprintIQ provides two readings of budget pressure. The risk model scores delivery
+ * signals. The cost model estimates final labor cost from effort and rates, and its
+ * mid-sprint stage also uses delivery signals. Agreement is not independent validation.</p>
  *
- * <p>Which leaves the comparison unmade, and the comparison is where the useful part is.
- * When two independent readings agree, that is corroboration no single model can offer.
- * When they disagree, the disagreement names the problem: money over but team fine is a
- * pricing failure, team struggling but money fine is a process one. A delivery lead
- * acting on either number alone cannot tell those apart.</p>
+ * <p>The comparison makes disagreement visible without assigning a cause from either
+ * prediction alone.</p>
  *
  * <p>This service only compares. It writes nothing, scores nothing, and calls no model —
  * both readings are already stored by the time it runs. The overrun it reports is
@@ -80,14 +74,10 @@ public class CostRiskCrossCheckService {
 
     private String headline(CostRiskAgreement agreement, CostOverrun overrun) {
         return switch (agreement) {
-            case BOTH_HIGH -> "Both models say this sprint is heading over budget.";
-            // Not "on track". Neither model flagging is a weaker claim than the sprint
-            // being healthy — a medium reading and a variance just inside the cost
-            // model's error both land here, and calling either of those "on track"
-            // would be the panel overstating what it actually knows.
-            case BOTH_LOW -> "Neither model is flagging this sprint.";
-            case COST_ONLY -> "The forecast is over budget, but the risk model is not flagging the team.";
-            case RISK_ONLY -> "The team is flagged, but the money is still within budget.";
+            case BOTH_HIGH -> "Both readings indicate budget pressure.";
+            case BOTH_LOW -> "Neither reading currently raises a budget alert.";
+            case COST_ONLY -> "The cost forecast is over budget; the risk score is below its warning threshold.";
+            case RISK_ONLY -> "The risk score is high; the cost forecast remains below budget.";
             case UNKNOWN -> unknownHeadline(overrun);
         };
     }
@@ -103,29 +93,21 @@ public class CostRiskCrossCheckService {
     private String detail(CostRiskAgreement agreement, CostOverrun overrun,
                           RiskAssessmentResponse overBudget) {
         return switch (agreement) {
-            // Two readings with no inputs in common landing on the same answer is the
-            // strongest evidence this system can produce. Saying so is the point of the
-            // panel — the same conclusion from one model is a guess.
             case BOTH_HIGH -> String.format(
                     "The cost forecast is %s%% over budget, and the risk model puts the "
-                            + "over-budget probability at %s%%. These two models share no inputs — "
-                            + "one reads spend, the other reads how the team is working — so agreeing "
-                            + "is real corroboration rather than the same signal counted twice. "
-                            + "Treat the overrun as likely and act on scope.",
+                            + "over-budget probability at %s%%. Review actual cost, task effort, "
+                            + "rates, and scope before deciding what is driving the risk.",
                     overrun.variancePct(), percent(overBudget));
             case BOTH_LOW -> bothLowDetail(overrun, overBudget);
             case COST_ONLY -> String.format(
-                    "Spend is %s%% over budget, while the risk model reads %s at %s%% — below "
-                            + "the level it treats as a warning. That pattern usually means the "
-                            + "sprint was priced too low rather than executed badly. Re-check the "
-                            + "budget and the assumed rate before chasing the team; pushing harder "
-                            + "will not close a gap that opened at planning.",
+                    "The cost forecast is %s%% over budget, while the risk model reads %s at %s%% — "
+                            + "below its warning threshold. Review the budget, hourly rates, task "
+                            + "effort, and recent progress before assigning a cause.",
                     overrun.variancePct(), band(overBudget), percent(overBudget));
             case RISK_ONLY -> String.format(
                     "The risk model puts the over-budget probability at %s%%, but the forecast "
-                            + "is still inside budget. The work is going badly and happens to be "
-                            + "cheap. Re-budgeting will not fix this — look at what is blocked, "
-                            + "reopened or waiting.",
+                            + "is still inside budget. Review delivery signals and data freshness; "
+                            + "the cost estimate may change as more work is logged.",
                     percent(overBudget));
             case UNKNOWN -> unknownDetail(overrun);
         };
@@ -143,10 +125,10 @@ public class CostRiskCrossCheckService {
         String costPart = overrun.outcome() == CostOverrun.Outcome.WITHIN_MARGIN
                 && overrun.variancePct() != null
                 && overrun.variancePct().signum() > 0
-                ? String.format("Spend is %s%% over budget, which is inside the %.1f%% the cost "
+                ? String.format("The cost forecast is %s%% over budget, which is inside the %.1f%% the cost "
                         + "model is typically wrong by, so it is not counted as an overrun.",
                         overrun.variancePct(), overrun.marginPct())
-                : "Spend is tracking to plan.";
+                : "The cost forecast is below budget.";
         String riskPart = overBudget == null
                 ? " The risk model has not scored this sprint."
                 : String.format(" The risk model reads %s at %s%%, below the level it treats as "
