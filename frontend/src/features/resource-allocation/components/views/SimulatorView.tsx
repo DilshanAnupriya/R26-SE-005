@@ -121,7 +121,9 @@ export default function SimulatorView() {
             lastName: d.profile?.lastName || d.profile?.last_name || "",
             specialization: d.profile?.specialization || "Fullstack",
             efficiency: d.consistency || 1.0,
-            capacity: (d.experience_level || 2) * 10 
+            capacity: (d.base_velocity && d.base_velocity > 0)
+              ? Math.round(d.base_velocity * 10) / 10
+              : (d.experience_level || 2) * 10
           })));
         } else {
           setDevelopers([]);

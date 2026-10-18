@@ -465,7 +465,10 @@ def seed_test_environment() -> Dict[str, Any]:
         ),
         new_member AS (
             INSERT INTO org_members (id, organization_id, user_id, role_id, created_at, updated_at, version)
-            SELECT gen_random_uuid(), '{org_id}', id, '25354517-c393-4897-8d7d-74d16a85d1fb', NOW(), NOW(), 0
+            SELECT gen_random_uuid(), '{org_id}', id, 
+                   CASE WHEN '{dev['email']}' = 'elena.rostova@sprintiq.qa' THEN 'a25ee31d-cca3-4047-a900-a78306d2d104'::uuid
+                        ELSE '25354517-c393-4897-8d7d-74d16a85d1fb'::uuid END, 
+                   NOW(), NOW(), 0
             FROM new_user
             RETURNING user_id
         ),
@@ -490,11 +493,11 @@ def seed_test_environment() -> Dict[str, Any]:
         new_opt_dev AS (
             INSERT INTO optimizer_developers (
                 dev_id, experience_level, skill_frontend, skill_backend, skill_db, current_workload,
-                availability, current_tasks, consistency, learning_rate, organization_id
+                availability, current_tasks, consistency, learning_rate, organization_id, base_velocity
             )
             VALUES (
                 '{dev['dev_id']}', {dev['experience_level']}, {dev['skill_frontend']}, {dev['skill_backend']}, {dev['skill_db']},
-                0, 100.0, 0, {round(consistency, 3)}, {round(learning_rate, 4)}, '{org_id}'
+                0, 100.0, 0, {round(consistency, 3)}, {round(learning_rate, 4)}, '{org_id}', {avg_vel}
             )
             RETURNING id
         ),

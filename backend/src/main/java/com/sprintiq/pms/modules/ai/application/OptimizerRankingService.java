@@ -124,7 +124,16 @@ public class OptimizerRankingService {
             developers = allDevs;
         }
 
-        if (tasks == null || tasks.isEmpty()) {
+        taskService.syncSprintStories(sprintId);
+        List<Task> allTasks = taskRepository.findBySprintId(sprintId);
+        List<Task> tasks = allTasks.stream()
+                .filter(t -> t.getDeveloper() == null)
+                .toList();
+        if (tasks.isEmpty()) {
+            tasks = allTasks;
+        }
+
+        if (tasks.isEmpty()) {
             System.out.println("⚠️ No tasks found for sprint: " + sprintId);
             return Collections.emptyList();
         }
@@ -285,7 +294,7 @@ public class OptimizerRankingService {
 
                 int devCount = 0;
                 for (Map<String, Object> devData : devRecs) {
-                    if (++devCount > 3) break;
+                    if (++devCount > 5) break;
 
                     String devId = devData.get("dev_id").toString();
 

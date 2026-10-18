@@ -34,12 +34,19 @@ public class OptimizerSimulatorController {
     private String pythonApiUrl;
 
     @PostMapping("/calculate")
-    public SimulationResponse calculate(@RequestBody List<SimulationAssignment> assignments) {
+    public SimulationResponse calculate(
+            @RequestBody List<SimulationAssignment> assignments,
+            @RequestHeader(value = "X-Organization-Id", required = false) String headerOrgId) {
         double totalStoryPoints = 0;
         double predictedVelocity = 0;
         int assignmentsCount = 0;
         Map<Long, Double> devAssignedSpMap = new HashMap<>();
         java.util.UUID orgId = null;
+        if (headerOrgId != null && !headerOrgId.isBlank()) {
+            try {
+                orgId = java.util.UUID.fromString(headerOrgId);
+            } catch (IllegalArgumentException ignored) {}
+        }
 
         if (assignments != null) {
             for (SimulationAssignment assignment : assignments) {
@@ -82,7 +89,7 @@ public class OptimizerSimulatorController {
             double assignedSp = devAssignedSpMap.getOrDefault(dev.getId(), 0.0);
             workloads.add(assignedSp);
 
-            double capacity = (dev.getExperience_level() > 0 ? dev.getExperience_level() : 2) * 10.0;
+            double capacity = dev.getEffectiveCapacity();
             double utilization = capacity > 0 ? (assignedSp / capacity) * 100.0 : 0.0;
             boolean isOverloaded = assignedSp > capacity;
             if (isOverloaded) {

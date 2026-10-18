@@ -37,9 +37,22 @@ public class Developer implements TenantScoped {
     private int current_tasks;
     private double consistency;
     private double learning_rate;
+    @Column(name = "base_velocity")
+    private double base_velocity;
 
     @OneToOne(mappedBy = "developerMetrics")
     @JsonIgnoreProperties("developerMetrics")
     private DeveloperProfile profile;
+
+    /**
+     * Calculates empirical capacity derived from historical delivery velocity,
+     * scaled by personal availability, falling back to a cold-start prior
+     * (experience_level * 10) only when no empirical history is present.
+     */
+    public double getEffectiveCapacity() {
+        double velocity = this.base_velocity > 0 ? this.base_velocity : (this.experience_level > 0 ? this.experience_level : 2) * 10.0;
+        double availRatio = this.availability > 0 ? this.availability / 100.0 : 1.0;
+        return Math.max(5.0, Math.round(velocity * availRatio * 10.0) / 10.0);
+    }
 }
 
