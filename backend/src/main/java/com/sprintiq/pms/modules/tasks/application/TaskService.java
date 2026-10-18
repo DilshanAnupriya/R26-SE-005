@@ -46,6 +46,18 @@ public class TaskService {
     /** How deep subtasks may nest. One level of subtask is a checklist; five is a second backlog. */
     private static final int MAX_SUBTASK_DEPTH = 1;
 
+    /**
+     * A story card's estimate on the board, at an hour a point.
+     *
+     * <p>Multiplied before it is rounded: {@code intValue() * 60} truncated the points
+     * first, so a half-point story — a card on the Planning Poker deck — showed as zero
+     * minutes of work.</p>
+     */
+    static int storyPointMinutes(java.math.BigDecimal points) {
+        return points.multiply(java.math.BigDecimal.valueOf(60))
+                .setScale(0, java.math.RoundingMode.HALF_UP).intValue();
+    }
+
     private final TaskRepository taskRepository;
     private final ProjectLookupService projectLookup;
     private final ItemKeyService itemKeyService;
@@ -249,7 +261,7 @@ public class TaskService {
                             "%s moved from %s to %s".formatted(story.getItemKey(), previous, newStatus));
                 }
 
-                int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+                int estimateMins = story.getStoryPoints() != null ? storyPointMinutes(story.getStoryPoints()) : 0;
                 var assignee = story.getAssigneeId() == null ? null
                         : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
 
@@ -417,7 +429,7 @@ public class TaskService {
                 com.sprintiq.pms.modules.backlog.domain.Story story = optStory.get();
                 UUID previous = story.getAssigneeId();
                 if (Objects.equals(previous, request.assigneeId())) {
-                    int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+                    int estimateMins = story.getStoryPoints() != null ? storyPointMinutes(story.getStoryPoints()) : 0;
                     var assignee = story.getAssigneeId() == null ? null
                             : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
                     return toStoryTaskResponse(story, assignee, estimateMins);
@@ -455,7 +467,7 @@ public class TaskService {
                 payload.put("assigneeId", request.assigneeId() != null ? request.assigneeId().toString() : null);
                 realtime.projectEvent(story.getProjectId(), "task.assigned", payload);
 
-                int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+                int estimateMins = story.getStoryPoints() != null ? storyPointMinutes(story.getStoryPoints()) : 0;
                 var assignee = story.getAssigneeId() == null ? null
                         : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
                 return toStoryTaskResponse(story, assignee, estimateMins);

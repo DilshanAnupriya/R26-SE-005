@@ -89,11 +89,12 @@ class MockAiModelClientTest {
     }
 
     @Test
-    @DisplayName("estimates land on the Fibonacci scale a team actually uses")
+    @DisplayName("estimates land on the Planning Poker deck a team actually uses")
     void estimatesSnapToTheEstimationScale() {
-        List<BigDecimal> scale = List.of(BigDecimal.ONE, BigDecimal.valueOf(2), BigDecimal.valueOf(3),
-                BigDecimal.valueOf(5), BigDecimal.valueOf(8), BigDecimal.valueOf(13),
-                BigDecimal.valueOf(21));
+        List<BigDecimal> scale = List.of(BigDecimal.ZERO, new BigDecimal("0.5"), BigDecimal.ONE,
+                BigDecimal.valueOf(2), BigDecimal.valueOf(3), BigDecimal.valueOf(5),
+                BigDecimal.valueOf(8), BigDecimal.valueOf(13), BigDecimal.valueOf(20),
+                BigDecimal.valueOf(40), BigDecimal.valueOf(100));
 
         for (int criteria = 0; criteria <= 10; criteria++) {
             BigDecimal points = run(AiModelCode.M1_STORY_POINTS, story(criteria, 150, 0, true)).value();

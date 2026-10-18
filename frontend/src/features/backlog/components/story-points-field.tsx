@@ -10,8 +10,14 @@ import type { Story } from "@/lib/api/delivery-schemas";
 import { cn } from "@/lib/utils";
 import { useEstimateStory } from "../hooks";
 
-/** The scale planning sessions actually use, matching the model's own snapping. */
-const FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
+/**
+ * The Planning Poker deck planning sessions actually use.
+ *
+ * <p>0 and ½ for the work that is barely work, 20, 40 and 100 for the epics that are
+ * really several stories. The one scale SprintIQ uses: the model service and the
+ * backend's mock report on the same cards.</p>
+ */
+const DECK = [0, 0.5, 1, 2, 3, 5, 8, 13, 20, 40, 100];
 
 /** How the number on the story got there — worth saying, because it changes its weight. */
 const SOURCE_LABEL: Record<Story["estimateSource"], string> = {
@@ -29,7 +35,7 @@ const SOURCE_LABEL: Record<Story["estimateSource"], string> = {
  * points, "Override", only appeared once a suggestion existed, which made the model a
  * gatekeeper for a number the team owns.</p>
  *
- * <p>The quick picks are the Fibonacci scale rather than a free number first, because
+ * <p>The quick picks are the Planning Poker deck rather than a free number first, because
  * the argument in a planning session is "is this a 5 or an 8", not "is this a 6.5". The
  * free input is still there underneath for the teams that use a different scale.</p>
  */
@@ -98,7 +104,7 @@ export function StoryPointsField({ story, projectId }: { story: Story; projectId
             role="group"
             aria-label={`Story points for ${story.itemKey}`}
           >
-            {FIBONACCI.map((value) => (
+            {DECK.map((value) => (
               <Button
                 key={value}
                 size="sm"
