@@ -429,7 +429,7 @@ class ExplainabilityEngine:
             p_raw = str(task.get("priority", task.get("priority_id", "3"))).lower()
             priority_id = float(priority_map.get(p_raw, 3))
             depended_on = int(task.get("dependedOn", task.get("depended_on", 0)))
-            is_blocked = 1.0 if (task.get("is_blocked") or task.get("isBlocked") or depended_on > 0) else 0.0
+            is_blocked = 1.0 if (task.get("is_blocked") or task.get("isBlocked") or task.get("blocked") or depended_on > 0) else 0.0
 
             curr_tasks = float(dev_dict.get("current_tasks", 0))
             curr_workload = float(dev_dict.get("current_workload", 0.0))

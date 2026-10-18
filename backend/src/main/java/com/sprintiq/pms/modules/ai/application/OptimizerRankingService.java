@@ -116,8 +116,13 @@ public class OptimizerRankingService {
             throw new RuntimeException("Sprint not found with ID: " + sprintId);
         }
         Sprint sprint = sprintOpt.get();
-        List<Task> tasks = taskRepository.findBySprintId(sprintId);
-        List<Developer> developers = developerRepository.findAll();
+        List<Developer> allDevs = developerRepository.findAll();
+        List<Developer> developers = (sprint.getOrganizationId() != null)
+                ? allDevs.stream().filter(d -> sprint.getOrganizationId().equals(d.getOrganizationId())).toList()
+                : allDevs;
+        if (developers.isEmpty()) {
+            developers = allDevs;
+        }
 
         if (tasks == null || tasks.isEmpty()) {
             System.out.println("⚠️ No tasks found for sprint: " + sprintId);
@@ -171,16 +176,27 @@ public class OptimizerRankingService {
                         }
                     }
 
-                    Allocation allocation = Allocation.builder()
-                            .developer(devOpt.get())
-                            .sprint(sprint)
-                            .task(taskOpt.get())
-                            .mlScore(0.0)
-                            .finalScore(Double.valueOf(allocData.get("match_score").toString()))
-                            .skillMatchScore(Double.valueOf(allocData.get("skill_match").toString()))
-                            .status("AUTO_ALLOCATED")
-                            .explanation(explanationJson)
-                            .build();
+                    Double mlScore = 0.0;
+                    if (allocData.get("ml_score") != null) {
+                        try {
+                            mlScore = Double.valueOf(allocData.get("ml_score").toString());
+                        } catch (Exception ignored) {}
+                    }
+
+                    Allocation allocation = allocationRepository
+                            .findBySprintAndTaskAndDeveloper(sprint, taskOpt.get(), devOpt.get())
+                            .orElseGet(() -> Allocation.builder()
+                                    .developer(devOpt.get())
+                                    .sprint(sprint)
+                                    .task(taskOpt.get())
+                                    .organizationId(sprint.getOrganizationId())
+                                    .build());
+
+                    allocation.setMlScore(mlScore);
+                    allocation.setFinalScore(Double.valueOf(allocData.get("match_score").toString()));
+                    allocation.setSkillMatchScore(Double.valueOf(allocData.get("skill_match").toString()));
+                    allocation.setStatus("AUTO_ALLOCATED");
+                    allocation.setExplanation(explanationJson);
 
                     allocationRepository.save(allocation);
                 }
@@ -209,7 +225,13 @@ public class OptimizerRankingService {
                 .filter(t -> t.getDeveloper() == null)
                 .toList();
 
-        List<Developer> developers = developerRepository.findAll();
+        List<Developer> allDevs = developerRepository.findAll();
+        List<Developer> developers = (sprint.getOrganizationId() != null)
+                ? allDevs.stream().filter(d -> sprint.getOrganizationId().equals(d.getOrganizationId())).toList()
+                : allDevs;
+        if (developers.isEmpty()) {
+            developers = allDevs;
+        }
 
         if (tasks.isEmpty()) {
             System.out.println("⚠️ No unassigned tasks found for sprint " + sprintId + " (Total tasks in sprint: " + allTasks.size() + ")");

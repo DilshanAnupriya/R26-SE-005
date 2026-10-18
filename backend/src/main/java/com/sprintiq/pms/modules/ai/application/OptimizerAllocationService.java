@@ -71,8 +71,13 @@ public class OptimizerAllocationService {
         Sprint sprint = sprintRepository.findById(sprintId).orElse(null);
         if (sprint == null) return;
 
-        List<Task> sprintTasks = taskRepository.findBySprintId(sprintId);
-        List<Developer> developers = developerRepository.findAll();
+        List<Developer> allDevs = developerRepository.findAll();
+        List<Developer> developers = (sprint.getOrganizationId() != null)
+                ? allDevs.stream().filter(d -> sprint.getOrganizationId().equals(d.getOrganizationId())).toList()
+                : allDevs;
+        if (developers.isEmpty()) {
+            developers = allDevs;
+        }
         if (developers.isEmpty() || sprintTasks.isEmpty()) return;
 
         for (Task task : sprintTasks) {

@@ -39,6 +39,7 @@ public class OptimizerSimulatorController {
         double predictedVelocity = 0;
         int assignmentsCount = 0;
         Map<Long, Double> devAssignedSpMap = new HashMap<>();
+        java.util.UUID orgId = null;
 
         if (assignments != null) {
             for (SimulationAssignment assignment : assignments) {
@@ -49,6 +50,10 @@ public class OptimizerSimulatorController {
                 if (devOpt.isPresent() && taskOpt.isPresent()) {
                     Developer dev = devOpt.get();
                     Task task = taskOpt.get();
+                    
+                    if (orgId == null && dev.getOrganizationId() != null) {
+                        orgId = dev.getOrganizationId();
+                    }
                     
                     double sp = task.getStory_points();
                     totalStoryPoints += sp;
@@ -65,6 +70,10 @@ public class OptimizerSimulatorController {
 
         // Fetch developers to calculate team Gini Index and capacity distribution
         List<Developer> allDevs = developerRepository.findAll();
+        if (orgId != null) {
+            final java.util.UUID targetOrg = orgId;
+            allDevs = allDevs.stream().filter(d -> targetOrg.equals(d.getOrganizationId())).toList();
+        }
         List<Double> workloads = new ArrayList<>();
         List<DeveloperLoadDto> devLoads = new ArrayList<>();
         int overloadedCount = 0;

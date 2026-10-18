@@ -70,7 +70,7 @@ def rank_developers_for_task(
         priority_id = priority_map.get(p_raw, 3)
 
         depended_on = int(task_profile.get("dependedOn", task_profile.get("depended_on", 0)))
-        is_blocked = 1 if (task_profile.get("is_blocked") or task_profile.get("isBlocked") or depended_on > 0) else 0
+        is_blocked = 1 if (task_profile.get("is_blocked") or task_profile.get("isBlocked") or task_profile.get("blocked") or depended_on > 0) else 0
         dependency_count = int(task_profile.get("dependency_count", task_profile.get("dependencyCount", task_profile.get("dependedOnBy", depended_on))))
 
         title = str(task_profile.get("title", task_profile.get("summary", task_profile.get("name", "Task description"))))
