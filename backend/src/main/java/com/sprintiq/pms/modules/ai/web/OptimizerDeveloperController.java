@@ -67,6 +67,11 @@ public class OptimizerDeveloperController {
         return developerService.getProfileByDeveloperId(id);
     }
 
+    @GetMapping("/{id}/analytics")
+    public com.sprintiq.pms.modules.ai.web.dto.OptimizerDtos.DeveloperAnalyticsDto getAnalytics(@PathVariable Long id) {
+        return developerService.getDeveloperAnalytics(id);
+    }
+
     @PutMapping("/{id}")
     public Developer updateDeveloper(
             @PathVariable Long id,

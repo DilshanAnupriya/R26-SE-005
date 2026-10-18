@@ -67,5 +67,79 @@ public class OptimizerDtos {
         private int req_backend;
         private int req_db;
     }
+
+    @Data
+    @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    public static class DeveloperAnalyticsDto {
+        private Long developerId;
+        private String devId;
+        private String fullName;
+        private String role;
+        private String specialization;
+        private String email;
+        private String bio;
+        private int experienceLevel;
+        private double consistencyScore;
+        private double learningRate;
+        private double effectiveCapacity;
+        private int currentWorkload;
+        private double availability;
+        private int currentTasks;
+
+        // Cumulative Historical Metrics
+        private int totalTasksAssigned;
+        private int totalTasksCompleted;
+        private double totalStoryPointsDelivered;
+        private double avgCycleTimeHours;
+        private double defectRate;
+        private double completionRate;
+
+        // Sprint-by-Sprint History (for Graphs & Velocity Progression)
+        private java.util.List<SprintPerformanceDto> sprintHistory;
+
+        // Domain Handling Breakdown (Percentage of points across domains)
+        private java.util.Map<String, Double> domainDistribution;
+
+        // AI Coaching & Talent Evaluation
+        private String aiExecutiveSummary;
+        private java.util.List<String> strengths;
+        private java.util.List<String> growthAreas;
+        private String coachingRecommendation;
+        private String burnoutRiskLevel;
+    }
+
+    @Data
+    @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    public static class SprintPerformanceDto {
+        private Long sprintId;
+        private String sprintName;
+        private String status;
+        private double plannedSp;
+        private double deliveredSp;
+        private int tasksCount;
+        private int defects;
+        private double avgCycleTimeHours;
+        private java.util.List<TaskSummaryDto> tasks;
+    }
+
+    @Data
+    @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    public static class TaskSummaryDto {
+        private Long id;
+        private String taskType;
+        private int storyPoints;
+        private int complexity;
+        private String status;
+        private int reqFrontend;
+        private int reqBackend;
+        private int reqDb;
+        private int defects;
+    }
 }
 
