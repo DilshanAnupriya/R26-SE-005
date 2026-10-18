@@ -16,7 +16,13 @@ import type {
 import { cn } from "@/lib/utils";
 import { boardEventsFor, boardSectionCopy, type BoardEvent } from "../board-guidance";
 import { RISK_MODELS, RISK_TYPE_FOR_KEY, type RiskModelKey } from "../risk-models";
-import { asPercent, SEVERITY_COLOUR, SeverityBadge, type RiskSeverityLabel } from "./risk-gauge";
+import {
+  asPercent,
+  modelPercentLabel,
+  SEVERITY_COLOUR,
+  SeverityBadge,
+  type RiskSeverityLabel,
+} from "./risk-gauge";
 
 /** What the parent hands down so a tick can be recorded. */
 export type StepToggle = (input: { riskType: RiskType; stepKey: string; done: boolean }) => void;
@@ -345,7 +351,7 @@ function RiskExplanation({
       */}
       {delta !== 0 ? (
         <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-2">
-          The readings below scored it {asPercent(assessment.riskScore)}%.{" "}
+          The readings below scored it {modelPercentLabel(assessment.riskScore)}%.{" "}
           <span className={delta > 0 ? "font-semibold text-red" : "font-semibold text-green"}>
             {delta > 0 ? "+" : ""}
             {delta} points
