@@ -1,5 +1,5 @@
 -- =====================================================================
--- V33 · Bump both M1 models after widening what they can answer
+-- V35 · Bump both M1 models after widening what they can answer
 --
 -- Neither model's weights changed. What changed is what the service does at
 -- and past the edges of the data each was trained on:

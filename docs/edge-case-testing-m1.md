@@ -207,7 +207,7 @@ not another system. A person's `export` or `import` *label* still counts. On its
 moved no test case's number; it stops the tooltip's explanation saying "pushed up by
 integration work".
 
-Migration `V34` bumps M1_STORY_POINTS to 2.3.0 so the six-hour cache stops serving the
+Migration `V36` bumps M1_STORY_POINTS to 2.3.0 so the six-hour cache stops serving the
 old 8s (SP-41 to SP-45, MR-15).
 
 ### What changed outside the model service
@@ -217,7 +217,7 @@ old 8s (SP-41 to SP-45, MR-15).
   Two things did not: the mock model snapped to 1-21 and now uses the same deck
   (`MockAiModelClient`); and the board turned a story card's points into minutes with
   `intValue() * 60`, which truncated **½ point to 0 minutes** — it now multiplies first
-  (`TaskService.storyPointMinutes`, tested in `StoryPointMinutesTest`). Migration `V33`
+  (`TaskService.storyPointMinutes`, tested in `StoryPointMinutesTest`). Migration `V35`
   bumps M1_STORY_POINTS to 2.2.0 and M1_VELOCITY to 2.1.0, which is what clears the
   six-hour prediction cache of capped answers. Resource allocation (M3) still rounds a
   ½-point story up to 1 for its optimiser, which works in whole points.
