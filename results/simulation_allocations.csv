@@ -1,0 +1,61 @@
+task_id,task_type,story_points,developer_id,developer_name,final_score,skill_match,workload_balance,status
+585,"SIM-168: Architect High-Volume Microservice Gateway Filter",13,DEV-BE-MID1,"Priya Patel",69.1,0.6,1.0,DECLINED
+585,"SIM-168: Architect High-Volume Microservice Gateway Filter",13,DEV-FS-SR1,"Lucas Meyer",75.63,0.733,1.0,ALLOCATED
+590,"SIM-173: Implement Granular User Role-Based Access Control (RBAC)",8,DEV-FS-MID1,"Aisha Morales",75.38,0.733,1.0,ALLOCATED
+580,"SIM-163: Optimize Client-Side Chart Rendering Performance",8,DEV-BE-MID1,"Priya Patel",69.21,0.6,1.0,ALLOCATED
+590,"SIM-173: Implement Granular User Role-Based Access Control (RBAC)",8,DEV-BE-SR1,"Dr. Aris Thorne",68.49,0.533,1.0,DECLINED
+581,"SIM-164: Develop Interactive Kanban Task Drag-and-Drop",8,DEV-FE-MID1,"Marcus Vance",66.2,0.467,1.0,DECLINED
+581,"SIM-164: Develop Interactive Kanban Task Drag-and-Drop",8,DEV-BE-SR1,"Dr. Aris Thorne",68.81,0.533,1.0,ALLOCATED
+582,"SIM-165: Implement OAuth2 / OIDC Token Verification Service",8,DEV-JR-DEV1,"Toby Jenkins",66.1,0.467,1.0,DECLINED
+582,"SIM-165: Implement OAuth2 / OIDC Token Verification Service",8,DEV-COLD-JR,"Zoe Washington",65.55,0.533,1.0,DECLINED
+582,"SIM-165: Implement OAuth2 / OIDC Token Verification Service",8,DEV-FE-MID1,"Marcus Vance",66.2,0.467,1.0,ALLOCATED
+596,"SIM-179: Develop Asynchronous Event Notification Dispatcher",8,DEV-COLD-JR,"Zoe Washington",65.55,0.533,1.0,DECLINED
+596,"SIM-179: Develop Asynchronous Event Notification Dispatcher",8,DEV-JR-DEV1,"Toby Jenkins",66.1,0.467,1.0,ALLOCATED
+589,"SIM-172: Build Automated End-to-End Cypress Integration Suite",5,DEV-FE-SR1,"Elena Rostova",61.51,0.33,1.0,ALLOCATED
+592,"SIM-175: Implement React UI Dashboard Widgets",5,DEV-FE-SR1,"Elena Rostova",61.51,0.33,1.0,ALLOCATED
+593,"SIM-176: Build Accessible Modal Dialogs and Keyboard Navigation",5,DEV-DB-SR1,"Siddharth Rao",56.12,0.22,1.0,DECLINED
+593,"SIM-176: Build Accessible Modal Dialogs and Keyboard Navigation",5,DEV-DB-MID1,"Chloe Dubois",60.49,0.4,1.0,ALLOCATED
+595,"SIM-178: Add Internationalization Support for Multi-Language UI",5,DEV-FS-SR1,"Lucas Meyer",50.38,0.7,0.158,DECLINED
+586,"SIM-169: Design JSONB Aggregation Pipeline for Analytics Export",5,DEV-DB-SR1,"Siddharth Rao",55.05,0.6,0.428,DECLINED
+597,"SIM-180: Integrate Redis Distributed Caching for Session State",5,DEV-FS-SR1,"Lucas Meyer",51.67,0.733,0.158,DECLINED
+597,"SIM-180: Integrate Redis Distributed Caching for Session State",5,DEV-FS-MID1,"Aisha Morales",55.42,0.733,0.294,ALLOCATED
+579,"SIM-162: Refactor Design System Color Tokens and Theme Toggle",3,DEV-FS-SR1,"Lucas Meyer",51.72,0.733,0.158,ALLOCATED
+588,"SIM-171: Implement Tenant-Aware Cascade Deletion Triggers",5,DEV-BE-SR1,"Dr. Aris Thorne",53.34,0.8,0.131,DECLINED
+583,"SIM-166: Build RESTful Audit Logging Endpoints with Pagination",3,DEV-JR-DEV1,"Toby Jenkins",50.17,0.57,0.294,ALLOCATED
+591,"SIM-174: Refactor Legacy Entity DTO Serialization to Records",3,DEV-COLD-JR,"Zoe Washington",49.5,0.533,0.428,DECLINED
+591,"SIM-174: Refactor Legacy Entity DTO Serialization to Records",3,DEV-FS-MID1,"Aisha Morales",51.07,0.733,0.131,ALLOCATED
+583,"SIM-166: Build RESTful Audit Logging Endpoints with Pagination",3,DEV-FE-MID1,"Marcus Vance",49.46,0.57,0.294,DECLINED
+584,"SIM-167: Fix Concurrent Rate Limiting Race Condition Bug",3,DEV-FS-MID1,"Aisha Morales",49.32,0.733,0.077,ALLOCATED
+587,"SIM-170: Tune HikariCP Connection Pool and Statement Caching",3,DEV-BE-MID1,"Priya Patel",48.93,0.6,0.294,DECLINED
+587,"SIM-170: Tune HikariCP Connection Pool and Statement Caching",3,DEV-DB-SR1,"Siddharth Rao",55.1,0.6,0.428,ALLOCATED
+578,"SIM-161: Configure Prometheus Metrics Scraper for JVM GC Monitoring",2,DEV-COLD-JR,"Zoe Washington",49.57,0.533,0.428,ALLOCATED
+588,"SIM-171: Implement Tenant-Aware Cascade Deletion Triggers",5,DEV-DB-MID1,"Chloe Dubois",55.28,0.667,0.428,ALLOCATED
+594,"SIM-177: Fix Cross-Browser Responsive Flexbox Overflow Bug",2,DEV-BE-MID1,"Priya Patel",48.87,0.6,0.294,DECLINED
+578,"SIM-161: Configure Prometheus Metrics Scraper for JVM GC Monitoring",2,DEV-FS-MID1,"Aisha Morales",49.04,0.733,0.053,DECLINED
+578,"SIM-161: Configure Prometheus Metrics Scraper for JVM GC Monitoring",2,DEV-BE-MID1,"Priya Patel",49.01,0.6,0.294,DECLINED
+579,"SIM-162: Refactor Design System Color Tokens and Theme Toggle",3,DEV-FS-MID1,"Aisha Morales",51.07,0.733,0.131,DECLINED
+579,"SIM-162: Refactor Design System Color Tokens and Theme Toggle",3,DEV-COLD-JR,"Zoe Washington",49.5,0.533,0.428,DECLINED
+580,"SIM-163: Optimize Client-Side Chart Rendering Performance",8,DEV-BE-SR1,"Dr. Aris Thorne",68.81,0.533,1.0,DECLINED
+580,"SIM-163: Optimize Client-Side Chart Rendering Performance",8,DEV-FE-MID1,"Marcus Vance",66.2,0.467,1.0,DECLINED
+581,"SIM-164: Develop Interactive Kanban Task Drag-and-Drop",8,DEV-JR-DEV1,"Toby Jenkins",66.1,0.467,1.0,DECLINED
+583,"SIM-166: Build RESTful Audit Logging Endpoints with Pagination",3,DEV-FS-MID1,"Aisha Morales",49.98,0.75,0.077,DECLINED
+584,"SIM-167: Fix Concurrent Rate Limiting Race Condition Bug",3,DEV-FS-SR1,"Lucas Meyer",49.62,0.733,0.09,DECLINED
+584,"SIM-167: Fix Concurrent Rate Limiting Race Condition Bug",3,DEV-COLD-JR,"Zoe Washington",49.37,0.533,0.428,DECLINED
+585,"SIM-168: Architect High-Volume Microservice Gateway Filter",13,DEV-FS-MID1,"Aisha Morales",75.55,0.733,1.0,DECLINED
+586,"SIM-169: Design JSONB Aggregation Pipeline for Analytics Export",5,DEV-BE-SR1,"Dr. Aris Thorne",57.8,0.8,0.294,DECLINED
+586,"SIM-169: Design JSONB Aggregation Pipeline for Analytics Export",5,DEV-DB-MID1,"Chloe Dubois",55.28,0.667,0.428,ALLOCATED
+587,"SIM-170: Tune HikariCP Connection Pool and Statement Caching",3,DEV-BE-SR1,"Dr. Aris Thorne",53.39,0.8,0.131,DECLINED
+588,"SIM-171: Implement Tenant-Aware Cascade Deletion Triggers",5,DEV-DB-SR1,"Siddharth Rao",55.05,0.6,0.428,DECLINED
+589,"SIM-172: Build Automated End-to-End Cypress Integration Suite",5,DEV-COLD-JR,"Zoe Washington",65.17,0.53,1.0,DECLINED
+589,"SIM-172: Build Automated End-to-End Cypress Integration Suite",5,DEV-DB-MID1,"Chloe Dubois",60.49,0.4,1.0,DECLINED
+590,"SIM-173: Implement Granular User Role-Based Access Control (RBAC)",8,DEV-BE-MID1,"Priya Patel",68.89,0.6,1.0,DECLINED
+591,"SIM-174: Refactor Legacy Entity DTO Serialization to Records",3,DEV-FS-SR1,"Lucas Meyer",49.76,0.733,0.09,DECLINED
+592,"SIM-175: Implement React UI Dashboard Widgets",5,DEV-DB-MID1,"Chloe Dubois",60.49,0.4,1.0,DECLINED
+592,"SIM-175: Implement React UI Dashboard Widgets",5,DEV-DB-SR1,"Siddharth Rao",56.12,0.22,1.0,DECLINED
+593,"SIM-176: Build Accessible Modal Dialogs and Keyboard Navigation",5,DEV-FS-MID1,"Aisha Morales",55.89,0.75,0.294,DECLINED
+594,"SIM-177: Fix Cross-Browser Responsive Flexbox Overflow Bug",2,DEV-COLD-JR,"Zoe Washington",49.43,0.533,0.428,DECLINED
+594,"SIM-177: Fix Cross-Browser Responsive Flexbox Overflow Bug",2,DEV-FS-MID1,"Aisha Morales",49.43,0.733,0.077,ALLOCATED
+595,"SIM-178: Add Internationalization Support for Multi-Language UI",5,DEV-FS-MID1,"Aisha Morales",55.89,0.75,0.294,DECLINED
+595,"SIM-178: Add Internationalization Support for Multi-Language UI",5,DEV-DB-SR1,"Siddharth Rao",56.12,0.22,1.0,ALLOCATED
+596,"SIM-179: Develop Asynchronous Event Notification Dispatcher",8,DEV-DB-MID1,"Chloe Dubois",62.04,0.4,1.0,DECLINED
+597,"SIM-180: Integrate Redis Distributed Caching for Session State",5,DEV-COLD-JR,"Zoe Washington",49.46,0.533,0.428,DECLINED
