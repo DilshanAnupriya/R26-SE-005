@@ -409,16 +409,19 @@ class ExplainabilityEngine:
                 return None
 
             # Align to model features
-            dev_row = dev_row[self.feature_columns]
+            dev_row_aligned = dev_row.reindex(columns=self.feature_columns, fill_value=0)
 
             # Get SHAP values
-            shap_values = self.shap_explainer.shap_values(dev_row)
+            shap_values = self.shap_explainer.shap_values(dev_row_aligned)
 
             # Convert to human-readable format
             feature_importance = []
             for i, feature in enumerate(self.feature_columns):
-                if isinstance(shap_values, list):  # For some models
-                    shap_val = shap_values[0][0, i] if len(shap_values) > 0 else 0
+                if isinstance(shap_values, list):  # For classification models [class0, class1]
+                    cls_idx = 1 if len(shap_values) > 1 else 0
+                    shap_val = shap_values[cls_idx][0, i] if len(shap_values[cls_idx]) > 0 else 0
+                elif hasattr(shap_values, "ndim") and shap_values.ndim == 3:
+                    shap_val = shap_values[0, i, 1]
                 else:
                     shap_val = shap_values[0, i]
 

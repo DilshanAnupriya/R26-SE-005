@@ -6,6 +6,8 @@ import com.sprintiq.pms.modules.ai.domain.TaskStatus;
 import com.sprintiq.pms.modules.ai.domain.OptimizerDeveloperRepository;
 import com.sprintiq.pms.modules.ai.domain.OptimizerTaskRepository;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,57 +38,96 @@ public class OptimizerSimulatorController {
         double totalStoryPoints = 0;
         double predictedVelocity = 0;
         int assignmentsCount = 0;
+        Map<Long, Double> devAssignedSpMap = new HashMap<>();
 
-        for (SimulationAssignment assignment : assignments) {
-            Optional<Developer> devOpt = developerRepository.findById(assignment.getDeveloperId());
-            Optional<Task> taskOpt = taskRepository.findById(assignment.getTaskId());
-            
-            if (devOpt.isPresent() && taskOpt.isPresent()) {
-                Developer dev = devOpt.get();
-                Task task = taskOpt.get();
+        if (assignments != null) {
+            for (SimulationAssignment assignment : assignments) {
+                if (assignment.getDeveloperId() == null || assignment.getTaskId() == null) continue;
+                Optional<Developer> devOpt = developerRepository.findById(assignment.getDeveloperId());
+                Optional<Task> taskOpt = taskRepository.findById(assignment.getTaskId());
                 
-                double sp = task.getStory_points();
-                totalStoryPoints += sp;
-                assignmentsCount++;
-
-                // LIVE ML INFERENCE CALL
-                try {
-                    Map<String, Object> payload = new HashMap<>();
-                    payload.put("task", task);
-                    payload.put("developers", Collections.singletonList(dev));
-
-                    HttpHeaders headers = new HttpHeaders();
-                    headers.setContentType(MediaType.APPLICATION_JSON);
-                    HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
-
-                    // Call the Python ML service (/predict)
-                    ResponseEntity<Map> mlResponse = restTemplate.postForEntity(pythonApiUrl, entity, Map.class);
+                if (devOpt.isPresent() && taskOpt.isPresent()) {
+                    Developer dev = devOpt.get();
+                    Task task = taskOpt.get();
                     
-                    if (mlResponse.getStatusCode() == HttpStatus.OK && mlResponse.getBody() != null) {
-                        List<Map<String, Object>> recommendations = (List<Map<String, Object>>) mlResponse.getBody().get("recommendations");
-                        if (recommendations != null && !recommendations.isEmpty()) {
-                            double aiScore = Double.parseDouble(recommendations.get(0).get("final_score").toString());
-                            predictedVelocity += (sp * (aiScore / 100.0));
-                        }
-                    }
-                } catch (Exception e) {
-                    // Fallback to basic logic if ML service is down
-                    double performancePrediction = (dev.getConsistency() * 0.3 + (dev.getExperience_level() / 5.0) * 0.7);
-                    predictedVelocity += (sp * performancePrediction);
-                    System.err.println("ML Simulation Fallback: " + e.getMessage());
+                    double sp = task.getStory_points();
+                    totalStoryPoints += sp;
+                    assignmentsCount++;
+                    devAssignedSpMap.put(dev.getId(), devAssignedSpMap.getOrDefault(dev.getId(), 0.0) + sp);
+
+                    double aiScore = getDeveloperTaskScore(task, dev);
+                    predictedVelocity += (sp * (aiScore / 100.0));
                 }
             }
         }
 
         double healthScore = (totalStoryPoints > 0) ? (predictedVelocity / totalStoryPoints) * 100 : 0;
 
+        // Fetch developers to calculate team Gini Index and capacity distribution
+        List<Developer> allDevs = developerRepository.findAll();
+        List<Double> workloads = new ArrayList<>();
+        List<DeveloperLoadDto> devLoads = new ArrayList<>();
+        int overloadedCount = 0;
+
+        for (Developer dev : allDevs) {
+            double assignedSp = devAssignedSpMap.getOrDefault(dev.getId(), 0.0);
+            workloads.add(assignedSp);
+
+            double capacity = (dev.getExperience_level() > 0 ? dev.getExperience_level() : 2) * 10.0;
+            double utilization = capacity > 0 ? (assignedSp / capacity) * 100.0 : 0.0;
+            boolean isOverloaded = assignedSp > capacity;
+            if (isOverloaded) {
+                overloadedCount++;
+            }
+            String status = isOverloaded ? "OVERLOADED" : (utilization >= 85.0 ? "NEAR_CAPACITY" : "OPTIMAL");
+            
+            String name = (dev.getProfile() != null && dev.getProfile().getFirstName() != null)
+                    ? (dev.getProfile().getFirstName() + " " + (dev.getProfile().getLastName() != null ? dev.getProfile().getLastName() : "")).trim()
+                    : dev.getDev_id();
+
+            devLoads.add(new DeveloperLoadDto(
+                dev.getId(),
+                dev.getDev_id(),
+                name,
+                Math.round(assignedSp * 10.0) / 10.0,
+                capacity,
+                Math.round(utilization * 10.0) / 10.0,
+                isOverloaded,
+                status
+            ));
+        }
+
+        double gini = calculateGini(workloads);
+        gini = Math.round(gini * 1000.0) / 1000.0;
+        String giniStatus = (gini <= 0.28) ? "OPTIMAL" : ((gini <= 0.38) ? "MODERATE" : "UNBALANCED");
+
         SimulationResponse response = new SimulationResponse();
         response.setPredictedVelocity(Math.round(predictedVelocity * 100.0) / 100.0);
         response.setTotalStoryPoints(totalStoryPoints);
         response.setHealthScore(Math.round(healthScore * 10.0) / 10.0);
         response.setAssignmentCount(assignmentsCount);
+        response.setGiniIndex(gini);
+        response.setGiniStatus(giniStatus);
+        response.setOverloadedDevelopersCount(overloadedCount);
+        response.setDeveloperLoads(devLoads);
         
         return response;
+    }
+
+    private double calculateGini(List<Double> workloads) {
+        if (workloads == null || workloads.isEmpty()) return 0.0;
+        double sum = 0.0;
+        for (double w : workloads) sum += w;
+        if (sum <= 0.0) return 0.0;
+
+        List<Double> sorted = new ArrayList<>(workloads);
+        Collections.sort(sorted);
+        int n = sorted.size();
+        double num = 0.0;
+        for (int i = 0; i < n; i++) {
+            num += (2.0 * (i + 1) - n - 1.0) * sorted.get(i);
+        }
+        return Math.max(0.0, Math.min(1.0, num / (n * sum)));
     }
 
     @Autowired
@@ -319,5 +360,23 @@ public class OptimizerSimulatorController {
         private double totalStoryPoints;
         private double healthScore;
         private int assignmentCount;
+        private double giniIndex;
+        private String giniStatus;
+        private int overloadedDevelopersCount;
+        private List<DeveloperLoadDto> developerLoads;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DeveloperLoadDto {
+        private Long developerId;
+        private String devId;
+        private String name;
+        private double assignedPoints;
+        private double capacity;
+        private double utilizationPercent;
+        private boolean isOverloaded;
+        private String loadStatus;
     }
 }
