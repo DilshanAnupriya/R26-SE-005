@@ -105,6 +105,26 @@ class RiskAdvisorServiceTest {
     }
 
     @Test
+    @DisplayName("a question carries the guide to the whole product, even for an unassessed sprint")
+    void questionKnowsTheProduct() {
+        stub(200, """
+                {"model":"gemini-3.5-flash","choices":[{"message":{"role":"assistant","content":"ok"}}]}
+                """);
+
+        RiskAdvisorResponse response = service.ask(
+                new SprintRiskResponse(UUID.randomUUID(), null, null, null, null, null),
+                List.of(), List.of(), null, "Where do I set up OKRs?", List.of());
+
+        // "I can only talk about this sprint's risk" was the answer to anything else.
+        assertThat(response.available()).isTrue();
+        assertThat(lastBody.get())
+                .contains("ABOUT SPRINTIQ")
+                .contains("Goals & OKRs")
+                .contains("has not been assessed yet")
+                .contains("COST FORECAST: none stored");
+    }
+
+    @Test
     @DisplayName("reads the advice out of an OpenAI-shaped reply")
     void happyPath() {
         // Gemini's compatibility layer sends more than the four fields this parses.

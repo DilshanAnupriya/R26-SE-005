@@ -103,14 +103,18 @@ class RiskAdvisorAskTest {
     }
 
     @Test
-    @DisplayName("an unassessed sprint is declined, not scored")
+    @DisplayName("an unassessed sprint is still asked about, not declined")
     void unassessedSprint() {
+        // The AI Assistant answers questions about the whole product, and "how do I plan
+        // a sprint?" needs no risk score. Only the unprompted advisory refuses.
         RiskAdvisorService service = service();
         SprintRiskResponse unscored =
                 new SprintRiskResponse(SPRINT, null, null, null, RiskSeverity.LOW, null);
 
-        RiskAdvisorResponse answer = service.ask(unscored, List.of(), "Why?", List.of());
-        assertThat(answer.available()).isFalse();
-        assertThat(answer.reason()).contains("not been assessed");
+        RiskAdvisorResponse[] answer = new RiskAdvisorResponse[1];
+        assertThatCode(() -> answer[0] = service.ask(
+                unscored, List.of(), "How do I plan a sprint?", List.of()))
+                .doesNotThrowAnyException();
+        assertThat(answer[0].reason()).doesNotContain("not been assessed");
     }
 }
