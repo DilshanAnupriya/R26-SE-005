@@ -344,6 +344,30 @@ public class SprintRiskAdjustmentService {
             return softCap(total);
         }
 
+        /**
+         * The same net as {@link #netSince}, as it stood at {@code until}.
+         *
+         * <p>For a past day on the trend chart. Entries recorded after that day's reading
+         * are left out, so this afternoon's blocker is never backdated onto last Tuesday,
+         * while what the board had recorded by then still counts — as it did on the
+         * gauges that day.</p>
+         */
+        public BigDecimal netBetween(RiskType riskType, java.time.Instant since,
+                                     java.time.Instant until) {
+            BigDecimal total = BigDecimal.ZERO;
+            for (SprintRiskAdjustment entry : entries) {
+                if (entry.getRiskType() != riskType || entry.getCreatedAt().isAfter(until)) {
+                    continue;
+                }
+                if (!entry.isSurvivesScoring() && since != null
+                        && !entry.getCreatedAt().isAfter(since)) {
+                    continue;
+                }
+                total = total.add(entry.getDelta());
+            }
+            return softCap(total);
+        }
+
         /** Every type's net, over the whole ledger. Always carries all three keys. */
         public Map<RiskType, BigDecimal> net() {
             Map<RiskType, BigDecimal> totals = new EnumMap<>(RiskType.class);

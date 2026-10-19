@@ -84,6 +84,45 @@ class AdjustmentsSurviveAssessTest {
     }
 
     @Nested
+    @DisplayName("A past day's reading")
+    class PastDay {
+
+        private final Instant cutoff = AFTER.plus(Duration.ofHours(1));
+
+        @Test
+        @DisplayName("counts what the board had recorded by that day's cutoff")
+        void countsWhatWasThere() {
+            entry(RiskType.COMMUNICATION_COLLABORATION, 1.1, AFTER, true);
+            entry(RiskType.COMMUNICATION_COLLABORATION, 1.5, AFTER, false);
+
+            assertThat(ledger().netBetween(RiskType.COMMUNICATION_COLLABORATION, SCORED_AT, cutoff))
+                    .isEqualByComparingTo("2.6");
+        }
+
+        @Test
+        @DisplayName("never backdates what was recorded after the cutoff")
+        void ignoresLaterEntries() {
+            entry(RiskType.COMMUNICATION_COLLABORATION, 2.75, cutoff.plus(Duration.ofDays(1)), true);
+            entry(RiskType.OVER_BUDGET, 4, cutoff.plusSeconds(1), false);
+
+            assertThat(ledger().netBetween(RiskType.COMMUNICATION_COLLABORATION, SCORED_AT, cutoff))
+                    .isZero();
+            assertThat(ledger().netBetween(RiskType.OVER_BUDGET, SCORED_AT, cutoff)).isZero();
+        }
+
+        @Test
+        @DisplayName("follows the same scoring rules as the gauges")
+        void sameRulesAsNetSince() {
+            entry(RiskType.OVER_BUDGET, 8, BEFORE, false);               // absorbed by the scoring
+            entry(RiskType.REQUIREMENT_CHANGE, 5, BEFORE, true);          // survives it
+
+            assertThat(ledger().netBetween(RiskType.OVER_BUDGET, SCORED_AT, cutoff)).isZero();
+            assertThat(ledger().netBetween(RiskType.REQUIREMENT_CHANGE, SCORED_AT, cutoff))
+                    .isEqualByComparingTo("5");
+        }
+    }
+
+    @Nested
     @DisplayName("Logged requirement changes")
     class LoggedChanges {
 

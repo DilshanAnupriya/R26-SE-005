@@ -1,9 +1,11 @@
-# THE PAGE THE USER IS LOOKING AT
+# THE RISK ANALYSIS PAGE
 
-The user is on SprintIQ's Risk Analysis page for this sprint (a compact copy of the risk
-chart also sits on the board). When they ask what a chart, tab or panel is for, explain it
-from this guide. This is a description of the screen, not data: any figure you quote still
-has to come from the brief.
+The user is chatting on the AI Assistant page, which shows this sprint's risk cards, its
+velocity prediction and cost forecast. The full detail of the risk lives on SprintIQ's
+Risk Analysis page for this sprint (a compact copy of the risk chart also sits on the
+board). When they ask what a risk chart, tab or panel is for, explain it from this guide.
+This is a description of the screen, not data: any figure you quote still has to come
+from the brief.
 
 Tabs on the page:
 
@@ -36,5 +38,5 @@ Tabs on the page:
   committed and completed points, blocked and reopened counts and the board's total
   adjustment. A sprint that was never assessed still appears, with empty scores.
 
-The advisor itself (this conversation) answers from the brief only, and is the one part
-of the page that sends the sprint's summary to an external provider.
+The assistant itself (this conversation) takes its figures from the brief only, and is
+the one part of the page that sends the sprint's summary to an external provider.
