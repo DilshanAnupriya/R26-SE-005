@@ -47,5 +47,6 @@ jobs:
           tags: |
             ${{ steps.image.outputs.name }}:latest
             ${{ steps.image.outputs.name }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Its own scope, so the ai-service workflow's cache does not overwrite this one.
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend

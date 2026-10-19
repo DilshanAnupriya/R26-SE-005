@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
 """Points each AI model at the member who hosts it, through the backend's admin API.
 
-Each member hosts their own copy of ai-service (for example a Hugging Face Space). The
-backend keeps one address per model in its ai_models table, and caches it in Redis, so
-an address changed straight in the database is not seen until that cache is cleared.
-PATCH /ai/models/{code} updates the row and clears the cache in one step — this script
-just calls it for every model whose owner you name.
+Each member's models are served by their own copy of ai-service (an Azure Web App
+running the shared sprintiq-ai image). The backend keeps one address per model in its
+ai_models table, and caches it in Redis, so an address changed straight in the database
+is not seen until that cache is cleared. PATCH /ai/models/{code} updates the row and
+clears the cache in one step — this script just calls it for every model whose owner
+you name.
 
 Usage (signed in as the organisation's owner, who has the ai:manage permission):
 
-  SPRINTIQ_API=https://<backend>.azurewebsites.net/api/v1 \\
+  SPRINTIQ_API=https://<backend-domain>/api/v1 \\
   SPRINTIQ_EMAIL=you@example.com SPRINTIQ_PASSWORD=... \\
   python scripts/point-models.py \\
-      M1=https://<dilshan>-sprintiq.hf.space \\
-      M2=https://<member2>-sprintiq.hf.space \\
-      M4=https://<member4>-sprintiq.hf.space
+      M1=https://<ai-dilshan-domain> \\
+      M2=https://<ai-risk-domain> \\
+      M4=https://<ai-risk-domain>
 
 M1, M2 and M4 name a member's whole set of models; a full code (M2_OVER_BUDGET=...)
 points one model on its own. Resource allocation (M3) is not in the table: the backend
 reads it from its PYTHON_API_URL setting instead (see docs/hosting.md).
 
 --timeout-ms raises each model's latency budget (default 30000). The backend waits for
-the lower of this and its AI_TIMEOUT_MS, and a free host that has gone to sleep can take
-longer than the default four seconds to answer.
+the lower of this and its AI_TIMEOUT_MS, and the first prediction after a host restarts
+can take longer than the default four seconds.
 """
 import argparse
 import json
