@@ -73,8 +73,12 @@ the frontend needs the backend's address; and the backend then needs the fronten
    | `DB_PASSWORD` | the password |
    | `DB_POOL_MAX` | `5` (Neon's free tier has few connections to spare) |
 
-   The database can be empty. If an earlier deployment already used it, Flyway carries
-   on from where it is.
+   **Use an empty database.** If an older version of SprintIQ already created tables in
+   it, the backend may refuse to start with "Migration checksum mismatch" (two
+   migrations were renumbered when branches were merged). The safe way round it: Neon
+   console → **Databases** → **New database**, name `sprintiq`, owner `neondb_owner`,
+   and use `/sprintiq` instead of `/neondb` in `DB_URL`. The old database is left as it
+   is.
 
 ---
 
@@ -90,6 +94,11 @@ the frontend needs the backend's address; and the backend then needs the fronten
    | `SPRING_DATA_REDIS_USERNAME` | `default` |
    | `SPRING_DATA_REDIS_PASSWORD` | the password |
    | `SPRING_DATA_REDIS_SSL_ENABLED` | `true` |
+
+   **Or, in one setting:** `SPRING_DATA_REDIS_URL` =
+   `rediss://default:<password>@<endpoint>:6379` — Upstash's `redis-cli` line gives
+   the parts. The double `s` in `rediss://` switches on TLS, and this one setting
+   overrides the host, port, username and password above, so use one way or the other.
 
 ---
 
@@ -131,10 +140,25 @@ network problems (Norton's HTTPS scanning, the slow connection).
 1. Push. On GitHub → **Actions**, wait for a green tick on **Backend image** and on
    **AI service image**. The first AI build takes about 10 minutes. To build without a
    change, open the workflow and click **Run workflow**.
-2. GitHub → your profile → **Packages** → **sprintiq-backend** → **Package settings** →
-   **Change visibility** → **Public**. Do the same for **sprintiq-ai**. Azure can then
-   pull them with no password. (To keep them private instead, make a personal access
-   token with `read:packages`, and give it to Azure on the **Container** tab.)
+2. **Make a token Azure can pull the images with.** The images are private, so Azure
+   needs a GitHub username and a token that can only read packages. The owner of the
+   repository (`DilshanAnupriya`) makes it:
+   1. GitHub → profile picture (top right) → **Settings**.
+   2. Left sidebar, at the very bottom → **Developer settings**.
+   3. **Personal access tokens** → **Tokens (classic)** → **Generate new token** →
+      **Generate new token (classic)**. It must be a *classic* token: fine-grained
+      tokens cannot read GitHub's container registry.
+   4. **Note:** `azure-pull-sprintiq`. **Expiration:** **Custom**, a date after the final
+      presentation. When it expires Azure can no longer pull a new image ("Updating
+      after a change" below says what to do then).
+   5. Tick **only `read:packages`** — nothing else. A token with only this scope can
+      download your packages and do nothing more: it cannot read the code, push, or
+      change anything.
+   6. **Generate token**, and copy it straight away (it starts with `ghp_`). GitHub shows
+      it only once; if you lose it, delete it and make a new one.
+
+   Keep it as private as a password: it goes into Azure in steps 5 and 6, and nowhere
+   else — not in git, the guide or a chat.
 
 ---
 
@@ -150,9 +174,19 @@ network problems (Norton's HTTPS scanning, the slow connection).
    - **Linux plan:** **Create new** → `sprintiq-ai-plan`. **Pricing plan:** **Basic B1**.
    - **Zone redundancy:** Disabled.
 2. **Database** tab: nothing — the AI service has no database.
-3. **Container** tab: image source **Other container registries**, access type
-   **Public**, registry server URL `https://ghcr.io`, image and tag
-   `dilshananupriya/sprintiq-ai:latest`. Leave the startup command empty.
+3. **Container** tab:
+
+   | Field | Value |
+   |---|---|
+   | Image source | **Other container registries** |
+   | Access type | **Private** |
+   | Registry server URL | `https://ghcr.io` |
+   | Username | `DilshanAnupriya` |
+   | Password | the `ghp_…` token from step 4.2 |
+   | Image and tag | `dilshananupriya/sprintiq-ai:latest` (all lower case) |
+   | Startup command | leave empty |
+
+   If the form offers sidecar containers, leave that off.
 4. **Monitoring** tab: Application Insights **No** (it costs extra, and Log stream is
    enough). Then **Review + create** → **Create**.
 5. When it is created, open the app:
@@ -168,11 +202,19 @@ network problems (Norton's HTTPS scanning, the slow connection).
 7. Check: open `https://<ai-dilshan-domain>/health`. The first time it can take two or
    three minutes; then it shows `"status":"UP"`, with `"velocity": {"loaded": true …}`.
 
-**Second AI app — M2 risk models:** the same steps, with two differences:
+**Second AI app — M2 risk models:** the same steps **and the same image,
+`dilshananupriya/sprintiq-ai:latest`**. There is only one AI image, and it holds every
+member's models; what makes this app "the risk app" is that step 8 sends the risk
+models to it. Two differences:
 
 - **Name:** `sprintiq-ai-risk` (or the risk member's name).
 - **Linux plan:** choose the **existing** `sprintiq-ai-plan`. Do not create a new one —
   that would be a second bill.
+
+The second app is optional. The first app's `/health` already shows every model loaded
+(`velocity`, `risk`, `cost`, `resource_allocation`), so one app can serve them all. Make
+the second one if each member's models should have an app of their own; skip it and, in
+steps 6 and 8, use `<ai-dilshan-domain>` wherever this guide says `<ai-risk-domain>`.
 
 Its default domain is `<ai-risk-domain>` below. Its `/health` shows
 `"risk": {"over_budget": {"loaded": true …}, "requirement_change": {"loaded": true …}}`.
@@ -194,8 +236,9 @@ both members' models at the first.
    - **Linux plan:** **Create new** → `sprintiq-backend-plan`. **Pricing plan:**
      **Basic B1**. (F1 Free cannot run Spring Boot well.)
 2. **Database** tab: nothing — the database is Neon.
-3. **Container** tab: **Other container registries**, **Public**, `https://ghcr.io`,
-   image and tag `dilshananupriya/sprintiq-backend:latest`.
+3. **Container** tab: the same as the AI apps — **Other container registries**,
+   **Private**, `https://ghcr.io`, username `DilshanAnupriya`, password the same `ghp_…`
+   token — except the image and tag: `dilshananupriya/sprintiq-backend:latest`.
 4. **Monitoring** tab: Application Insights **No**. **Review + create** → **Create**.
 5. **Overview** → copy the **Default domain** — that is `<backend-domain>` below.
 6. **Settings** → **Environment variables** → **Advanced edit**, and paste this with
@@ -205,6 +248,8 @@ both members' models at the first.
    [
      { "name": "SPRING_PROFILES_ACTIVE", "value": "prod", "slotSetting": false },
      { "name": "WEBSITES_PORT", "value": "8080", "slotSetting": false },
+     { "name": "WEBSITES_CONTAINER_START_TIME_LIMIT", "value": "600", "slotSetting": false },
+     { "name": "MANAGEMENT_HEALTH_MAIL_ENABLED", "value": "false", "slotSetting": false },
      { "name": "DB_URL", "value": "jdbc:postgresql://<neon-host>/<database>?sslmode=require", "slotSetting": false },
      { "name": "DB_USERNAME", "value": "<neon-user>", "slotSetting": false },
      { "name": "DB_PASSWORD", "value": "<neon-password>", "slotSetting": false },
@@ -224,6 +269,13 @@ both members' models at the first.
    ]
    ```
 
+   - `WEBSITES_CONTAINER_START_TIME_LIMIT=600`: on one B1 CPU the backend takes two to
+     four minutes to start, longer than Azure's default limit of 230 seconds, after
+     which Azure kills it and starts again.
+   - `MANAGEMENT_HEALTH_MAIL_ENABLED=false`: there is no email server, and without this
+     `/actuator/health` reports `DOWN` for that reason alone (Log stream: "Mail health
+     check failed"), hiding whether the database and Redis are fine. Remove it if you
+     set up `MAIL_HOST`.
    - `AI_PROVIDER=http` makes the backend call the real models; without it, it uses
      made-up mock answers.
    - `PYTHON_API_URL` is resource allocation (M3), which reads its address from here
@@ -258,7 +310,11 @@ both members' models at the first.
    | `BACKEND_INTERNAL_URL` | `https://<backend-domain>/api/v1` |
    | `ENABLE_EXPERIMENTAL_COREPACK` | `1` |
 
-   The last one makes Vercel use pnpm 11, the version `package.json` asks for.
+   `frontend/vercel.json` pins the install and build to pnpm 11.20.0 (through `npx`), so
+   Vercel cannot fall back to its own older pnpm, which fails on today's Node.js with
+   `ERR_INVALID_THIS`. `ENABLE_EXPERIMENTAL_COREPACK` is a second line of defence.
+   Set **Node.js Version** to **22.x** or newer (Settings → Build and Deployment):
+   pnpm 11.20 needs Node 22.13 or later.
 4. **Deploy**, and note the production address, e.g. `https://sprintiq.vercel.app`.
 5. Back in Azure → the backend app → **Environment variables**: set
    `CORS_ALLOWED_ORIGINS` and `APP_BASE_URL` to that exact address (`https://`, no slash
@@ -309,6 +365,11 @@ Push. GitHub builds a new image (step 4), but Azure keeps running the old one un
 app restarts: open the app → **Overview** → **Restart**, and it pulls the new `latest`.
 For the frontend, Vercel redeploys on every push by itself.
 
+**When the token expires, or is deleted:** the apps keep running, but the next restart
+cannot pull the image and the app stays down. Make a new token (step 4.2), then in each
+of the three apps → **Deployment Center** → **Settings** → paste it as the **Password**
+→ **Save**, and restart the app.
+
 ---
 
 ## Presentation-day checklist
@@ -339,15 +400,17 @@ Neon, Upstash, Vercel and GitHub's container registry are free at this size.
 | What you see | Usually |
 |---|---|
 | The Subscription box says **(Disabled)** | That account's credit or its 12 months are used up. Use an account with credit (step 3). |
-| An app's Log stream says the image could not be pulled, or "unauthorized" | The package is still private on GitHub (step 4.2), or the image name is not all lower case. |
+| An app's Log stream says the image could not be pulled, "unauthorized" or "denied" | The registry login is wrong. In that app → **Deployment Center** → **Settings**, check: access **Private**, server `https://ghcr.io`, username `DilshanAnupriya`, password a *classic* token with `read:packages` that has not expired, and the image name all lower case. Save, then restart. |
 | An AI app's Log stream says the container "didn't respond to HTTP pings" | `WEBSITES_PORT` is not `7860` on that app. |
 | The AI apps keep restarting | The plan is out of memory: see "Is the plan big enough?" in step 5. |
 | The site loads, but sign-in says the API is unreachable, or the browser shows a CORS error | `CORS_ALLOWED_ORIGINS` is not exactly the Vercel address (`https://`, no slash at the end). Fix it and restart the backend. |
 | Changed a `NEXT_PUBLIC_*` value and nothing changed | Redeploy on Vercel: those values are built in. |
 | Live board updates do not arrive | Web sockets are off on the backend app, or `NEXT_PUBLIC_WS_URL` is not `wss://…/ws`. |
+| The backend stops at start-up with "Migration checksum mismatch for migration version 33" (or 34) | The database was set up by an older version of SprintIQ. Point `DB_URL` at a new, empty Neon database (step 1), restart. |
+| The backend starts, but logs "Unable to connect to Redis", and `/actuator/health` says `DOWN` | Sign-in and most pages fail until this is fixed (permissions and predictions are cached in Redis). Check the five Redis settings (step 2): `REDIS_HOST` the host alone, `REDIS_PORT` `6379`, username `default`, the password from Upstash's `redis-cli` line (not the REST token), `SPRING_DATA_REDIS_SSL_ENABLED` `true`. Apply, restart. |
 | The backend keeps restarting | Log stream. Usually `DB_URL` (must start `jdbc:postgresql://` and end `?sslmode=require`) or Redis (`SPRING_DATA_REDIS_SSL_ENABLED=true`). |
 | Estimates or risk come back "failed" or "degraded" | That model's app is down or its address is wrong. Open its `/health`, then run `point-models.py` again with the right address. |
 | Answers look made up ("against a project baseline") | `AI_PROVIDER` is not `http`. |
 | The risk page says no advisor API key is configured | `ADVISOR_API_KEY` is empty on the backend app. Optional; set it and restart to turn the advisor on. |
-| Vercel build fails at install | `ENABLE_EXPERIMENTAL_COREPACK=1` is missing. |
+| Vercel build fails at install, e.g. `ERR_PNPM_META_FETCH_FAIL … Value of "this" must be of type URLSearchParams` (`ERR_INVALID_THIS`) | Vercel ran an old pnpm. Set `ENABLE_EXPERIMENTAL_COREPACK=1`, turn the Install Command override off, Node.js 22.x or newer, then redeploy without the build cache. |
 | Uploaded attachments disappear after a restart | Attachments are stored inside the container. Fine for a demo; lasting storage needs S3 (`STORAGE_PROVIDER=s3`). |
