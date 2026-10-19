@@ -73,10 +73,10 @@ public class SprintRiskTrendService {
      * every day of a sprint nobody has assessed yet, which is the single most misleading
      * thing this endpoint could say.</p>
      *
-     * <p>Today's point is special twice over: it is read at the current instant rather
-     * than at the snapshot hour, so a scoring run five minutes ago shows immediately,
-     * and it carries the adjustment overlay, so the last point on the chart agrees with
-     * the gauges beside it.</p>
+     * <p>Today's point is read at the current instant rather than at the snapshot hour,
+     * so a scoring run five minutes ago shows immediately. Every point carries the
+     * adjustment overlay as it stood at its own reading, so the last point agrees with
+     * the gauges beside it and earlier points agree with what the gauges said then.</p>
      */
     @Transactional(readOnly = true)
     public List<DailyRiskPoint> dailyTrend(UUID sprintId) {
@@ -111,13 +111,14 @@ public class SprintRiskTrendService {
                 if (latest == null) {
                     continue;
                 }
-                BigDecimal score = latest.getRiskScore();
-                if (isToday) {
-                    // Only today's point gets the overlay. Applying it to earlier days
-                    // would backdate this afternoon's blocker onto last Tuesday.
-                    score = applyAdjustment(score, ledger.netSince(type, latest.getCreatedAt()));
-                }
-                scores.put(type, score);
+                // Every day carries the overlay as it stood at that day's reading. Past
+                // days count only what the board had recorded by their cutoff, so this
+                // afternoon's blocker is never backdated onto last Tuesday — but last
+                // Tuesday's blocker still shows on last Tuesday, as it did on the gauges.
+                BigDecimal delta = isToday
+                        ? ledger.netSince(type, latest.getCreatedAt())
+                        : ledger.netBetween(type, latest.getCreatedAt(), cutoff);
+                scores.put(type, applyAdjustment(latest.getRiskScore(), delta));
             }
 
             if (scores.isEmpty()) {
