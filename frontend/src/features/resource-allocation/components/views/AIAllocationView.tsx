@@ -1105,6 +1105,14 @@ export default function AIAllocationView() {
   const [unassigningAll, setUnassigningAll] = useState(false);
   const [workloadDev, setWorkloadDev] = useState<{ id: number; devId: string } | null>(null);
   const [explanationRec, setExplanationRec] = useState<{ rec: DeveloperRec; taskTitle: string } | null>(null);
+  const [sprintMetrics, setSprintMetrics] = useState<{
+    giniIndex: number;
+    giniStatus: string;
+    predictedVelocity: number;
+    healthScore: number;
+    totalStoryPoints: number;
+  } | null>(null);
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
 
   const fetchSprints = useCallback(async () => {
     try {
@@ -1153,6 +1161,48 @@ export default function AIAllocationView() {
       fetchAllocations();
     }
   }, [selectedSprintId, fetchAllocations]);
+
+  // Compute live sprint metrics (Gini Index, Predicted Velocity, Health Score)
+  useEffect(() => {
+    async function updateSprintMetrics() {
+      const assignmentList = taskGroups
+        .map((g) => {
+          const allocatedRec = g.recommendations.find((r) => r.status === "ALLOCATED");
+          return allocatedRec ? { developerId: allocatedRec.developerId, taskId: g.taskRawId } : null;
+        })
+        .filter(Boolean);
+
+      if (assignmentList.length === 0) {
+        setSprintMetrics(null);
+        return;
+      }
+
+      setLoadingMetrics(true);
+      try {
+        const res = await authFetch("http://localhost:8080/api/simulator/calculate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(assignmentList),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSprintMetrics({
+            giniIndex: typeof data.giniIndex === "number" ? data.giniIndex : 0,
+            giniStatus: data.giniStatus || "OPTIMAL",
+            predictedVelocity: data.predictedVelocity || 0,
+            healthScore: data.healthScore || 0,
+            totalStoryPoints: data.totalStoryPoints || 0,
+          });
+        }
+      } catch (err) {
+        console.error("Error computing sprint metrics:", err);
+      } finally {
+        setLoadingMetrics(false);
+      }
+    }
+
+    updateSprintMetrics();
+  }, [taskGroups]);
 
   const generateRecommendations = async () => {
     if (!selectedSprintId) return;
@@ -1315,6 +1365,146 @@ export default function AIAllocationView() {
           )}
         </div>
       </div>
+
+      {/* ── Sprint Allocation & Gini Fairness Banner ── */}
+      {sprintMetrics && approvedCount > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-2xl bg-card/80 border border-border shadow-sm backdrop-blur"
+        >
+          {/* Gini Workload Fairness Card */}
+          <div className="bg-card/70 p-3.5 rounded-xl border border-border/80 space-y-2">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-1.5 text-xs text-foreground font-semibold">
+                <Scale className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Workload Gini Index</span>
+              </div>
+              <span
+                className={cn(
+                  "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                  sprintMetrics.giniStatus === "OPTIMAL"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : sprintMetrics.giniStatus === "MODERATE"
+                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                )}
+              >
+                {sprintMetrics.giniStatus === "OPTIMAL"
+                  ? "Optimal Equity"
+                  : sprintMetrics.giniStatus === "MODERATE"
+                  ? "Moderate"
+                  : "High Disparity"}
+              </span>
+            </div>
+
+            <div className="flex items-baseline justify-between">
+              <div className="text-xl font-bold text-foreground font-mono">
+                {sprintMetrics.giniIndex.toFixed(3)}
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono">
+                Target &le; 0.280
+              </span>
+            </div>
+
+            {/* Horizontal Gini Visual Meter */}
+            <div className="space-y-1">
+              <div className="relative h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    sprintMetrics.giniStatus === "OPTIMAL"
+                      ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                      : sprintMetrics.giniStatus === "MODERATE"
+                      ? "bg-gradient-to-r from-amber-500 to-yellow-400"
+                      : "bg-gradient-to-r from-rose-500 to-red-500"
+                  )}
+                  style={{ width: `${Math.min(100, Math.max(6, sprintMetrics.giniIndex * 100))}%` }}
+                />
+                {/* Target boundary line at 28% */}
+                <div
+                  className="absolute top-0 bottom-0 w-0.5 bg-white/60 pointer-events-none"
+                  style={{ left: "28%" }}
+                  title="Target: 0.280"
+                />
+              </div>
+              <div className="grid grid-cols-3 text-[9px] text-muted-foreground font-mono">
+                <span className="text-left">0.00 (Fair)</span>
+                <span className="text-center font-sans font-semibold text-indigo-400/90">&le; 0.28</span>
+                <span className="text-right">1.00 (Max)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Predicted Team Velocity */}
+          <div className="bg-card/70 p-3.5 rounded-xl border border-border/80 space-y-2 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                Predicted Velocity
+              </span>
+              <span className="text-[10px] text-muted-foreground">Empirical AI</span>
+            </div>
+            <div>
+              <div className="text-xl font-bold font-mono text-foreground">
+                {sprintMetrics.predictedVelocity.toFixed(1)}{" "}
+                <span className="text-xs font-normal text-muted-foreground">SP</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Expected delivery based on developer performance history.
+              </p>
+            </div>
+          </div>
+
+          {/* Team Match Health */}
+          <div className="bg-card/70 p-3.5 rounded-xl border border-border/80 space-y-2 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <Bot className="w-3.5 h-3.5 text-emerald-400" />
+                Team Match Health
+              </span>
+              <span className="text-[10px] text-emerald-400 font-semibold">Skill & Cap</span>
+            </div>
+            <div>
+              <div className="text-xl font-bold font-mono text-emerald-400">
+                {sprintMetrics.healthScore.toFixed(1)}%
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Weighted composite score across all active task assignments.
+              </p>
+            </div>
+          </div>
+
+          {/* Allocation Progress */}
+          <div className="bg-card/70 p-3.5 rounded-xl border border-border/80 space-y-2 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                Sprint Coverage
+              </span>
+              <span className="text-[11px] font-mono font-semibold text-foreground">
+                {approvedCount} / {taskGroups.length}
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between">
+                <div className="text-xl font-bold font-mono text-foreground">
+                  {Math.round((approvedCount / (taskGroups.length || 1)) * 100)}%
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {sprintMetrics.totalStoryPoints.toFixed(0)} SP Total
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-primary to-emerald-400 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.round((approvedCount / (taskGroups.length || 1)) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Task Rows */}
       {loading ? (
