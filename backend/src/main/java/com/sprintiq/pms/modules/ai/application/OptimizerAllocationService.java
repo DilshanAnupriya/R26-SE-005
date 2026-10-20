@@ -71,8 +71,14 @@ public class OptimizerAllocationService {
         Sprint sprint = sprintRepository.findById(sprintId).orElse(null);
         if (sprint == null) return;
 
+        List<Developer> allDevs = developerRepository.findAll();
+        List<Developer> developers = (sprint.getOrganizationId() != null)
+                ? allDevs.stream().filter(d -> sprint.getOrganizationId().equals(d.getOrganizationId())).toList()
+                : allDevs;
+        if (developers.isEmpty()) {
+            developers = allDevs;
+        }
         List<Task> sprintTasks = taskRepository.findBySprintId(sprintId);
-        List<Developer> developers = developerRepository.findAll();
         if (developers.isEmpty() || sprintTasks.isEmpty()) return;
 
         for (Task task : sprintTasks) {
@@ -275,6 +281,55 @@ public class OptimizerAllocationService {
     }
 
     public void approveAllRecommendations(Long sprintId) {
+        // 1. First attempt Global Optimal Bipartite Matching (Hungarian Algorithm)
+        // This mathematically balances workload across the whole team (minimizing Gini index)
+        // and guarantees that developers with capacity (like Chloe, Zoe, Toby) are allocated.
+        if (rankingService != null) {
+            try {
+                List<Map<String, Object>> bulkAllocations = rankingService.allocateSprint(sprintId);
+                if (bulkAllocations != null && !bulkAllocations.isEmpty()) {
+                    Sprint sprint = sprintRepository.findById(sprintId).orElse(null);
+                    for (Map<String, Object> allocData : bulkAllocations) {
+                        Long taskId = Long.valueOf(allocData.get("task_id").toString());
+                        Object devIdObj = allocData.get("dev_id") != null ? allocData.get("dev_id") : allocData.get("allocated_to");
+                        if (devIdObj == null) continue;
+                        String devIdStr = devIdObj.toString();
+
+                        Optional<Developer> devOpt = developerRepository.findByDev_id(devIdStr);
+                        if (devOpt.isPresent()) {
+                            Developer dev = devOpt.get();
+                            Task task = taskRepository.findById(taskId).orElse(null);
+                            if (sprint != null && task != null) {
+                                Allocation alloc = allocationRepository
+                                        .findBySprintAndTaskAndDeveloper(sprint, task, dev)
+                                        .orElseGet(() -> {
+                                            List<Allocation> existingTaskAllocs = allocationRepository.findByTask_Id(taskId);
+                                            if (!existingTaskAllocs.isEmpty()) {
+                                                return existingTaskAllocs.get(0);
+                                            }
+                                            Allocation newAlloc = Allocation.builder()
+                                                    .sprint(sprint)
+                                                    .task(task)
+                                                    .developer(dev)
+                                                    .organizationId(sprint.getOrganizationId())
+                                                    .finalScore(allocData.get("match_score") != null ? Double.valueOf(allocData.get("match_score").toString()) : 70.0)
+                                                    .status("RECOMMENDED")
+                                                    .build();
+                                            return allocationRepository.save(newAlloc);
+                                        });
+
+                                assignRecommendedDeveloper(alloc.getId(), dev.getId());
+                            }
+                        }
+                    }
+                    return;
+                }
+            } catch (Exception e) {
+                System.err.println("Note: Global bipartite matching approval fallback: " + e.getMessage());
+            }
+        }
+
+        // 2. Fallback to Capacity-Aware Fair Distribution loop
         List<Allocation> allAllocations = getAllocationsBySprint(sprintId);
 
         // Group by task to identify pending tasks
@@ -302,7 +357,7 @@ public class OptimizerAllocationService {
                 // Sort allocations by rank
                 allocations.sort((a, b) -> Integer.compare(a.getRankPosition(), b.getRankPosition()));
 
-                // 1. Try to find top candidate who doesn't have a task in this sprint yet (fair distribution)
+                // Try to find top candidate who doesn't have a task in this sprint yet (fair distribution)
                 Allocation chosen = allocations.stream()
                     .filter(a -> !assignedDevIdsInSprint.contains(a.getDeveloper().getId()) && "RECOMMENDED".equals(a.getStatus()))
                     .findFirst()

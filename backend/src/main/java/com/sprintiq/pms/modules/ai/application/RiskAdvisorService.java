@@ -1,5 +1,7 @@
 package com.sprintiq.pms.modules.ai.application;
 
+import com.sprintiq.pms.modules.ai.web.dto.AiDtos.CostForecastResponse;
+import com.sprintiq.pms.modules.ai.web.dto.AiDtos.DailyRiskPoint;
 import com.sprintiq.pms.modules.ai.web.dto.AiDtos.RiskAdjustmentResponse;
 import com.sprintiq.pms.modules.ai.web.dto.AiDtos.RiskAdvisorResponse;
 import com.sprintiq.pms.modules.ai.web.dto.AiDtos.RiskAssessmentResponse;
@@ -49,6 +51,20 @@ public class RiskAdvisorService {
     private static final String QA_PROMPT_PATH = "prompts/risk-advisor-qa.txt";
 
     /**
+     * What each tab and panel of the Risk Analysis page is for, appended to the question
+     * path's instructions. Optional: without it the advisor still answers from the figures,
+     * it just cannot explain the screen.
+     */
+    private static final String PAGE_GUIDE_PATH = "prompts/risk-page-guide.txt";
+
+    /**
+     * What every page of SprintIQ is for, appended to the question path's instructions.
+     * Optional, like the page guide: without it the advisor still answers about the
+     * sprint, it just cannot explain the rest of the product.
+     */
+    private static final String SYSTEM_GUIDE_PATH = "prompts/sprintiq-system-guide.txt";
+
+    /**
      * How many prior turns are replayed to the provider.
      *
      * <p>The brief is re-sent in full on every question, so the history is only needed
@@ -62,12 +78,16 @@ public class RiskAdvisorService {
     private final AppProperties properties;
     private final String systemPrompt;
     private final String qaPrompt;
+    private final String pageGuide;
+    private final String systemGuide;
 
     public RiskAdvisorService(WebClient.Builder builder, AppProperties properties) {
         this.builder = builder;
         this.properties = properties;
         this.systemPrompt = loadPrompt(SYSTEM_PROMPT_PATH);
         this.qaPrompt = loadPrompt(QA_PROMPT_PATH);
+        this.pageGuide = loadPrompt(PAGE_GUIDE_PATH);
+        this.systemGuide = loadPrompt(SYSTEM_GUIDE_PATH);
     }
 
     /** One turn of a conversation. Only the two roles a client is allowed to send. */
@@ -107,7 +127,7 @@ public class RiskAdvisorService {
      * because a third party is down would make the optional part load-bearing.</p>
      */
     public RiskAdvisorResponse advise(SprintRiskResponse risk, List<RiskAdjustmentResponse> findings) {
-        RiskAdvisorResponse refusal = unavailableReason(risk, systemPrompt);
+        RiskAdvisorResponse refusal = unavailableReason(risk, systemPrompt, true);
         if (refusal != null) {
             return refusal;
         }
@@ -132,7 +152,35 @@ public class RiskAdvisorService {
      */
     public RiskAdvisorResponse ask(SprintRiskResponse risk, List<RiskAdjustmentResponse> findings,
                                    String question, List<Turn> history) {
-        RiskAdvisorResponse refusal = unavailableReason(risk, qaPrompt);
+        return ask(risk, findings, List.of(), question, history);
+    }
+
+    /**
+     * The same, with the sprint's day-by-day trend in the brief.
+     *
+     * <p>The question path also carries a guide to the page itself. Without it the model
+     * knew the numbers but not the screen they sit on, and "what is the trend chart for?"
+     * got "I cannot see a trends chart" — true of the brief, useless to the person
+     * looking at the chart.</p>
+     */
+    public RiskAdvisorResponse ask(SprintRiskResponse risk, List<RiskAdjustmentResponse> findings,
+                                   List<DailyRiskPoint> trend, String question, List<Turn> history) {
+        return ask(risk, findings, trend, null, question, history);
+    }
+
+    /**
+     * The same, with the sprint's stored cost forecast in the brief.
+     *
+     * <p>This is the AI Assistant's chat, and people ask it about the whole product, not
+     * only risk. So it also carries a guide to every page, and it answers for a sprint
+     * that has not been assessed yet: "how do I plan a sprint?" does not need a risk
+     * score. The unprompted advisory still refuses an unassessed sprint, because a
+     * report about risk with no risk in it says nothing.</p>
+     */
+    public RiskAdvisorResponse ask(SprintRiskResponse risk, List<RiskAdjustmentResponse> findings,
+                                   List<DailyRiskPoint> trend, CostForecastResponse cost,
+                                   String question, List<Turn> history) {
+        RiskAdvisorResponse refusal = unavailableReason(risk, qaPrompt, false);
         if (refusal != null) {
             return refusal;
         }
@@ -141,14 +189,17 @@ public class RiskAdvisorService {
         }
 
         List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", systemPrompt + "\n\n" + qaPrompt));
+        messages.add(Map.of("role", "system", "content", systemPrompt + "\n\n" + qaPrompt
+                + (pageGuide == null ? "" : "\n\n" + pageGuide)
+                + (systemGuide == null ? "" : "\n\n" + systemGuide)));
         // The grounding, as an exchange the model has already had. Sending it as the
         // opening turn rather than folding it into the system prompt keeps instructions
         // and data separable, which is the whole basis for telling the model that the
         // brief is evidence and not orders.
-        messages.add(Map.of("role", "user", "content", brief(risk, findings)));
+        messages.add(Map.of("role", "user", "content",
+                brief(risk, findings) + trendSection(trend) + costSection(cost)));
         messages.add(Map.of("role", "assistant", "content",
-                "I have this sprint's figures. What would you like to know?"));
+                "I have this sprint's figures and the guide to SprintIQ. What would you like to know?"));
 
         if (history != null) {
             // Newest turns win when the thread outgrows the budget: a follow-up depends
@@ -172,7 +223,8 @@ public class RiskAdvisorService {
      * the key is missing while its chat box says something else is a page nobody can
      * debug.</p>
      */
-    private RiskAdvisorResponse unavailableReason(SprintRiskResponse risk, String prompt) {
+    private RiskAdvisorResponse unavailableReason(SprintRiskResponse risk, String prompt,
+                                                  boolean requireAssessment) {
         AppProperties.Advisor config = properties.getAi().getAdvisor();
 
         if (!config.isConfigured()) {
@@ -185,7 +237,7 @@ public class RiskAdvisorService {
             return RiskAdvisorResponse.unavailable(
                     "The advisor's instructions could not be loaded, so it will not run.");
         }
-        if (risk == null || risk.overall() == null) {
+        if (risk == null || (requireAssessment && risk.overall() == null)) {
             return RiskAdvisorResponse.unavailable(
                     "This sprint has not been assessed yet — there is nothing to advise on.");
         }
@@ -236,7 +288,10 @@ public class RiskAdvisorService {
             return RiskAdvisorResponse.unavailable(switch (ex.getStatusCode().value()) {
                 case 400 -> "The provider rejected the request — check the configured model name.";
                 case 401, 403 -> "The provider rejected the API key.";
+                case 404 -> "The provider no longer serves the model \"" + config.getModel()
+                        + "\" — set ADVISOR_MODEL to a current one.";
                 case 429 -> "The provider is rate-limiting this key. Try again shortly.";
+                case 503 -> "The provider is overloaded right now. Try again in a minute.";
                 default -> "The advisor provider returned " + ex.getStatusCode() + ".";
             });
         } catch (RuntimeException ex) {
@@ -256,6 +311,14 @@ public class RiskAdvisorService {
     private String brief(SprintRiskResponse risk, List<RiskAdjustmentResponse> findings) {
         StringBuilder sb = new StringBuilder();
         var overall = risk.overall();
+
+        if (overall == null) {
+            // Only the question path gets here. Said outright, so a question about the
+            // score is answered with "not assessed yet" rather than a figure.
+            return "OVERALL RISK: this sprint has not been assessed yet, so there are no risk "
+                    + "scores, drivers or board findings. Assess now on the Risk Analysis page "
+                    + "scores it.\n";
+        }
 
         sb.append("OVERALL RISK\n");
         sb.append("- Score: ").append(pct(overall.score())).append(" (").append(overall.level()).append(")\n");
@@ -277,6 +340,67 @@ public class RiskAdvisorService {
             sb.append("BOARD FINDINGS: none standing.\n");
         }
         return sb.toString();
+    }
+
+    /**
+     * The Trend tab's numbers, one line per scored day.
+     *
+     * <p>Unscored days are counted rather than listed: the chart shows them as gaps, and a
+     * line of blanks per day would only invite the model to read them as zeros.</p>
+     */
+    private String trendSection(List<DailyRiskPoint> trend) {
+        if (trend == null || trend.isEmpty()) {
+            return "\nDAILY TREND: this sprint has no date range, so there is no daily trend.\n";
+        }
+        List<DailyRiskPoint> scored = trend.stream().filter(DailyRiskPoint::hasData).toList();
+        StringBuilder sb = new StringBuilder("\nDAILY TREND (overall / over-budget / "
+                + "requirement change / collaboration, read at 17:00 UTC; today is live)\n");
+        if (scored.isEmpty()) {
+            sb.append("- No day has been scored yet.\n");
+        }
+        scored.forEach(point -> sb.append("- ").append(point.date())
+                .append(point.current() ? " (today)" : "").append(": ")
+                .append(pct(point.overallScore())).append(" / ")
+                .append(pct(point.overBudgetScore())).append(" / ")
+                .append(pct(point.requirementChangeScore())).append(" / ")
+                .append(pct(point.communicationCollaborationScore())).append('\n'));
+        sb.append("- ").append(scored.size()).append(" of ").append(trend.size())
+                .append(" days scored; the rest are before the first assessment or still to come.\n");
+        return sb.toString();
+    }
+
+    /**
+     * The sprint's last stored M4 forecast, as the AI Assistant page shows it.
+     *
+     * <p>Read from storage, never re-forecast: asking a question must not write a
+     * prediction.</p>
+     */
+    private String costSection(CostForecastResponse cost) {
+        if (cost == null) {
+            return "\nCOST FORECAST: none stored for this sprint.\n";
+        }
+        StringBuilder sb = new StringBuilder("\nCOST FORECAST (M4, typically 23-29% off)\n");
+        sb.append("- Stage: ").append(cost.stage()).append('\n');
+        sb.append("- Forecast: ").append(money(cost.forecastAmount(), cost.currency()))
+          .append(" (range ").append(money(cost.lowerBound(), cost.currency()))
+          .append(" to ").append(money(cost.upperBound(), cost.currency())).append(")\n");
+        if (cost.varianceVsBudgetPct() != null) {
+            sb.append("- Versus budget: ")
+              .append(cost.varianceVsBudgetPct().stripTrailingZeros().toPlainString()).append("%\n");
+        }
+        if (cost.trend() != null) {
+            sb.append("- Trend: ").append(cost.trend()).append('\n');
+        }
+        if (cost.explanation() != null) {
+            sb.append("- Model's own words: ").append(cost.explanation()).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private String money(java.math.BigDecimal amount, String currency) {
+        return amount == null ? "unknown"
+                : amount.setScale(0, java.math.RoundingMode.HALF_UP).toPlainString()
+                        + (currency == null ? "" : " " + currency);
     }
 
     private void appendModel(StringBuilder sb, String label, RiskAssessmentResponse assessment) {

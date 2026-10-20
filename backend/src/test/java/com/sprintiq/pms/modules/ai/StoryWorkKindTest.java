@@ -66,6 +66,21 @@ class StoryWorkKindTest {
             assertThat(story("Rename the column header", "Cosmetic", 0, List.of())
                     .hasIntegrationWork()).isFalse();
         }
+
+        @Test
+        @DisplayName("an Export button is the system's own feature, not an integration")
+        void exportInTheWordingIsNotIntegration() {
+            assertThat(story("Add a tooltip to the Export button",
+                    "Explain what the export contains when a user hovers over the button.",
+                    0, List.of("ui")).hasIntegrationWork()).isFalse();
+        }
+
+        @Test
+        @DisplayName("a person's export label still counts")
+        void exportLabelStillCounts() {
+            assertThat(story("Monthly report file", "Send it to finance", 0, List.of("export"))
+                    .hasIntegrationWork()).isTrue();
+        }
     }
 
     @Nested

@@ -31,12 +31,24 @@ public class OptimizerDeveloperController {
 
 
     @GetMapping
-    public List<Developer> getAll() {
+    public List<Developer> getAll(
+            @RequestHeader(value = "X-Organization-Id", required = false) UUID headerOrgId) {
+        if (headerOrgId != null) {
+            return developerService.getAllDevelopers().stream()
+                    .filter(d -> headerOrgId.equals(d.getOrganizationId()))
+                    .toList();
+        }
         return developerService.getAllDevelopers();
     }
 
     @GetMapping("/profiles")
-    public List<DeveloperProfile> getAllProfiles() {
+    public List<DeveloperProfile> getAllProfiles(
+            @RequestHeader(value = "X-Organization-Id", required = false) UUID headerOrgId) {
+        if (headerOrgId != null) {
+            return developerService.getAllDeveloperProfiles().stream()
+                    .filter(p -> headerOrgId.equals(p.getOrganizationId()))
+                    .toList();
+        }
         return developerService.getAllDeveloperProfiles();
     }
 
@@ -53,6 +65,11 @@ public class OptimizerDeveloperController {
     @GetMapping("/{id}/profile")
     public DeveloperProfile getProfileByDevId(@PathVariable Long id) {
         return developerService.getProfileByDeveloperId(id);
+    }
+
+    @GetMapping("/{id}/analytics")
+    public com.sprintiq.pms.modules.ai.web.dto.OptimizerDtos.DeveloperAnalyticsDto getAnalytics(@PathVariable Long id) {
+        return developerService.getDeveloperAnalytics(id);
     }
 
     @PutMapping("/{id}")

@@ -42,6 +42,20 @@ describe("StoryPointsField", () => {
     );
   });
 
+  it.each([0, 0.5, 20, 40, 100])("offers %s on the deck and saves it", async (value) => {
+    // Past 13 and below 1: the cards a planning session plays for an epic or for work
+    // that is barely work, which the scale used to stop short of.
+    render(<StoryPointsField story={story()} projectId={PROJECT_ID} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Set/ }));
+    await userEvent.click(screen.getByRole("button", { name: String(value) }));
+
+    expect(estimateMutate).toHaveBeenCalledWith(
+      { storyId: STORY_ID, storyPoints: value },
+      expect.anything(),
+    );
+  });
+
   it("takes a number off the Fibonacci scale for teams that do not use it", async () => {
     render(<StoryPointsField story={story({ storyPoints: 5, estimateSource: "MANUAL" })} projectId={PROJECT_ID} />);
 

@@ -195,8 +195,8 @@ public class OptimizerTaskService {
                 com.sprintiq.pms.modules.ai.domain.Developer dev = task.getDeveloper();
                 dev.setCurrent_workload(Math.max(0, dev.getCurrent_workload() - task.getStory_points()));
                 dev.setCurrent_tasks(Math.max(0, dev.getCurrent_tasks() - 1));
-                int capacity = (dev.getExperience_level() > 0 ? dev.getExperience_level() : 2) * 10;
-                double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0, capacity - dev.getCurrent_workload()) / capacity) * 100.0));
+                double capacity = dev.getEffectiveCapacity();
+                double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0.0, capacity - dev.getCurrent_workload()) / capacity) * 100.0));
                 dev.setAvailability(availPct);
                 developerRepository.save(dev);
             }
@@ -216,8 +216,8 @@ public class OptimizerTaskService {
                     com.sprintiq.pms.modules.ai.domain.Developer dev = task.getDeveloper();
                     dev.setCurrent_workload(Math.max(0, dev.getCurrent_workload() - task.getStory_points()));
                     dev.setCurrent_tasks(Math.max(0, dev.getCurrent_tasks() - 1));
-                    int capacity = (dev.getExperience_level() > 0 ? dev.getExperience_level() : 2) * 10;
-                    double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0, capacity - dev.getCurrent_workload()) / capacity) * 100.0));
+                    double capacity = dev.getEffectiveCapacity();
+                    double availPct = Math.max(0.0, Math.min(100.0, ((double) Math.max(0.0, capacity - dev.getCurrent_workload()) / capacity) * 100.0));
                     dev.setAvailability(availPct);
                     developerRepository.save(dev);
                 }

@@ -26,12 +26,46 @@ export const aiModelCodeSchema = z.enum([
 ]);
 export type AiModelCode = z.infer<typeof aiModelCodeSchema>;
 
+/**
+ * A remedy the model measured for one driver raising its score, read off SHAP.
+ *
+ * <p>Sent by the over-budget model only. Snake-case because it is the model service's
+ * own object, passed through the backend untouched.</p>
+ */
+export const shapFixSchema = z.object({
+  method: z.string(),
+  /**
+   * `direct`: move the reading itself until its SHAP value stops being positive.
+   * `offset`: the reading is history, so move a controllable one by enough to cancel it.
+   * `none`: nothing within reach helps. `unsupplied`: the reading was a stand-in value.
+   */
+  kind: z.string(),
+  complete: z.boolean().nullish(),
+  summary: z.string(),
+  shap_now: z.coerce.number().nullish(),
+  shap_after: z.coerce.number().nullish(),
+  removed: z.coerce.number().nullish(),
+  cancels: z.coerce.number().nullish(),
+  probability_now: z.coerce.number().nullish(),
+  probability_after: z.coerce.number().nullish(),
+  move: z
+    .object({
+      feature: z.string(),
+      label: z.string().nullish(),
+      from: z.union([z.number(), z.string()]).nullish(),
+      to: z.union([z.number(), z.string()]).nullish(),
+    })
+    .nullish(),
+});
+export type ShapFix = z.infer<typeof shapFixSchema>;
+
 export const predictionDriverSchema = z.object({
   feature: z.string(),
   label: z.string().nullish(),
   contribution: z.coerce.number(),
   direction: z.string(),
   detail: z.string().nullish(),
+  fix: shapFixSchema.nullish(),
 });
 export type PredictionDriver = z.infer<typeof predictionDriverSchema>;
 

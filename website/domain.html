@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en" class="no-js" data-light="day">
+<head>
+<!-- head:start -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07090e">
+<meta name="author" content="R26-SE-005 · SLIIT Faculty of Computing">
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/core.css">
+<link rel="stylesheet" href="assets/css/components.css">
+<script>
+  (function () {
+    var d = document.documentElement, t = null;
+    d.classList.remove("no-js"); d.classList.add("js");
+    try { t = localStorage.getItem("siq-theme"); } catch (e) {}
+    if (t !== "night") t = "day";
+    d.setAttribute("data-theme", t);
+    d.setAttribute("data-light", t);
+  })();
+</script>
+<!-- head:end -->
+<title>Domain · SprintIQ research · R26-SE-005</title>
+<meta name="description" content="Literature survey, research gap, research problem, objectives, methodology and technologies behind SprintIQ, an AI-driven Agile project management framework (SLIIT R26-SE-005).">
+</head>
+<body data-page="domain">
+<!-- header:start -->
+<a class="skip" href="#main">Skip to content</a>
+<div class="grain" aria-hidden="true"></div>
+<header class="nav" data-nav-bar>
+  <div class="nav__inner wrap">
+    <a class="brand" href="index.html" aria-label="SprintIQ research, home">
+      <svg class="brand__mark" viewBox="0 -2 36 34" aria-hidden="true">
+        <defs>
+          <linearGradient id="sg-h" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/>
+          </linearGradient>
+        </defs>
+        <path d="M23.5 8.6C21.6 6.6 19 5.6 16 5.6c-4.4 0-7.4 2.4-7.4 5.7 0 3.5 3 4.7 7.4 5.5 4.6.8 7.6 2.3 7.6 5.8 0 3.4-3.1 5.8-7.6 5.8-3.2 0-5.9-1.1-7.8-3.1" fill="none" stroke="url(#sg-h)" stroke-width="4.2" stroke-linecap="round"/>
+        <g fill="none" stroke="#19e6c1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M24.3 6h3.2v3.2" opacity=".5"/><path d="M26.9 3.4h3.2v3.2" opacity=".75"/><path d="M29.5.8h3.2V4"/>
+        </g>
+      </svg>
+      <span class="brand__name">SprintIQ</span>
+      <span class="brand__id">R26-SE-005</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Main">
+      <ul>
+        <li><a class="nav__link" href="index.html" data-nav="home">Home</a></li>
+        <li><a class="nav__link" href="domain.html" data-nav="domain" aria-current="page">Domain</a></li>
+        <li class="has-menu">
+          <a class="nav__link" href="index.html#chapters" data-nav="components" aria-haspopup="true">
+            Components
+            <svg class="nav__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="menu" role="group" aria-label="Research components">
+            <ul>
+              <li><a href="components/estimation.html" data-nav="estimation"><span class="chip chip--model chip--m1">M1</span><span class="menu__title">Effort &amp; sprint estimation</span><span class="menu__sub">How big is it, and how much can we do?</span></a></li>
+              <li><a href="components/allocation.html" data-nav="allocation"><span class="chip chip--model chip--m3">M3</span><span class="menu__title">Skill-aware resource allocation</span><span class="menu__sub">Who should take it?</span></a></li>
+              <li><a href="components/cost.html" data-nav="cost"><span class="chip chip--model chip--m4">M4</span><span class="menu__title">Sprint cost forecasting</span><span class="menu__sub">What will it cost?</span></a></li>
+              <li><a href="components/risk.html" data-nav="risk"><span class="chip chip--model chip--m2">M2</span><span class="menu__title">Sprint risk prediction</span><span class="menu__sub">What could go wrong?</span></a></li>
+              <li><a href="components/copilot.html" data-nav="copilot"><span class="chip chip--model chip--cp">AI</span><span class="menu__title">SprintIQ Copilot</span><span class="menu__sub">Ask across all four models</span></a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="has-menu">
+          <a class="nav__link" href="milestones.html" data-nav="milestones" aria-haspopup="true">
+            Milestones
+            <svg class="nav__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="menu menu--milestones" role="group" aria-label="Assessments">
+            <ul>
+              <li><a href="milestones.html#taf"><span class="menu__title">Topic assessment</span><span class="menu__date">TAF</span></a></li>
+              <li><a href="milestones.html#charter"><span class="menu__title">Project charter</span><span class="menu__date">Charter</span></a></li>
+              <li><a href="milestones.html#proposal"><span class="menu__title">Project proposal</span><span class="menu__date">PP0</span></a></li>
+              <li><a href="milestones.html#pp1"><span class="menu__title">Progress presentation 1</span><span class="menu__date">PP1</span></a></li>
+              <li><a href="milestones.html#pp2"><span class="menu__title">Progress presentation 2</span><span class="menu__date">PP2</span></a></li>
+              <li><a href="milestones.html#website"><span class="menu__title">Research website</span><span class="menu__date">Web</span></a></li>
+              <li><a href="milestones.html#paper"><span class="menu__title">Research paper</span><span class="menu__date">Paper</span></a></li>
+              <li><a href="milestones.html#final-report"><span class="menu__title">Final report</span><span class="menu__date">Thesis</span></a></li>
+              <li><a href="milestones.html#final"><span class="menu__title">Final presentation &amp; viva</span><span class="menu__date">Viva</span></a></li>
+            </ul>
+            <div class="menu__foot"><a class="link-arrow" href="milestones.html">All milestones</a></div>
+          </div>
+        </li>
+        <li><a class="nav__link" href="documents.html" data-nav="documents">Documents</a></li>
+        <li><a class="nav__link" href="presentations.html" data-nav="presentations">Presentations</a></li>
+        <li><a class="nav__link" href="about.html" data-nav="about">About us</a></li>
+      </ul>
+    </nav>
+
+    <div class="nav__actions">
+      <button class="icon-btn theme-toggle" type="button" data-theme-toggle aria-label="Switch to night mode">
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <a class="btn btn--primary btn--sm nav__contact" href="contact.html" data-nav="contact">Contact us</a>
+
+      <details class="mnav" data-mnav>
+        <summary aria-label="Open menu"><span class="mnav__bars" aria-hidden="true"></span>Menu</summary>
+        <div class="mnav__sheet" data-lenis-prevent>
+          <nav aria-label="Mobile">
+            <div class="mnav__group">
+              <span class="label">Research</span>
+              <ul class="mnav__list">
+                <li><a href="index.html" data-nav="home">Home</a></li>
+                <li><a href="domain.html" data-nav="domain" aria-current="page">Domain</a></li>
+                <li><a href="milestones.html" data-nav="milestones">Milestones</a></li>
+                <li><a href="documents.html" data-nav="documents">Documents</a></li>
+                <li><a href="presentations.html" data-nav="presentations">Presentations</a></li>
+                <li><a href="about.html" data-nav="about">About us</a></li>
+                <li><a href="contact.html" data-nav="contact">Contact us</a></li>
+              </ul>
+            </div>
+            <div class="mnav__group">
+              <span class="label">Components, in sprint order</span>
+              <ul class="mnav__list">
+                <li><a href="components/estimation.html" data-nav="estimation">Estimation <span class="mono">M1</span></a></li>
+                <li><a href="components/allocation.html" data-nav="allocation">Allocation <span class="mono">M3</span></a></li>
+                <li><a href="components/cost.html" data-nav="cost">Cost <span class="mono">M4</span></a></li>
+                <li><a href="components/risk.html" data-nav="risk">Risk <span class="mono">M2</span></a></li>
+                <li><a href="components/copilot.html" data-nav="copilot">Copilot <span class="mono">AI</span></a></li>
+              </ul>
+            </div>
+          </nav>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+<!-- header:end -->
+
+<main id="main">
+  <section class="page-hero">
+    <div class="wrap page-hero__grid">
+      <div class="page-hero__copy">
+        <span class="eyebrow">Domain · research background</span>
+        <h1>Sprint planning runs on four guesses.</h1>
+        <p class="lead">How big is it? Who should take it? What will it cost? What could go wrong? Agile teams answer these with a planning-poker vote, whoever looks free, last quarter's spreadsheet, and whatever they find out on day nine. This page sets out what the research says about each guess, where it falls short, and how SprintIQ was built to close the gap.</p>
+        <dl class="page-hero__meta">
+          <div><dt>Field</dt><dd>Agile project management · applied ML</dd></div>
+          <div><dt>Setting</dt><dd>Sri Lanka's software industry</dd></div>
+          <div><dt>Method</dt><dd>Design Science Research</dd></div>
+        </dl>
+      </div>
+      <figure class="page-hero__art" data-reveal="scale">
+        <img src="assets/img/illus/gap-steps.svg" width="600" height="480" alt="Illustration: two solid steps labelled by their contents, rows of records and a bar-chart report, lead up to a third step drawn as a glowing dashed outline holding a prediction with a range bar and drivers. Today's tools stop at recording and reporting; the missing step is predicting with ranges and reasons.">
+      </figure>
+    </div>
+  </section>
+
+  <div class="wrap section section--flush">
+    <div class="longform">
+      <nav class="toc" aria-label="On this page">
+        <span class="label">On this page</span>
+        <ol>
+          <li><a href="#literature">Literature survey</a></li>
+          <li><a href="#gap">Research gap</a></li>
+          <li><a href="#problem">Research problem</a></li>
+          <li><a href="#objectives">Research objectives</a></li>
+          <li><a href="#methodology">Methodology</a></li>
+          <li><a href="#technologies">Technologies used</a></li>
+          <li><a href="#references">References</a></li>
+        </ol>
+      </nav>
+
+      <div class="longform__body">
+        <!-- 1. Literature survey -->
+        <section id="literature" aria-labelledby="literature-h">
+          <span class="eyebrow">01 · Literature survey</span>
+          <h2 id="literature-h">What's already known</h2>
+          <div class="prose">
+            <p>Agile is now the default way software teams plan work, and sprint planning is where most of its decisions are made <a class="cite" href="#ref-1">[1]</a>. Each of those decisions has its own research thread. The four threads below are the ones SprintIQ builds on.</p>
+
+            <h3>Sizing work: story points and velocity</h3>
+            <p>Machine-learning estimation of story points from issue text started with classifiers over issue features <a class="cite" href="#ref-2">[2]</a> and moved to deep models: Deep-SE combined an LSTM with a recurrent highway network <a class="cite" href="#ref-3">[3]</a>, and GPT2SP used a transformer <a class="cite" href="#ref-4">[4]</a>. A careful replication found that Deep-SE did not consistently beat simple baselines such as the median <a class="cite" href="#ref-5">[5]</a>, so any new model has to be judged against those baselines. Team velocity has also been predicted from iteration history <a class="cite" href="#ref-6">[6]</a>. Almost all of this work returns a single number. Conformalised quantile regression gives a range with a coverage guarantee <a class="cite" href="#ref-7">[7]</a>, but it hasn't been applied to sprint planning.</p>
+
+            <h3>Staffing work: who should take it</h3>
+            <p>Recommending a developer for a work item is well studied in bug triage, where models learn from who fixed similar reports before <a class="cite" href="#ref-8">[8]</a>. Those recommenders optimise for one goal: expertise. Sprint assignment has several goals that pull against each other: skill match, a fair workload, avoiding overload, and giving people room to grow. Multi-criteria methods such as the Analytic Hierarchy Process weigh competing goals explicitly <a class="cite" href="#ref-9">[9]</a>, and ensembles such as stacking combine several predictors of performance <a class="cite" href="#ref-10">[10]</a>.</p>
+
+            <h3>Costing work: what will the sprint cost</h3>
+            <p>Parametric models such as COCOMO estimate cost from size at the start of a project <a class="cite" href="#ref-11">[11]</a>, and a systematic review found that expert judgement still dominates practice <a class="cite" href="#ref-12">[12]</a>. Earned value management compares actual spend with the plan as work progresses <a class="cite" href="#ref-13">[13]</a>, but it extrapolates rather than learning what the rest of a sprint is likely to cost. Shapley values give a principled way to explain which factors moved a forecast <a class="cite" href="#ref-14">[14]</a>.</p>
+
+            <h3>Risk-checking work: what could go wrong</h3>
+            <p>Issue-level risk, such as the chance an issue will be delayed, can be predicted from project data <a class="cite" href="#ref-15">[15]</a>. Gradient-boosted trees with native categorical handling, such as CatBoost, suit the mixed data a sprint produces <a class="cite" href="#ref-16">[16]</a>. Distilled language models such as DistilBERT make it practical to read risk signals from text <a class="cite" href="#ref-17">[17]</a>. Most risk models score a snapshot taken at planning time. They don't update as the board moves, and they don't say what to do next.</p>
+
+            <h3>Comparison with existing approaches</h3>
+          </div>
+
+          <div class="table-wrap" style="margin-top: var(--sp-21);">
+            <table class="table">
+              <caption>Simplified summary of the comparisons in each member's thesis. ● addressed · ◐ partly · ○ not addressed.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Approach</th>
+                  <th scope="col" class="c">Sizes work</th>
+                  <th scope="col" class="c">Staffs work</th>
+                  <th scope="col" class="c">Costs sprint</th>
+                  <th scope="col" class="c">Flags risk</th>
+                  <th scope="col" class="c">Gives a range</th>
+                  <th scope="col" class="c">Explains drivers</th>
+                  <th scope="col" class="c">Updates mid-sprint</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><th scope="row">Mainstream Agile boards and reports</th><td class="c no">○</td><td class="c no">○</td><td class="c no">○</td><td class="c part">◐</td><td class="c no">○</td><td class="c no">○</td><td class="c part">◐</td></tr>
+                <tr><th scope="row">Story-point models <a class="cite" href="#ref-3">[3]</a> <a class="cite" href="#ref-4">[4]</a></th><td class="c yes">●</td><td class="c no">○</td><td class="c no">○</td><td class="c no">○</td><td class="c no">○</td><td class="c part">◐</td><td class="c no">○</td></tr>
+                <tr><th scope="row">Delivery-capability prediction <a class="cite" href="#ref-6">[6]</a></th><td class="c part">◐</td><td class="c no">○</td><td class="c no">○</td><td class="c part">◐</td><td class="c no">○</td><td class="c no">○</td><td class="c part">◐</td></tr>
+                <tr><th scope="row">Developer recommenders <a class="cite" href="#ref-8">[8]</a></th><td class="c no">○</td><td class="c yes">●</td><td class="c no">○</td><td class="c no">○</td><td class="c no">○</td><td class="c no">○</td><td class="c no">○</td></tr>
+                <tr><th scope="row">Parametric cost models <a class="cite" href="#ref-11">[11]</a></th><td class="c part">◐</td><td class="c no">○</td><td class="c yes">●</td><td class="c no">○</td><td class="c part">◐</td><td class="c part">◐</td><td class="c no">○</td></tr>
+                <tr><th scope="row">Issue-risk prediction <a class="cite" href="#ref-15">[15]</a></th><td class="c no">○</td><td class="c no">○</td><td class="c no">○</td><td class="c yes">●</td><td class="c part">◐</td><td class="c no">○</td><td class="c part">◐</td></tr>
+                <tr class="is-ours"><th scope="row">SprintIQ</th><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 2. Research gap -->
+        <section id="gap" aria-labelledby="gap-h">
+          <span class="eyebrow">02 · Research gap</span>
+          <h2 id="gap-h">Tools record and report. They don't predict.</h2>
+          <div class="statement" data-reveal>
+            <span class="label">The shared gap</span>
+            <p>Agile tools record what happened and report on it. They don't predict what will happen, explain why, or say how sure they are, and the research models that do predict live outside the tools teams actually plan in.</p>
+          </div>
+          <div class="cards-2" style="margin-top: var(--sp-21);" data-stagger>
+            <article class="card icard" data-reveal>
+              <span class="chip chip--model chip--m1">M1 · Estimation</span>
+              <h3>One number, no range</h3>
+              <p>Story-point models return a single value with no calibrated range, so a team can't tell a confident 5 from a wild guess. Velocity models assume history from the same kind of project, so they break when a team starts work in a new domain.</p>
+            </article>
+            <article class="card icard" data-reveal>
+              <span class="chip chip--model chip--m3">M3 · Allocation</span>
+              <h3>Skill match is not the whole job</h3>
+              <p>Assignment recommenders optimise for expertise alone. Workload fairness, overload and growth are left out, and when several goals are combined the weights are set by hand rather than derived and tested.</p>
+            </article>
+            <article class="card icard" data-reveal>
+              <span class="chip chip--model chip--m4">M4 · Cost</span>
+              <h3>Costed once, never revised</h3>
+              <p>Sprint cost is estimated once at planning, from a formula or expert judgement. Forecasts aren't revised mid-sprint from the cost already incurred, and nobody can see which factors moved them.</p>
+            </article>
+            <article class="card icard" data-reveal>
+              <span class="chip chip--model chip--m2">M2 · Risk</span>
+              <h3>Risk found on day nine</h3>
+              <p>Risk is discussed at planning and discovered late. Models score a static snapshot, don't react to what happens on the board, and stop at a probability without recommending what to do.</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- 3. Research problem -->
+        <section id="problem" aria-labelledby="problem-h">
+          <span class="eyebrow">03 · Research problem</span>
+          <h2 id="problem-h">The question we set out to answer</h2>
+          <div class="statement" data-reveal>
+            <span class="label">Main research problem</span>
+            <p>How can an Agile project management tool use machine learning to size, staff, cost and risk-check sprint work for Sri Lankan software teams, while showing how sure each prediction is and why, so that teams can trust it when they plan?</p>
+          </div>
+          <div class="table-wrap" style="margin-top: var(--sp-21);">
+            <table class="table">
+              <caption>Each component answers one part of the main problem.</caption>
+              <thead><tr><th scope="col">Component</th><th scope="col">Specific research problem</th></tr></thead>
+              <tbody>
+                <tr><th scope="row"><span class="chip chip--model chip--m1">M1</span></th><td>How can story points and next-sprint velocity be predicted with a range that keeps its promised coverage, including for a team working in a domain the model has never seen?</td></tr>
+                <tr><th scope="row"><span class="chip chip--model chip--m3">M3</span></th><td>How can tasks be assigned so that skill match, workload balance, overload and growth are all weighed, with weights that are derived rather than guessed?</td></tr>
+                <tr><th scope="row"><span class="chip chip--model chip--m4">M4</span></th><td>How can sprint cost be forecast at planning and re-forecast mid-sprint from the cost already incurred, with each forecast's drivers explained?</td></tr>
+                <tr><th scope="row"><span class="chip chip--model chip--m2">M2</span></th><td>How can over-budget, requirement-change and communication risks be predicted, updated live from board events, and turned into recommended next steps?</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 4. Objectives -->
+        <section id="objectives" aria-labelledby="objectives-h">
+          <span class="eyebrow">04 · Research objectives</span>
+          <h2 id="objectives-h">What we committed to build and prove</h2>
+          <div class="prose">
+            <p><strong>Main objective.</strong> To design, build and evaluate SprintIQ, an AI-driven Agile project management framework that improves productivity and project success in Sri Lanka's software industry, by attaching four explainable, uncertainty-aware models to the planning decisions they inform.</p>
+          </div>
+          <ol class="obj-list" role="list" data-stagger>
+            <li data-reveal><a class="obj" href="components/estimation.html"><span class="chip chip--model chip--m1">M1</span><span><strong>Estimate story points and velocity with honest ranges</strong><p>Beat the median baseline on error, hit the 70% range-coverage target, and predict velocity for an unseen domain.</p></span><span class="link-arrow" aria-hidden="true"></span></a></li>
+            <li data-reveal><a class="obj" href="components/allocation.html"><span class="chip chip--model chip--m3">M3</span><span><strong>Rank developers for each task fairly</strong><p>Blend predicted performance with skill, workload and growth, using AHP weights refined by simulation.</p></span><span class="link-arrow" aria-hidden="true"></span></a></li>
+            <li data-reveal><a class="obj" href="components/cost.html"><span class="chip chip--model chip--m4">M4</span><span><strong>Forecast sprint cost, then re-forecast mid-sprint</strong><p>Choose the planning method by evidence and explain every forecast with exact Shapley drivers.</p></span><span class="link-arrow" aria-hidden="true"></span></a></li>
+            <li data-reveal><a class="obj" href="components/risk.html"><span class="chip chip--model chip--m2">M2</span><span><strong>Predict sprint risks live and advise on them</strong><p>Score how bad and how likely each risk is, adjust from board events, and recommend steps.</p></span><span class="link-arrow" aria-hidden="true"></span></a></li>
+            <li data-reveal><a class="obj" href="components/copilot.html"><span class="chip chip--model chip--cp">AI</span><span><strong>Let people ask across all four models</strong><p>A Copilot that calls the models as tools, sees only what the user can see, and changes nothing without confirmation.</p></span><span class="link-arrow" aria-hidden="true"></span></a></li>
+          </ol>
+        </section>
+
+        <!-- 5. Methodology -->
+        <section id="methodology" aria-labelledby="methodology-h">
+          <span class="eyebrow">05 · Methodology</span>
+          <h2 id="methodology-h">Design Science Research, one loop per model</h2>
+          <div class="prose">
+            <p>SprintIQ is an artefact: something built to solve a real problem and then evaluated. That makes Design Science Research the natural method <a class="cite" href="#ref-21">[21]</a> <a class="cite" href="#ref-22">[22]</a>. We followed its six activities as a loop, once for the platform and once for each model.</p>
+          </div>
+
+          <figure class="dsr" data-reveal="scale">
+            <svg viewBox="0 0 720 470" role="img" aria-labelledby="dsr-t dsr-d">
+              <title id="dsr-t">Design Science Research process</title>
+              <desc id="dsr-d">Six activities in a loop: identify the problem, define objectives, design and develop, demonstrate, evaluate, communicate, with an iteration arrow from evaluation back to design.</desc>
+              <defs>
+                <linearGradient id="dsr-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563eb"/><stop offset=".55" stop-color="#0ea5e9"/><stop offset="1" stop-color="#19e6c1"/></linearGradient>
+                <marker id="dsr-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#0ea5e9"/></marker>
+              </defs>
+              <ellipse cx="360" cy="235" rx="250" ry="160" fill="none" stroke="url(#dsr-g)" stroke-width="2" stroke-dasharray="4 8" class="flow"/>
+              <path d="M470 345 C 420 300, 330 300, 300 150" fill="none" stroke="#0ea5e9" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#dsr-a)" opacity=".8"/>
+              <text x="398" y="270" class="dsr__iter">iterate</text>
+              <g class="dsr__node" transform="translate(360 75)"><rect x="-120" y="-30" width="240" height="60" rx="13"/><text class="dsr__n" x="-104" y="-6">01</text><text x="-104" y="15">Identify the problem</text></g>
+              <g class="dsr__node" transform="translate(585 160)"><rect x="-120" y="-30" width="240" height="60" rx="13"/><text class="dsr__n" x="-104" y="-6">02</text><text x="-104" y="15">Define objectives</text></g>
+              <g class="dsr__node is-key" transform="translate(585 310)"><rect x="-120" y="-30" width="240" height="60" rx="13"/><text class="dsr__n" x="-104" y="-6">03</text><text x="-104" y="15">Design and develop</text></g>
+              <g class="dsr__node" transform="translate(360 395)"><rect x="-120" y="-30" width="240" height="60" rx="13"/><text class="dsr__n" x="-104" y="-6">04</text><text x="-104" y="15">Demonstrate</text></g>
+              <g class="dsr__node is-key" transform="translate(135 310)"><rect x="-120" y="-30" width="240" height="60" rx="13"/><text class="dsr__n" x="-104" y="-6">05</text><text x="-104" y="15">Evaluate</text></g>
+              <g class="dsr__node" transform="translate(135 160)"><rect x="-120" y="-30" width="240" height="60" rx="13"/><text class="dsr__n" x="-104" y="-6">06</text><text x="-104" y="15">Communicate</text></g>
+            </svg>
+          </figure>
+
+          <div class="table-wrap" style="margin-top: var(--sp-21);">
+            <table class="table">
+              <caption>How each activity was carried out in this project.</caption>
+              <thead><tr><th scope="col">Activity</th><th scope="col">What we did</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">01 Identify the problem</th><td>Reviewed the literature and current sprint-planning practice; framed the four guesses and the shared gap.</td></tr>
+                <tr><th scope="row">02 Define objectives</th><td>Set measurable targets per model, each against a baseline: error vs the median estimate, 70% range coverage, success rate vs manual allocation, MAPE vs the remaining-estimate method, AUC for risk.</td></tr>
+                <tr><th scope="row">03 Design and develop</th><td>Built and tuned each model in Python, then the SprintIQ platform: a multi-tenant Spring Boot backend, a Next.js frontend and a FastAPI model service.</td></tr>
+                <tr><th scope="row">04 Demonstrate</th><td>Attached each model to the decision it informs inside the product, with Accept, Override and Dismiss on every suggestion, and added the Copilot on top.</td></tr>
+                <tr><th scope="row">05 Evaluate</th><td>Held-out test sets, ten-sprint simulations and time-based holdouts, always beside a baseline. Every prediction the product makes is stored with its inputs for later study.</td></tr>
+                <tr><th scope="row">06 Communicate</th><td>Proposal, progress presentations, research paper, final theses and this website.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 style="margin-top: var(--sp-55);">Inside each model's loop</h3>
+          <div class="pipeline" data-pipeline style="--n: 6;">
+            <ol class="pipeline__rail" role="list">
+              <li><button class="pipeline__stage" type="button" aria-expanded="true" aria-controls="dm-1"><span class="pipeline__dot">01</span>Data</button></li>
+              <li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="dm-2"><span class="pipeline__dot">02</span>Features</button></li>
+              <li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="dm-3"><span class="pipeline__dot">03</span>Models</button></li>
+              <li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="dm-4"><span class="pipeline__dot">04</span>Range &amp; reasons</button></li>
+              <li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="dm-5"><span class="pipeline__dot">05</span>Evaluate</button></li>
+              <li><button class="pipeline__stage" type="button" aria-expanded="false" aria-controls="dm-6"><span class="pipeline__dot">06</span>Serve</button></li>
+            </ol>
+            <span class="pipeline__token" aria-hidden="true"></span>
+            <div class="pipeline__detail">
+              <div class="pipeline__panel is-active" id="dm-1"><h4>Data</h4><p>Real sprint data with ground truth is rarely shared, so the models were trained on structured synthetic datasets. M1, for example, used 3,000 stories and 3,000 sprints across five domains. Validation on real organisational data continues.</p></div>
+              <div class="pipeline__panel" id="dm-2"><h4>Features</h4><p>Text features from story titles and descriptions (TF-IDF), structural features such as dependencies and acceptance criteria, team capacity and history, developer skill profiles, and live board events.</p></div>
+              <div class="pipeline__panel" id="dm-3"><h4>Models</h4><p>Gradient-boosted trees where the data is tabular: XGBoost <a class="cite" href="#ref-18">[18]</a>, LightGBM <a class="cite" href="#ref-19">[19]</a> and CatBoost <a class="cite" href="#ref-16">[16]</a>; plus a stacking ensemble for developer performance and a fine-tuned DistilBERT for communication risk.</p></div>
+              <div class="pipeline__panel" id="dm-4"><h4>Range and reasons</h4><p>Every model returns the same envelope: a value, its range, the drivers behind it and a one-line explanation. Ranges come from calibrated quantiles; drivers from SHAP <a class="cite" href="#ref-20">[20]</a> and exact Shapley values.</p></div>
+              <div class="pipeline__panel" id="dm-5"><h4>Evaluate</h4><p>Each model is scored on held-out or simulated data beside the baseline it has to beat, never on its own. The results page lists every figure with that baseline.</p></div>
+              <div class="pipeline__panel" id="dm-6"><h4>Serve</h4><p>Bundles load into a FastAPI service with <span class="mono">/predict/*</span> endpoints. The backend checks the contract at start-up, caches results, and records each prediction with its exact inputs.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. Technologies -->
+        <section id="technologies" aria-labelledby="technologies-h">
+          <span class="eyebrow">06 · Technologies used</span>
+          <h2 id="technologies-h">What it's built with</h2>
+          <div class="tech-groups" data-stagger>
+            <div class="card tech-group" data-reveal><h3>Machine learning</h3><div class="cluster"><span class="chip chip--tech">XGBoost</span><span class="chip chip--tech">LightGBM</span><span class="chip chip--tech">CatBoost</span><span class="chip chip--tech">scikit-learn</span><span class="chip chip--tech">DistilBERT</span><span class="chip chip--tech">SHAP</span><span class="chip chip--tech">SciPy (SLSQP)</span></div></div>
+            <div class="card tech-group" data-reveal><h3>Language model</h3><div class="cluster"><span class="chip chip--tech">Gemini 2.0 Flash</span><span class="chip chip--tech">Tool calling</span><span class="chip chip--tech">OpenAI-compatible API</span></div></div>
+            <div class="card tech-group" data-reveal><h3>Services</h3><div class="cluster"><span class="chip chip--tech">FastAPI</span><span class="chip chip--tech">Spring Boot 3.3</span><span class="chip chip--tech">Java 21</span><span class="chip chip--tech">STOMP / WebSocket</span></div></div>
+            <div class="card tech-group" data-reveal><h3>Web</h3><div class="cluster"><span class="chip chip--tech">Next.js 16</span><span class="chip chip--tech">React 19</span><span class="chip chip--tech">Tailwind CSS 4</span><span class="chip chip--tech">TypeScript</span></div></div>
+            <div class="card tech-group" data-reveal><h3>Data</h3><div class="cluster"><span class="chip chip--tech">PostgreSQL 16</span><span class="chip chip--tech">Redis 7</span><span class="chip chip--tech">Flyway</span></div></div>
+            <div class="card tech-group" data-reveal><h3>Tooling</h3><div class="cluster"><span class="chip chip--tech">Docker</span><span class="chip chip--tech">GitHub</span><span class="chip chip--tech">Jupyter</span><span class="chip chip--tech">Python 3</span></div></div>
+          </div>
+        </section>
+
+        <!-- References -->
+        <section id="references" aria-labelledby="references-h">
+          <span class="eyebrow">References</span>
+          <h2 id="references-h">Sources</h2>
+          <p class="muted" style="margin-bottom: var(--sp-21);">IEEE style. Each member's thesis carries the complete reference list for their component.</p>
+          <ol class="refs" role="list">
+            <li id="ref-1">Digital.ai, <em>17th State of Agile Report</em>, 2023.</li>
+            <li id="ref-2">S. Porru, A. Murgia, S. Demeyer, M. Marchesi, and R. Tonelli, "Estimating story points from issue reports," in <em>Proc. 12th Int. Conf. Predictive Models and Data Analytics in Software Engineering (PROMISE)</em>, 2016.</li>
+            <li id="ref-3">M. Choetkiertikul, H. K. Dam, T. Tran, T. Pham, A. Ghose, and T. Menzies, "A deep learning model for estimating story points," <em>IEEE Trans. Softw. Eng.</em>, vol. 45, no. 7, pp. 637–656, 2019.</li>
+            <li id="ref-4">M. Fu and C. Tantithamthavorn, "GPT2SP: A transformer-based agile story point estimation approach," <em>IEEE Trans. Softw. Eng.</em>, vol. 49, no. 2, pp. 611–625, 2023.</li>
+            <li id="ref-5">V. Tawosi, R. Moussa, and F. Sarro, "Agile effort estimation: Have we solved the problem yet? Insights from a replication study," <em>IEEE Trans. Softw. Eng.</em>, vol. 49, no. 4, pp. 2677–2697, 2023.</li>
+            <li id="ref-6">M. Choetkiertikul, H. K. Dam, T. Tran, A. Ghose, and J. Grundy, "Predicting delivery capability in iterative software development," <em>IEEE Trans. Softw. Eng.</em>, vol. 44, no. 6, pp. 551–573, 2018.</li>
+            <li id="ref-7">Y. Romano, E. Patterson, and E. J. Candès, "Conformalized quantile regression," in <em>Advances in Neural Information Processing Systems 32</em>, 2019.</li>
+            <li id="ref-8">J. Anvik, L. Hiew, and G. C. Murphy, "Who should fix this bug?" in <em>Proc. 28th Int. Conf. Software Engineering (ICSE)</em>, 2006, pp. 361–370.</li>
+            <li id="ref-9">T. L. Saaty, <em>The Analytic Hierarchy Process</em>. New York, NY, USA: McGraw-Hill, 1980.</li>
+            <li id="ref-10">D. H. Wolpert, "Stacked generalization," <em>Neural Networks</em>, vol. 5, no. 2, pp. 241–259, 1992.</li>
+            <li id="ref-11">B. W. Boehm, <em>Software Engineering Economics</em>. Englewood Cliffs, NJ, USA: Prentice-Hall, 1981.</li>
+            <li id="ref-12">M. Jørgensen and M. Shepperd, "A systematic review of software development cost estimation studies," <em>IEEE Trans. Softw. Eng.</em>, vol. 33, no. 1, pp. 33–53, 2007.</li>
+            <li id="ref-13">Q. W. Fleming and J. M. Koppelman, <em>Earned Value Project Management</em>, 4th ed. Newtown Square, PA, USA: Project Management Institute, 2010.</li>
+            <li id="ref-14">L. S. Shapley, "A value for n-person games," in <em>Contributions to the Theory of Games II</em>. Princeton, NJ, USA: Princeton Univ. Press, 1953, pp. 307–317.</li>
+            <li id="ref-15">M. Choetkiertikul, H. K. Dam, T. Tran, and A. Ghose, "Characterization and prediction of issue-related risks in software projects," in <em>Proc. 12th Working Conf. Mining Software Repositories (MSR)</em>, 2015, pp. 280–291.</li>
+            <li id="ref-16">L. Prokhorenkova, G. Gusev, A. Vorobev, A. V. Dorogush, and A. Gulin, "CatBoost: Unbiased boosting with categorical features," in <em>Advances in Neural Information Processing Systems 31</em>, 2018.</li>
+            <li id="ref-17">V. Sanh, L. Debut, J. Chaumond, and T. Wolf, "DistilBERT, a distilled version of BERT: Smaller, faster, cheaper and lighter," arXiv:1910.01108, 2019.</li>
+            <li id="ref-18">T. Chen and C. Guestrin, "XGBoost: A scalable tree boosting system," in <em>Proc. 22nd ACM SIGKDD Int. Conf. Knowledge Discovery and Data Mining</em>, 2016, pp. 785–794.</li>
+            <li id="ref-19">G. Ke <em>et al.</em>, "LightGBM: A highly efficient gradient boosting decision tree," in <em>Advances in Neural Information Processing Systems 30</em>, 2017.</li>
+            <li id="ref-20">S. M. Lundberg and S.-I. Lee, "A unified approach to interpreting model predictions," in <em>Advances in Neural Information Processing Systems 30</em>, 2017.</li>
+            <li id="ref-21">K. Peffers, T. Tuunanen, M. A. Rothenberger, and S. Chatterjee, "A design science research methodology for information systems research," <em>J. Manage. Inf. Syst.</em>, vol. 24, no. 3, pp. 45–77, 2007.</li>
+            <li id="ref-22">A. R. Hevner, S. T. March, J. Park, and S. Ram, "Design science in information systems research," <em>MIS Quarterly</em>, vol. 28, no. 1, pp. 75–105, 2004.</li>
+          </ol>
+        </section>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- footer:start -->
+<footer class="footer" data-footer>
+  <div class="wrap">
+    <div class="footer__top">
+      <div class="footer__brand">
+        <a class="brand" href="index.html" aria-label="SprintIQ research, home">
+          <svg class="brand__mark" viewBox="0 -2 36 34" aria-hidden="true">
+            <defs>
+              <linearGradient id="sg-f" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/>
+              </linearGradient>
+            </defs>
+            <path d="M23.5 8.6C21.6 6.6 19 5.6 16 5.6c-4.4 0-7.4 2.4-7.4 5.7 0 3.5 3 4.7 7.4 5.5 4.6.8 7.6 2.3 7.6 5.8 0 3.4-3.1 5.8-7.6 5.8-3.2 0-5.9-1.1-7.8-3.1" fill="none" stroke="url(#sg-f)" stroke-width="4.2" stroke-linecap="round"/>
+            <g fill="none" stroke="#19e6c1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M24.3 6h3.2v3.2" opacity=".5"/><path d="M26.9 3.4h3.2v3.2" opacity=".75"/><path d="M29.5.8h3.2V4"/>
+            </g>
+          </svg>
+          <span class="brand__name">SprintIQ</span>
+        </a>
+        <p>An AI-driven Agile project management framework for enhancing productivity and project success in Sri Lanka's software industry.</p>
+        <p class="footer__people">
+          <strong>R26-SE-005</strong> · BSc (Hons) in IT, Software Engineering<br>
+          Faculty of Computing, Sri Lanka Institute of Information Technology<br>
+          Supervisor <strong>Mrs. Karthiga Vivek</strong> · Co-supervisor <strong>Ms. Kaushalya Rajapakse</strong><br>
+          External supervisor <strong>Mr. Suresh Fernando</strong>
+        </p>
+      </div>
+      <div class="footer__col">
+        <h2>Research</h2>
+        <ul>
+          <li><a href="domain.html">Domain</a></li>
+          <li><a href="domain.html#gap">Research gap</a></li>
+          <li><a href="domain.html#methodology">Methodology</a></li>
+          <li><a href="milestones.html">Milestones</a></li>
+          <li><a href="documents.html">Documents</a></li>
+          <li><a href="presentations.html">Presentations</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h2>Components</h2>
+        <ul>
+          <li><a href="components/estimation.html">M1 · Estimation</a></li>
+          <li><a href="components/allocation.html">M3 · Allocation</a></li>
+          <li><a href="components/cost.html">M4 · Cost</a></li>
+          <li><a href="components/risk.html">M2 · Risk</a></li>
+          <li><a href="components/copilot.html">Copilot</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h2>Group</h2>
+        <ul>
+          <li><a href="about.html">About us</a></li>
+          <li><a href="contact.html">Contact us</a></li>
+          <li><a href="contact.html#template">E-mail template</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__ship">
+      <span class="footer__shipped">SHIPPED <span class="chevrons" aria-hidden="true"><span>›</span><span>›</span><span>›</span></span> R26-SE-005</span>
+      <span>© <span data-year>2026</span> SprintIQ research group · SLIIT · For academic purposes</span>
+      <a href="#main">Back to top ↑</a>
+    </div>
+  </div>
+</footer>
+<!-- footer:end -->
+<script src="assets/js/site.js" defer></script>
+</body>
+</html>

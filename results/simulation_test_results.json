@@ -1,0 +1,324 @@
+{
+  "timestamp": "2026-10-18T18:55:14.811096",
+  "organization": "SprintIQ Resource Allocation QA Organization",
+  "project": "SprintIQ Resource Allocation Simulation Project [SIM]",
+  "developers_count": 10,
+  "sprints_count": 10,
+  "total_tasks_created": 200,
+  "developer_profiles": {
+    "DEV-FE-SR1": {
+      "user_uuid": "247563d7-de38-4f35-b858-ee68d3551e78",
+      "opt_dev_id": 29,
+      "dev_id": "DEV-FE-SR1",
+      "name": "Elena Rostova",
+      "seniority": "SENIOR",
+      "experience_level": 3,
+      "consistency": 0.979,
+      "learning_rate": -0.0021,
+      "avg_velocity": 16.62,
+      "sprint_points": [
+        16,
+        17,
+        16,
+        18,
+        16,
+        17,
+        16,
+        17
+      ]
+    },
+    "DEV-FE-MID1": {
+      "user_uuid": "076454ae-352f-400c-8239-81ace1374d61",
+      "opt_dev_id": 30,
+      "dev_id": "DEV-FE-MID1",
+      "name": "Marcus Vance",
+      "seniority": "MID",
+      "experience_level": 2,
+      "consistency": 0.949,
+      "learning_rate": 0.0124,
+      "avg_velocity": 12.0,
+      "sprint_points": [
+        12,
+        10,
+        13,
+        11,
+        14,
+        12,
+        11,
+        13
+      ]
+    },
+    "DEV-BE-SR1": {
+      "user_uuid": "1f9f2f29-fba5-496e-9373-5a6bdffa6613",
+      "opt_dev_id": 31,
+      "dev_id": "DEV-BE-SR1",
+      "name": "Dr. Aris Thorne",
+      "seniority": "SENIOR",
+      "experience_level": 3,
+      "consistency": 0.988,
+      "learning_rate": 0.0018,
+      "avg_velocity": 20.38,
+      "sprint_points": [
+        20,
+        21,
+        20,
+        20,
+        21,
+        20,
+        21,
+        20
+      ]
+    },
+    "DEV-BE-MID1": {
+      "user_uuid": "5aeabcf3-779c-478b-a319-b58c8cbba84a",
+      "opt_dev_id": 32,
+      "dev_id": "DEV-BE-MID1",
+      "name": "Priya Patel",
+      "seniority": "MID",
+      "experience_level": 2,
+      "consistency": 0.767,
+      "learning_rate": 0.0227,
+      "avg_velocity": 11.88,
+      "sprint_points": [
+        15,
+        6,
+        18,
+        5,
+        17,
+        7,
+        19,
+        8
+      ]
+    },
+    "DEV-DB-SR1": {
+      "user_uuid": "f872e3ef-14c0-49d3-a79f-594531bde7dd",
+      "opt_dev_id": 33,
+      "dev_id": "DEV-DB-SR1",
+      "name": "Siddharth Rao",
+      "seniority": "SENIOR",
+      "experience_level": 3,
+      "consistency": 0.984,
+      "learning_rate": 0.0023,
+      "avg_velocity": 15.38,
+      "sprint_points": [
+        15,
+        16,
+        15,
+        15,
+        16,
+        15,
+        16,
+        15
+      ]
+    },
+    "DEV-DB-MID1": {
+      "user_uuid": "687546a3-ab87-452c-98b6-b5dfdc854d8e",
+      "opt_dev_id": 34,
+      "dev_id": "DEV-DB-MID1",
+      "name": "Chloe Dubois",
+      "seniority": "MID",
+      "experience_level": 2,
+      "consistency": 0.857,
+      "learning_rate": -0.0593,
+      "avg_velocity": 10.5,
+      "sprint_points": [
+        14,
+        14,
+        13,
+        12,
+        10,
+        8,
+        7,
+        6
+      ]
+    },
+    "DEV-FS-SR1": {
+      "user_uuid": "ba8a6e48-3d30-40ff-99c0-0f5f65fd70d1",
+      "opt_dev_id": 35,
+      "dev_id": "DEV-FS-SR1",
+      "name": "Lucas Meyer",
+      "seniority": "SENIOR",
+      "experience_level": 3,
+      "consistency": 0.979,
+      "learning_rate": 0.0019,
+      "avg_velocity": 18.88,
+      "sprint_points": [
+        18,
+        19,
+        18,
+        20,
+        19,
+        18,
+        19,
+        20
+      ]
+    },
+    "DEV-FS-MID1": {
+      "user_uuid": "78dd4ce4-0e53-43c6-ada8-6ebb04fb4ffb",
+      "opt_dev_id": 36,
+      "dev_id": "DEV-FS-MID1",
+      "name": "Aisha Morales",
+      "seniority": "MID",
+      "experience_level": 2,
+      "consistency": 0.87,
+      "learning_rate": 0.0836,
+      "avg_velocity": 13.25,
+      "sprint_points": [
+        8,
+        9,
+        11,
+        13,
+        14,
+        16,
+        17,
+        18
+      ]
+    },
+    "DEV-JR-DEV1": {
+      "user_uuid": "211003a4-be22-4d20-9b2c-ecdf00c73d3c",
+      "opt_dev_id": 37,
+      "dev_id": "DEV-JR-DEV1",
+      "name": "Toby Jenkins",
+      "seniority": "JUNIOR",
+      "experience_level": 1,
+      "consistency": 0.854,
+      "learning_rate": 0.0971,
+      "avg_velocity": 8.38,
+      "sprint_points": [
+        5,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ]
+    },
+    "DEV-COLD-JR": {
+      "user_uuid": "b051e5ee-545a-4c28-9bdf-7b7526a4c77c",
+      "opt_dev_id": 38,
+      "dev_id": "DEV-COLD-JR",
+      "name": "Zoe Washington",
+      "seniority": "JUNIOR",
+      "experience_level": 1,
+      "consistency": 0.7,
+      "learning_rate": 0.0,
+      "avg_velocity": 3.0,
+      "sprint_points": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ]
+    }
+  },
+  "sprint_9_results": {
+    "sprint_id": 55,
+    "allocated_tasks": 20,
+    "predicted_velocity": 47.17,
+    "health_score": 44.1,
+    "gini_index": 0.255
+  },
+  "sprint_10_results": {
+    "sprint_id": 56,
+    "allocated_tasks": 20,
+    "predicted_velocity": 49.98,
+    "gini_index": 0.224
+  },
+  "test_results": {
+    "total_tests": 14,
+    "passed_tests": 14,
+    "failed_tests": 0,
+    "tests": [
+      {
+        "category": "Database Integrity",
+        "name": "Single Organization Isolation",
+        "passed": true,
+        "details": "Found 1 organization(s) with slug 'sprintiq-qa-org'."
+      },
+      {
+        "category": "Database Integrity",
+        "name": "Exactly 10 Developers Created",
+        "passed": true,
+        "details": "Found 10 developers in QA organization."
+      },
+      {
+        "category": "Database Integrity",
+        "name": "Single Project Created",
+        "passed": true,
+        "details": "Project key SIM verified."
+      },
+      {
+        "category": "Database Integrity",
+        "name": "Exactly 10 Sequential Sprints",
+        "passed": true,
+        "details": "Found 10 sprints."
+      },
+      {
+        "category": "Database Integrity",
+        "name": "Substantial Task Dataset (150-250)",
+        "passed": true,
+        "details": "Seeded 200 total tasks."
+      },
+      {
+        "category": "Historical Metrics",
+        "name": "High Consistency Developer (Aris)",
+        "passed": true,
+        "details": "Aris Thorne consistency=0.988 (expected >= 0.95)."
+      },
+      {
+        "category": "Historical Metrics",
+        "name": "Erratic Variance Developer (Priya)",
+        "passed": true,
+        "details": "Priya consistency=0.767 is lower than Aris (0.988) due to sprint wobble."
+      },
+      {
+        "category": "Historical Metrics",
+        "name": "Upward Learning Progression (Aisha)",
+        "passed": true,
+        "details": "Aisha Morales learning rate=0.0836 demonstrates steep skill acquisition."
+      },
+      {
+        "category": "Historical Metrics",
+        "name": "Junior Growth Progression (Toby)",
+        "passed": true,
+        "details": "Toby Jenkins learning rate=0.0971 reflects junior progression."
+      },
+      {
+        "category": "Historical Metrics",
+        "name": "Cold-Start Developer History (Zoe)",
+        "passed": true,
+        "details": "Zoe Washington has 1 completed historical baseline task(s) prior to live allocation."
+      },
+      {
+        "category": "Resource Allocation",
+        "name": "Sprint 9 Tasks Allocated",
+        "passed": true,
+        "details": "Allocated 20 tasks in Sprint 9."
+      },
+      {
+        "category": "Resource Allocation",
+        "name": "Workload Fairness (Gini Index)",
+        "passed": true,
+        "details": "Sprint 9 Gini Index=0.255 indicates balanced load without hoarding."
+      },
+      {
+        "category": "Resource Allocation",
+        "name": "Sprint 10 Cross-Sprint Adaptation",
+        "passed": true,
+        "details": "Allocated 20 tasks in Sprint 10."
+      },
+      {
+        "category": "Explainability",
+        "name": "SHAP TreeExplainer Attributions",
+        "passed": true,
+        "details": "Valid feature attributions, score breakdowns, strengths and concerns generated."
+      }
+    ]
+  }
+}

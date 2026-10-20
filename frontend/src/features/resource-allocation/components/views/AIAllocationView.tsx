@@ -204,8 +204,8 @@ function buildGroups(data: any[]): TaskGroup[] {
 
   map.forEach((group) => {
     group.recommendations.sort((a, b) => a.rankPosition - b.rankPosition);
-    if (group.recommendations.length > 3) {
-      group.recommendations = group.recommendations.slice(0, 3);
+    if (group.recommendations.length > 5) {
+      group.recommendations = group.recommendations.slice(0, 5);
     }
     if (group.recommendations.some((r) => r.status === "ALLOCATED")) {
       group.overallStatus = "Approved";
@@ -227,6 +227,12 @@ function formatFeatureName(raw: string): string {
     skill_backend: "Backend / API Technical Proficiency",
     skill_db: "Database Architecture Skill",
     skill_match: "Component Skill Alignment",
+    dev_domain_familiarity: "Domain Expertise & Familiarity",
+    dev_prior_completed_tasks: "Prior Completed Tasks (Track Record)",
+    dev_prior_completed_rate: "Historical Task Completion Rate",
+    dev_historical_velocity_avg: "Historical Average Velocity",
+    dev_sprint_task_load: "Current Sprint Task Count",
+    dev_sprint_story_point_load: "Assigned Sprint Story Points",
     dev_load_ratio: "Current Sprint Workload Ratio",
     current_tasks: "Concurrent Active Tasks",
     current_workload: "Total Story Point Load",
@@ -236,6 +242,8 @@ function formatFeatureName(raw: string): string {
     story_points: "Task Complexity (Story Points)",
     comment_count: "Issue Discussion / Collaboration Intensity",
     sprint_total_issues: "Sprint Scope / Issue Density",
+    sprint_devs: "Sprint Team Size (Active Devs)",
+    sprint_len: "Sprint Duration (Days)",
     scope_creep: "Sprint Scope Creep Factor",
     historical_failure_rate: "Historical Defect / Failure Probability",
   };
@@ -1287,9 +1295,10 @@ export default function AIAllocationView() {
               onClick={handleApproveAll}
               disabled={approvingAll || !selectedSprintId}
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm cursor-pointer"
+              title="Runs Global Hungarian Optimization to balance sprint workload across all developers and eliminate idle capacity"
             >
               {approvingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              <span>Approve All (#1)</span>
+              <span>AI Auto-Allocate (Global Optimal)</span>
             </button>
           )}
 

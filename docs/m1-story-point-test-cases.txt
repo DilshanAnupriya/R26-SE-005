@@ -1,0 +1,340 @@
+=====================================================================================
+ SprintIQ - Story Point Prediction (M1) - Test Cases, from tiny to huge
+ Every result below was checked against the running system on 18 October 2026,
+ and re-checked after the small-Story fix (story point model version 2.3.0)
+=====================================================================================
+
+WHERE TO SEE THEM
+  SprintIQ (local) > Projects > "M1 Test Cases · Presentation"
+  Open a story > "Estimate with AI" panel shows the result.
+
+TEAM CONTEXT USED FOR EVERY CASE (project "Estimation context")
+  Team of 4, mostly mid-level, Finance domain, Spring Boot, velocity 30, completion 80%
+
+HOW EACH CASE WAS RUN
+  TC-01 to TC-15: the story was created in SprintIQ and estimated through the real
+                  backend and AI model, exactly as a user would.
+  TC-16, TC-17 and the API versions of TC-09 to TC-11: sent straight to the AI model at
+                  http://localhost:8000/docs  (POST /predict/story-points).
+
+HOW TO READ THE RESULTS
+  Expected   = what a team would estimate before seeing the AI answer
+  Result     = SprintIQ's suggested points and its likely range (70% interval)
+  Confidence = how precise the estimate is (narrow range = high, wide range = low)
+  Verdict    PASS        matches the expected size or behaviour
+             PARTIAL     the expected value is inside the range, the main number is higher
+             LIMITATION  a known weakness of the model (explained at the end)
+
+
+-------------------------------------------------------------------------------------
+ SUMMARY
+-------------------------------------------------------------------------------------
+ ID     Size / type               Expected      Result (range)     Conf.  Risk  Verdict
+ -----  ------------------------  ------------  -----------------  -----  ----  ----------
+ TC-01  Tiny                      1             3   (1 - 3)         37%   LOW   PARTIAL
+ TC-02  Very small                1 - 2         3   (3 - 5)         32%   LOW   LIMITATION
+ TC-03  Small (typed as STORY)    1 - 2         5   (3 - 8)         45%   LOW   LIMITATION *
+ TC-04  Medium                    3 - 5         8   (5 - 13)        51%   LOW   PARTIAL
+ TC-05  Medium                    5             8   (5 - 13)        51%   LOW   PARTIAL
+ TC-06  Large                     8 - 13        13  (8 - 13)        63%   LOW   PASS
+ TC-07  Complex                   8             8   (5 - 13)        57%   LOW   PASS
+ TC-08  Very complex              13            13  (8 - 13)        63%   LOW   PASS
+ TC-09  Huge (epic)               20+, split    20  (8 - 20)        24%   HIGH  PASS
+ TC-10  Programme-sized           40+, split    40  (20 - 40)        0%   HIGH  PASS
+ TC-11  Mega (API test)           100, split    100 (40 - 100)       0%   HIGH  PASS
+ TC-12  Vague one-liner           unclear       3   (1 - 3)         34%   LOW   PASS
+ TC-13  Long text, no structure   5 - 8         5   (5 - 13)        24%   LOW   PASS
+ TC-14  Non-English (Sinhala)     1 - 3         3   (3 - 8)         17%   LOW   PASS
+ TC-15  Same story, team level    senior lower  junior 13, mid 13, senior 8     PASS
+ TC-16  Empty input (API test)    no crash      5   (2 - 5)          3%   LOW   PASS
+ TC-17  Invalid numbers (API)     no crash      8   (5 - 13)        17%   LOW   PASS
+
+ TOTAL: 12 PASS, 3 PARTIAL, 2 LIMITATION
+ * TC-03 improved from 8 to 5 after the small-Story fix; it is still above the
+   expected 1-2 because of the low floor (limitation 1 at the end).
+
+ BEFORE / AFTER THE SMALL-STORY FIX (model 2.2.0 -> 2.3.0)
+   TC-03 tooltip            8 (5-13)  ->  5 (3-8)    small Story now read as a change
+                                                    to something existing
+   TC-12 vague one-liner    5 (2-5)   ->  3 (1-3)    same rule (one line, 1 component)
+   TC-13 long text          8 (5-13)  ->  5 (5-13)   "export" in the text no longer
+                                                    counts as integration work
+   Everything else          unchanged (TC-06 13, TC-08 13, TC-09 20, TC-10 40,
+                            150 components 100, team level 13 / 13 / 8)
+
+ Key points for the panel
+  - Ordering is right: tiny (3) < small story (5) < medium (8) < complex (13)
+    < huge (20) < programme (40) < mega (100).
+  - Stories bigger than the training data (max 7 components) are no longer capped at 13.
+    They are extrapolated to 20 / 40 / 100, marked HIGH, and the system says to split them.
+  - When the system knows less, confidence drops: Sinhala text (17%), long text with
+    no structure (24%), empty input (3%), epics (0-24%), against 51-63% for normal
+    stories. It never hides uncertainty behind a confident number.
+  - A test found a real weakness (small Stories sized as new features), it was fixed,
+    and every case was re-run to prove nothing else moved.
+  - Bad input never crashes it: empty or negative values still get a cleaned answer.
+
+
+-------------------------------------------------------------------------------------
+ TEST CASE DETAILS (type these into SprintIQ to repeat a case)
+-------------------------------------------------------------------------------------
+
+TC-01  TINY
+  Title:        Fix typo in the footer copyright text
+  Type:         Bug          Priority: Low
+  Description:  (none)
+  Criteria:     (none)       Labels: (none)     Tasks: (none)
+  Expected:     1
+  Result:       3, range 1-3, confidence 37%
+  Shows:        The smallest stories come out at 2-3, because the training data starts
+                at 1 and has few 1-point stories. The range still reaches 1.  -> PARTIAL
+
+TC-02  VERY SMALL
+  Title:        Increase the session timeout from 15 to 30 minutes
+  Type:         Chore        Priority: Medium
+  Description:  Users are logged out too quickly while filling long forms.
+  Criteria:     - Session timeout is 30 minutes
+  Labels:       (none)       Tasks: (none)
+  Expected:     1-2
+  Result:       3, range 3-5, confidence 32%
+  Shows:        Same floor as TC-01: the model rarely goes below 3 for a mid-level team
+                (the TC-01 typo fix for a senior team gets 2).  -> LIMITATION (lower floor)
+
+TC-03  SMALL, BUT TYPED AS "STORY"
+  Title:        Add a tooltip to the Export button
+  Type:         Story        Priority: Medium
+  Description:  Explain what the export contains when a user hovers over the button.
+  Criteria:     - Tooltip shows on hover
+                - Tooltip text can be translated
+  Labels:       ui           Tasks: (none)
+  Expected:     1-2
+  Result:       5, range 3-8, confidence 45%      (before the fix: 8, range 5-13, 34%)
+  Shows:        This test found a real defect: every SprintIQ "Story" was read as a new
+                "feature", a 5-13 point category in the training data. Now a small Story
+                (3 components or fewer, no external dependency, no security work, 40 words
+                or fewer) is read as a change to something existing. The explanation says:
+                "A Story this small ... is sized as a change to something existing rather
+                than a new feature." Still above 1-2 because of the low floor.
+                -> LIMITATION (improved from 8 to 5; see the end)
+
+TC-04  MEDIUM
+  Title:        Add CSV export to the reports page
+  Type:         Story        Priority: Medium
+  Description:  Let a manager download the filtered report as a CSV file.
+  Criteria:     - Export uses the current filters
+                - File opens correctly in Excel
+                - Large reports download without timing out
+  Labels:       ui
+  Tasks:        Backend export endpoint (4h), Download button (2h)
+  Expected:     3-5
+  Result:       8, range 5-13, confidence 51%
+  Shows:        6 components (3 criteria + 2 tasks + 1 label), too many for the
+                small-Story rule, so it is still sized as a feature. 5 is inside the
+                range; the main number leans high.  -> PARTIAL
+
+TC-05  MEDIUM
+  Title:        Send an email when a task becomes overdue
+  Type:         Story        Priority: Medium
+  Description:  Notify the assignee and the project lead by email the morning a task
+                passes its due date.
+  Criteria:     - Email sent once per overdue task
+                - Users can turn it off
+                - Email links to the task
+  Labels:       integration
+  Tasks:        Daily overdue job (4h)
+  Expected:     5
+  Result:       8, range 5-13, confidence 51%
+  Shows:        Expected 5 is inside the range.  -> PARTIAL
+
+TC-06  LARGE
+  Title:        Integrate the Stripe payment gateway for subscriptions
+  Type:         Story        Priority: Medium
+  Description:  Customers pay monthly by card through Stripe. Handle failed payments,
+                webhooks and refunds, and store no card data ourselves.
+  Criteria:     - Card payments succeed
+                - Failed payments retried and the user told
+                - Stripe webhooks verified
+                - Refunds issued from the admin page
+  Labels:       security, integration
+  Tasks:        Webhook handler (6h)
+  Blocked by:   Get Stripe production API keys   (1 dependency = 1 external API)
+  Expected:     8-13
+  Result:       13, range 8-13, confidence 63%
+  Shows:        7 components + an external dependency. Explanation says "13 is the
+                largest size this model was trained on ... worth splitting".  -> PASS
+
+TC-07  COMPLEX
+  Title:        Add role-based access control to project settings
+  Type:         Story        Priority: Medium
+  Description:  Only owners and admins may change project settings; members see them
+                read-only. Every change is written to the audit log.
+  Criteria:     - Owners and admins can edit
+                - Members see settings read-only
+                - Blocked attempts return 403
+                - Every change is audited
+  Labels:       security, ui
+  Tasks:        Permission checks in the API (5h)
+  Expected:     8
+  Result:       8, range 5-13, confidence 57%
+  Shows:        Same 7 components as TC-06 but no external dependency, so one size
+                smaller than TC-06.  -> PASS
+
+TC-08  VERY COMPLEX
+  Title:        Single sign-on with Google and Microsoft accounts
+  Type:         Story        Priority: Medium
+  Description:  Users sign in with their company Google or Microsoft account through
+                OAuth 2.0 / OpenID Connect, accounts are linked by email, and admins can
+                force SSO for their organisation.
+  Criteria:     - Google sign-in works
+                - Microsoft sign-in works
+                - Existing accounts are linked by email
+                - Admins can enforce SSO
+  Labels:       security, integration
+  Tasks:        OIDC callback and token exchange (8h)
+  Blocked by:   Register the Google OAuth app, Register the Microsoft Entra app
+  Expected:     13
+  Result:       13, range 8-13, confidence 63%
+  Shows:        Two external dependencies. Top of the trained scale.  -> PASS
+
+TC-09  HUGE (EPIC)
+  Title:        Build the customer mobile app for iOS and Android
+  Type:         Story        Priority: Medium
+  Description:  A native-feeling mobile app with sign-in, dashboards, notifications,
+                offline mode and payments, released to both app stores.
+  Criteria:     10 lines: Sign-in with existing accounts / Dashboard matches the web app /
+                Push notifications / Works offline and syncs later / In-app payments /
+                Dark mode / Accessibility checked / Crash reporting /
+                Released on the App Store / Released on Google Play
+  Labels:       ui, integration
+  Tasks:        App shell and navigation (8h), Offline sync (8h),
+                Push notification service (6h), Store submission (4h)
+  Expected:     20 or more, should be split
+  Result:       20, range 8-20, confidence 24%, risk HIGH
+  Shows:        16 components, more than the 7 the model was trained on. Explanation:
+                "bigger than anything the model has seen ... extrapolated, not measured
+                ... Treat it as an epic, and split it".  -> PASS
+
+TC-10  PROGRAMME-SIZED
+  Title:        Split the monolith into microservices
+  Type:         Story        Priority: Medium
+  Description:  Move every module of the platform into its own service with its own
+                database, with no downtime and no lost data.
+  Criteria:     20 lines, one per service (Auth, Users, Projects, Backlog, Sprints,
+                Tasks, Comments, Notifications, Files, Reports, Billing, Search) plus
+                own databases, service-to-service auth, logging and tracing, blue-green
+                deployments, load test, rollback, monolith switched off, runbooks
+  Labels:       security, integration, performance, compliance
+  Tasks:        Workstream 1 ... Workstream 12 (8h each)
+  Expected:     40 or more, must be split
+  Result:       40, range 20-40, confidence 0%, risk HIGH
+  Shows:        36 components, five times the training maximum. 0% confidence is the
+                honest answer for something this far outside the data.  -> PASS
+
+TC-11  MEGA (API TEST)
+  How:          http://localhost:8000/docs > POST /predict/story-points > Try it out >
+                paste the BASE INPUT (below) and change "num_components": 7 to 150
+  Expected:     100, "read it as 100 or more"
+  Result:       100, range 40-100, confidence 0%, risk HIGH
+  Also try:     "num_components": 18 -> 20 (13-40), and 36 -> 40 (20-100)   -> PASS
+
+TC-12  VAGUE ONE-LINER
+  Title:        Misc improvements
+  Type:         Story        (no description, criteria, labels or tasks)
+  Expected:     cannot be sized, so low confidence
+  Result:       3, range 1-3, confidence 34%      (before the fix: 5, range 2-5, 19%)
+  Shows:        Explanation: "The model did not recognise any of this story's wording,
+                so the estimate rests on its structure alone." A one-line Story with
+                one component now counts as small work.  -> PASS
+
+TC-13  LONG TEXT, NO STRUCTURE
+  Title:        Improve the reports module
+  Type:         Story
+  Description:  About 120 words describing slow, confusing reports, wrong totals and
+                support tickets, ending "look at the whole module ... make every number
+                match the board". (No criteria, labels or tasks.)
+  Expected:     5-8, not very confident
+  Result:       5, range 5-13, confidence 24%     (before the fix: 8, range 5-13, 32%)
+  Shows:        A long description keeps it a feature, but with only 1 component the
+                confidence stays low. It dropped from 8 because "export to Excel" in the
+                text no longer counts as integration work.  -> PASS
+
+TC-14  NON-ENGLISH (SINHALA)
+  Title:        ගෙවීම් පිටුවේ දෝෂය නිවැරදි කරන්න   (Fix the bug on the payment page)
+  Type:         Bug
+  Description:  ගෙවීම් බොත්තම එබූ විට දෝෂ පණිවිඩයක් පෙන්වයි.
+                (An error message appears when the pay button is pressed.)
+  Expected:     1-3, low confidence because the model reads English only
+  Result:       3, range 3-8, confidence 17%
+  Shows:        Explanation says it did not recognise the wording and used the story's
+                structure only. Answers, does not crash, and admits it.  -> PASS
+
+TC-15  SAME STORY, DIFFERENT TEAM LEVEL
+  How:          Project > "Estimation context" > Experience level, then open TC-06
+                (Stripe) and click Re-estimate. Set it back to "mid" afterwards.
+  Expected:     a senior team gets a smaller number
+  Result:       junior 13, mid 13, senior 8   (range 8-13 each time)
+  Shows:        Same work, more experienced team, fewer points.  -> PASS
+
+TC-16  EMPTY INPUT (API TEST)
+  How:          POST /predict/story-points with  {"model":"M1_STORY_POINTS","features":{}}
+  Expected:     no crash
+  Result:       5, range 2-5, confidence 3%
+  Shows:        Falls back to a typical story and says so with near-zero confidence. -> PASS
+
+TC-17  INVALID NUMBERS (API TEST)
+  How:          BASE INPUT with "num_components": -5, "team_size": 0, "external_apis": -2
+  Expected:     no crash, values cleaned
+  Result:       8, range 5-13, confidence 17% (down from 54% for the clean input)
+  Shows:        Impossible values are corrected, and the confidence drops.  -> PASS
+
+BASE INPUT for the API tests (paste into /docs, then change one value at a time).
+On its own it gives 8, range 8-13, confidence 54%:
+
+{"model": "M1_STORY_POINTS", "features": {"title": "Integrate the Stripe payment gateway for subscriptions", "description": "Customers pay monthly by card through Stripe. Handle failed payments, webhooks and refunds, and store no card data ourselves.", "story_type": "STORY", "num_components": 7, "external_apis": 1, "has_integration": true, "has_security": true, "has_ui_complexity": false, "team_size": 4, "sprint_duration_days": 14, "domain": "finance", "tech_stack": "springboot", "dev_experience_level": "mid", "team_velocity_avg": 30, "recent_completion_rate": 0.8}}
+
+(This short input gives 8 where the app gives 13 for TC-06, because the app also sends
+ word counts, priority, project history and similar fields.)
+
+
+-------------------------------------------------------------------------------------
+ WHY IS CONFIDENCE ONLY 25% FOR THE BILLING EPIC (20 POINTS)?
+-------------------------------------------------------------------------------------
+ Confidence here means precision, not "chance of being right":
+
+     confidence = 1 - (width of the range / the estimate) / 1.5
+
+ For "Migrate the billing platform to a multi-region datastore":
+   - It has 18 components; the training data stops at 7. So the model cannot measure
+     it and extrapolates from two directions:
+        trend continued                     -> about 15 points
+        biggest known story, scaled up      -> about 28 points
+   - The final estimate is between them: 20.8, with a raw range of 12.9 to 36.2.
+   - That range (23.3 points wide) is wider than the estimate itself:
+        1 - (23.3 / 20.8) / 1.5 = 0.25  ->  25%
+   - On top of that, anything beyond the training data is capped at 30% at most.
+
+ For the panel: low confidence is correct here. The system is saying "about 20, could
+ be 13 or could be 40, split it", which is the honest answer for a story bigger than
+ anything it has seen. Normal stories (TC-04 to TC-08) get 51-63%.
+
+
+-------------------------------------------------------------------------------------
+ LIMITATIONS FOUND BY THESE TESTS (and what would fix them)
+-------------------------------------------------------------------------------------
+ 1. Small items are estimated a bit high (TC-01, TC-02): the lowest answer is 2-3.
+    Cause: the training dataset has very few 1-point stories.
+    Fix:   retrain with SprintIQ's own recorded estimates, which include small work.
+
+ 2. FIXED (model 2.3.0): small work typed as "Story" was over-estimated (TC-03: 8).
+    Cause: every SprintIQ "Story" was mapped to the dataset's "feature" type, which
+           averages 5-13 points.
+    Fix:   a Story with 3 components or fewer, no external dependency, no security work
+           and 40 words or fewer is now read as an "enhancement" (a change to something
+           existing). Bigger Stories stay features, so large cases did not move.
+           Result: TC-03 8 -> 5, TC-12 5 -> 3, all large cases unchanged.
+    Still open: TC-04 / TC-05 (5-6 components) stay at 8, and small items cannot go
+           below the floor in limitation 1.
+
+ 3. FIXED (model 2.3.0): the words "export" / "import" in a story's text no longer count
+    as integration work (a person's "export" or "import" label still does).
+    Result: TC-13 8 -> 5.

@@ -86,7 +86,7 @@ class SprintSlippageBlockedCountTest {
     }
 
     private static SprintSlippage slippageOver(Task... tasks) {
-        return new TaskFeatureProvider(repositoryOf(List.of(tasks)), null, null)
+        return new TaskFeatureProvider(repositoryOf(List.of(tasks)), null, null, null)
                 .sprintSlippage(SPRINT);
     }
 

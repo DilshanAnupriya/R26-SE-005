@@ -164,6 +164,29 @@ public class Task extends TenantAwareEntity implements SoftDeletable {
     @Column(name = "running_since")
     private Instant runningSince;
 
+    /**
+     * The clock's reading when the task first got an owner — how long it waited for one.
+     * Null until then, and kept through later reassignments: the wait happened once.
+     */
+    @Column(name = "unassigned_elapsed_seconds")
+    private Long unassignedElapsedSeconds;
+
+    /** The estimate when the task first got an owner, against which that wait is measured. */
+    @Column(name = "estimate_at_assign_minutes")
+    private Integer estimateAtAssignMinutes;
+
+    /**
+     * Notes the moment this task first has an owner. Only the first time: a task handed
+     * from one person to another was never unowned in between.
+     */
+    public void stampFirstAssignment(Instant now) {
+        if (assigneeId == null || unassignedElapsedSeconds != null) {
+            return;
+        }
+        unassignedElapsedSeconds = elapsedSecondsAt(now);
+        estimateAtAssignMinutes = estimateMinutes;
+    }
+
     public boolean isSubtask() {
         return parentTaskId != null;
     }

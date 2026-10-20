@@ -1,5 +1,6 @@
 package com.sprintiq.pms.modules.backlog.application;
 
+import com.sprintiq.pms.common.domain.Priority;
 import com.sprintiq.pms.common.error.BusinessRuleException;
 import com.sprintiq.pms.common.error.ResourceNotFoundException;
 import com.sprintiq.pms.modules.backlog.domain.Story;
@@ -84,7 +85,8 @@ public class StoryRequirementChangeService {
         RequirementChangeResponse change = requirementChanges.log(story.getProjectId(),
                 new LogRequirementChangeRequest(type, direction, sprintId,
                         story.getRequirementId(), storyId, request.description(),
-                        null, request.requestedByName()));
+                        null, request.requestedByName()),
+                levelsMoved(type, before, after));
 
         log.info("Story {} changed ({} {}) — requirement risk {}",
                 story.getItemKey(), type, direction, change.riskDelta());
@@ -127,6 +129,35 @@ public class StoryRequirementChangeService {
         }
     }
 
+    /**
+     * How far a change moved its field: priority levels, or acceptance criteria added or
+     * removed; one for every other change.
+     *
+     * <p>Low to High is two levels and is charged twice what Low to Medium is — raising a
+     * story further displaces more of what the sprint already committed to, and lowering
+     * it further hands more back. Criteria the same way: each one added is one more thing
+     * that has to be true before the story is done, and each one deleted is one fewer. A
+     * rewrite that keeps the count is one change, read from its length as before. The
+     * direction is already settled by {@code infer}; this is only the size.</p>
+     */
+    static int levelsMoved(RequirementChangeType type,
+                           RequirementChangeImpact.Snapshot before,
+                           RequirementChangeImpact.Snapshot after) {
+        return switch (type) {
+            case PRIORITY_CHANGED -> Math.max(1,
+                    Math.abs(weightOf(after.priority()) - weightOf(before.priority())));
+            case ACCEPTANCE_CRITERIA_CHANGED -> Math.max(1, Math.abs(
+                    RequirementChangeImpact.countCriteria(after.acceptanceCriteria())
+                            - RequirementChangeImpact.countCriteria(before.acceptanceCriteria())));
+            default -> 1;
+        };
+    }
+
+    /** An unset priority reads as Medium, as it does when the direction is inferred. */
+    private static int weightOf(Priority priority) {
+        return priority == null ? Priority.MEDIUM.weight() : priority.weight();
+    }
+
     private RequirementChangeImpact.Snapshot snapshot(Story story) {
         return new RequirementChangeImpact.Snapshot(story.getPriority(), story.getDescription(),
                 story.getAcceptanceCriteria(), story.getStoryPoints());
@@ -151,8 +182,13 @@ public class StoryRequirementChangeService {
             case ACCEPTANCE_CRITERIA_CHANGED -> new RequirementChangeImpact.Snapshot(
                     story.getPriority(), story.getDescription(),
                     request.newAcceptanceCriteria(), story.getStoryPoints());
+            // A scope change may also say what the scope now is. The text is carried, but
+            // the size is still what is checked and charged — a scope change is measured
+            // by the estimate, not by how much was written about it.
             case SCOPE_ADDED, SCOPE_REMOVED -> new RequirementChangeImpact.Snapshot(
-                    story.getPriority(), story.getDescription(), story.getAcceptanceCriteria(),
+                    story.getPriority(),
+                    request.newDescription() == null ? story.getDescription() : request.newDescription(),
+                    story.getAcceptanceCriteria(),
                     request.newStoryPoints() == null ? story.getStoryPoints() : request.newStoryPoints());
             // OTHER edits nothing on the story; it is a note on the record.
             case OTHER -> snapshot(story);
@@ -166,7 +202,10 @@ public class StoryRequirementChangeService {
             case PRIORITY_CHANGED -> story.setPriority(after.priority());
             case DESCRIPTION_UPDATED -> story.setDescription(after.description());
             case ACCEPTANCE_CRITERIA_CHANGED -> story.setAcceptanceCriteria(after.acceptanceCriteria());
-            case SCOPE_ADDED, SCOPE_REMOVED -> story.setStoryPoints(nonNegative(after.storyPoints()));
+            case SCOPE_ADDED, SCOPE_REMOVED -> {
+                story.setStoryPoints(nonNegative(after.storyPoints()));
+                story.setDescription(after.description());
+            }
             case OTHER -> { /* nothing on the story moves */ }
         }
     }

@@ -260,7 +260,6 @@ export function TaskDetailDialog({
   const clock = computeTaskClock(task);
   const timer = clockLabel(clock);
   const finished = task.status === "DONE" || task.status === "CANCELLED";
-  const reopens = task.reopenedCount ?? 0;
 
   const people = members
     .map((member) => ({
@@ -484,29 +483,6 @@ export function TaskDetailDialog({
               </div>
             </div>
 
-            {/* Over-budget Reopen Impact Banner */}
-            <div
-              className={cn(
-                "rounded-xl border p-4 text-xs",
-                reopens > 0 ? "border-amber-500/40 bg-amber-500/5" : "border-border bg-muted/40"
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
-                  <RotateCcw className="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden />
-                  Reopened Metrics
-                </span>
-                <span className="font-mono text-sm font-bold tabular-nums text-foreground">
-                  {reopens} time{reopens === 1 ? "" : "s"}
-                </span>
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                {reopens > 0
-                  ? "Opening this task counts as a reopen. Every one of them raises this sprint's over-budget risk, and each raises it by more than the last — the estimate is already spent by then."
-                  : "Opening this task counts as a reopen, which raises this sprint's over-budget risk."}
-              </p>
-            </div>
-
             {/* Conversation Thread */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -521,6 +497,14 @@ export function TaskDetailDialog({
                     void queryClient.invalidateQueries({
                       queryKey: queryKeys.projects.board(task.projectId),
                     });
+                    // A comment or reply credits the sprint's collaboration risk, so the
+                    // gauges should move now rather than at their next poll.
+                    if (task.sprintId) {
+                      void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(task.sprintId) });
+                      void queryClient.invalidateQueries({
+                        queryKey: queryKeys.ai.riskAdjustments(task.sprintId),
+                      });
+                    }
                   }}
                 />
               </div>

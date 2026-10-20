@@ -117,7 +117,11 @@ whichever one sorts first.
 | `dev_experience_level` | junior, mid, senior |
 
 SprintIQ's story types are mapped rather than passed through — `BUG → bug`,
-`STORY/TASK → feature`, `SPIKE/CHORE/TECH_DEBT → enhancement`.
+`SPIKE/CHORE/TECH_DEBT → enhancement`, and `STORY/TASK → feature`, unless the story is
+small by every measure the service has (at most 3 components, no external dependency, no
+security work, at most 40 words), when it is read as an `enhancement`. The dataset's
+features run 5 to 13 points, and reading a tooltip as one sized it 8.
+`provenance.story_type_read_as` records which reading was used.
 
 **Numeric** — `num_components`, `external_apis`, `has_integration`,
 `has_security`, `has_ui_complexity`, `team_size`, `sprint_duration_days`,
@@ -134,6 +138,34 @@ back to the median of the training set.
 Every response carries a `provenance` block naming what was defaulted and what
 was guessed, and the explanation says so in words. An estimate built mostly from
 defaults should not read as a measurement.
+
+A value that is supplied but unusable — NaN, infinity, a number past float32, a
+word where a number belongs, a negative count, a team of zero — is treated the same
+way and also listed in `provenance.rejected_as_invalid`, because the fix for it is
+upstream. The edge cases this covers, for both M1 models, are tabulated in
+`docs/edge-case-testing-m1.md` and tested in `tests/test_edge_cases_*.py`, with the
+directions the answers must move in tested in `tests/test_metamorphic.py`.
+
+## The scale, and stories bigger than the training data
+
+Estimates are reported on the Planning Poker deck, **0, 0.5, 1, 2, 3, 5, 8, 13, 20, 40,
+100** (`ESTIMATION_SCALE` in `app/predictor.py`). The dataset itself runs from 1 to 13
+points, and its stories have at most 7 components and 6 external APIs. Inside that the
+model answers as it was trained to.
+
+A story past either limit is bigger than anything the model has seen: the trees read 18
+components as 7, and XGBoost sends an external-API count above 6 down its "missing"
+branch, which scores it as none. Such a story is scored at the maximums
+(`TRAINING_MAXIMUMS` in `app/features.py`), then extrapolated between two estimates —
+the model's own per-unit trend continued, and its answer at the limit scaled in
+proportion — and given their geometric mean, labelled HIGH, with an explanation that says
+it was extrapolated. `provenance.beyond_training_range` names the input and its limit;
+`provenance.extrapolation` carries both estimates. The reasoning, and why this rather than
+retraining on synthetic epics, is in `docs/edge-case-testing-m1.md`.
+
+The velocity model does the same for a team whose three-sprint average is outside 13-54
+points, the range its trees can tell apart: the forecast follows the team's own record in
+proportion, upwards at most double (`provenance.scaled_for_history_range`).
 
 ## What is inferred rather than known
 

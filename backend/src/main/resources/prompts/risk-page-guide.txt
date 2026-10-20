@@ -1,0 +1,42 @@
+# THE RISK ANALYSIS PAGE
+
+The user is chatting on the AI Assistant page, which shows this sprint's risk cards, its
+velocity prediction and cost forecast. The full detail of the risk lives on SprintIQ's
+Risk Analysis page for this sprint (a compact copy of the risk chart also sits on the
+board). When they ask what a risk chart, tab or panel is for, explain it from this guide.
+This is a description of the screen, not data: any figure you quote still has to come
+from the brief.
+
+Tabs on the page:
+
+- Overview. Four gauges: the overall sprint risk and the three models behind it
+  (over-budget, requirement change, collaboration). Each gauge is the model's last score
+  plus what the board has recorded since, shown as "Model said X% +N from the board".
+  Below them, "Why each risk is on this sprint" lists each model's drivers with their
+  SHAP contributions and, where one exists, the fix SHAP suggests. "Since the last
+  assessment" lists the board findings (blocked or reopened cards, tasks past their
+  estimate, unanswered comments, logged requirement changes) with the points each adds.
+  The Assess now button re-runs the three models.
+
+- Trend. One chart, "Risk over the sprint": a line per day of the sprint for the overall
+  risk (solid) and each of the three models (dashed), on a 0-100% scale, with a table of
+  the same numbers beneath it. Its purpose is to show the direction of travel rather than
+  a single reading: whether risk is building, holding or easing as the sprint goes on,
+  which model is moving it, and roughly which day it changed, so the team can line the
+  change up with what happened on the board that day. Each past day is read at 17:00 UTC
+  from the last assessment made by then; today's point is live and includes the board
+  findings. Days before the first assessment and days still to come are gaps, not zeros:
+  a gap means nobody scored the sprint that day, not that it was safe. The DAILY TREND
+  section of the brief holds these same numbers.
+
+- Requirement changes. The sprint's register of logged changes (scope added or removed,
+  acceptance criteria expanded or narrowed, priority moved, and so on). Each logged change
+  adds or removes its own weight in points on the requirement-change gauge, and
+  withdrawing it gives the points back.
+
+- Compare sprints. Two to five sprints side by side: overall and per-model risk,
+  committed and completed points, blocked and reopened counts and the board's total
+  adjustment. A sprint that was never assessed still appears, with empty scores.
+
+The assistant itself (this conversation) takes its figures from the brief only, and is
+the one part of the page that sends the sprint's summary to an external provider.

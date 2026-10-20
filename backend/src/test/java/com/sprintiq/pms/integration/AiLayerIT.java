@@ -315,6 +315,75 @@ class AiLayerIT extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("requirement change is the model's full reading from the first assessment, plus the board")
+    void requirementChangeIsScoredFromTheStart() {
+        ProjectResponse project = newProject("Mobile Banking");
+        SprintResponse sprint = newSprintWithWork(project.id());
+
+        // Scored by the model from the first assessment. It used to be held at nought until
+        // a change was logged, so the model's whole reading arrived with the first small
+        // change and looked like a 60-point jump.
+        SprintRiskResponse fresh = riskService.assess(sprint.id());
+        assertThat(fresh.requirementChange().predictionId())
+                .as("the model is asked from the first assessment on")
+                .isNotNull();
+        BigDecimal model = fresh.requirementChange().riskScore();
+        assertThat(model).isPositive();
+
+        // Nothing changed, nothing moves.
+        assertThat(riskService.assess(sprint.id()).requirementChange().riskScore())
+                .isEqualByComparingTo(model);
+
+        // A logged change adds its own weight on top of the model's reading.
+        requirementChangeService.log(project.id(), new LogRequirementChangeRequest(
+                RequirementChangeType.SCOPE_ADDED, ChangeImpactDirection.INCREASE,
+                sprint.id(), null, null, "A second payment provider", null, "Product owner"));
+        SprintRiskResponse changed = riskService.assess(sprint.id());
+        assertThat(changed.requirementChange().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
+        assertThat(changed.requirementChange().adjustedScore())
+                .as("the model's reading plus the board's +8, not a jump from nought")
+                .isEqualByComparingTo(changed.requirementChange().riskScore()
+                        .add(new BigDecimal("0.08")).min(BigDecimal.ONE));
+
+        // Stories pulled in after the start move the model's own reading.
+        sprintService.start(sprint.id());
+        StoryResponse late = newStory(project.id(), "Pulled in late", "Detail.", "One",
+                BigDecimal.valueOf(13));
+        sprintService.addItems(sprint.id(), new AddSprintItemsRequest(List.of(late.id())));
+        assertThat(riskService.assess(sprint.id()).requirementChange().riskScore())
+                .as("scope moving mid-sprint raises the model's reading")
+                .isGreaterThan(changed.requirementChange().riskScore());
+    }
+
+    @Test
+    @DisplayName("collaboration starts at 0% and still shows what the board charges")
+    void collaborationBaselineCarriesBoardCharges() {
+        ProjectResponse project = newProject("Mobile Banking");
+        SprintResponse sprint = newSprintWithWork(project.id());
+
+        // Nothing for the collaboration model to read. It used to come back unscored, and
+        // an unscored gauge had nothing for a board charge to sit on.
+        SprintRiskResponse fresh = riskService.assess(sprint.id());
+        assertThat(fresh.communicationCollaboration()).isNotNull();
+        assertThat(fresh.communicationCollaboration().riskScore()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(fresh.communicationCollaboration().predictionId()).isNull();
+
+        // A task added with nobody on it.
+        adjustmentService.revise(sprint.id(), RiskType.COMMUNICATION_COLLABORATION,
+                "TASK_UNASSIGNED:" + UUID.randomUUID(), BigDecimal.valueOf(3), "Nobody assigned to MB-1");
+        assertThat(riskService.latest(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .as("the charge moves the gauge straight away")
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+
+        // And a second baseline does not swallow it.
+        assertThat(riskService.assess(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+        assertThat(riskService.latest(sprint.id()).communicationCollaboration().adjustmentDelta())
+                .isEqualByComparingTo(BigDecimal.valueOf(3));
+    }
+
+    @Test
     @DisplayName("a logged requirement change survives pressing Assess")
     void requirementChangeSurvivesReassessment() {
         ProjectResponse project = newProject("Mobile Banking");
@@ -369,23 +438,26 @@ class AiLayerIT extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("board evidence is still folded into the model's own figure")
-    void boardReadingsAreStillAbsorbed() {
+    @DisplayName("board evidence survives pressing Assess")
+    void boardReadingsSurviveReassessment() {
         ProjectResponse project = newProject("Mobile Banking");
         SprintResponse sprint = newSprintWithWork(project.id());
         riskService.assess(sprint.id());
 
-        // The counterpart risk: if everything survived scoring, a blocked task would be
-        // charged twice — once by the model that read it in blocked_count, and again by
-        // an overlay that refused to clear.
         adjustmentService.record(sprint.id(), RiskType.OVER_BUDGET,
                 BigDecimal.valueOf(8), "Task blocked: MBA-1");
         assertThat(riskService.latest(sprint.id()).overBudget().adjustmentDelta())
                 .isEqualByComparingTo(BigDecimal.valueOf(8));
 
+        // Re-scoring used to fold this away, and the gauge fell straight back to where it
+        // was before the card moved — the button appeared to undo the board. What the
+        // board added since the last scoring is carried through the new one instead.
         assertThat(riskService.assess(sprint.id()).overBudget().adjustmentDelta())
-                .as("a blocked task is in the features, so re-scoring absorbs the overlay")
-                .isEqualByComparingTo(BigDecimal.ZERO);
+                .as("the Assess response itself has to carry the board's charge")
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
+        assertThat(riskService.latest(sprint.id()).overBudget().adjustmentDelta())
+                .as("and so does every read after it")
+                .isEqualByComparingTo(BigDecimal.valueOf(8));
     }
 
     @Test

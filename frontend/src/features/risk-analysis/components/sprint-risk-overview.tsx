@@ -230,8 +230,7 @@ function ModelPanel({
 }) {
   const scored = assessment != null;
   // The adjusted score is what the badge and the gauge read: it is the number the board
-  // currently supports. The model's own figure stays visible underneath, because a
-  // dashboard that cannot be reconciled with the prediction record gets distrusted.
+  // currently supports.
   const displayed = assessment?.adjustedScore ?? assessment?.riskScore ?? null;
   const delta = assessment?.adjustmentDelta ?? 0;
 
@@ -246,17 +245,11 @@ function ModelPanel({
 
       {scored ? (
         <>
-          {delta !== 0 ? (
-            <p className="mt-1 text-xs text-ink-3">
-              Model said {asPercent(assessment?.riskScore)}%
-              <span className={delta > 0 ? "ml-1 font-semibold text-red" : "ml-1 font-semibold text-green"}>
-                {delta > 0 ? "+" : ""}
-                {delta} from the board
-              </span>
-            </p>
-          ) : (
+          {/* The model-versus-board split is not repeated here; the explanations below
+              still break the adjusted figure down. */}
+          {delta === 0 ? (
             <p className="mt-1 text-xs text-ink-3">Scored {formatWhen(assessment?.createdAt)}</p>
-          )}
+          ) : null}
 
           {assessment?.explanation ? (
             <p className="mt-2 text-xs leading-relaxed text-ink-2">{assessment.explanation}</p>
@@ -345,11 +338,11 @@ function AdjustmentLedger({ adjustments }: { adjustments: RiskAdjustment[] }) {
       <p className="flex items-start gap-1.5 border-t border-line px-4 py-2 text-xs text-ink-3">
         <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden />
         Points are an agreed ranking of how much each event disturbs a plan, not a measured
-        quantity. Re-assessing folds the board readings into the model&rsquo;s own figure and
-        starts them again; entries marked <em>stands after Assess</em> keep counting, because
-        nothing the models read represents them yet. A claimed fix is released from here the
-        moment it does — when the model stops offering that step, the fall is in its own
-        score instead.
+        quantity. Re-assessing re-scores the models and keeps everything the board has added or
+        taken off since — those entries are marked <em>stands after Assess</em>, and each one
+        goes when the board does, a card unblocked or a task finished. A claimed fix is
+        released from here once the model stops offering that step, because the fall is then
+        in its own score instead.
       </p>
     </Card>
   );

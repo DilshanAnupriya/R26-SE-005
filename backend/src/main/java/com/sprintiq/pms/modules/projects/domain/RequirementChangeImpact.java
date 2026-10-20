@@ -108,7 +108,7 @@ public final class RequirementChangeImpact {
      * they are written into the box and how they are read back out of it. Blank lines are
      * spacing, not criteria.</p>
      */
-    private static int countCriteria(String text) {
+    public static int countCriteria(String text) {
         if (text == null || text.isBlank()) {
             return 0;
         }

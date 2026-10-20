@@ -127,7 +127,10 @@ public class HttpAiModelClient implements AiModelClient {
                     contribution,
                     direction != null ? direction
                             : contribution.signum() >= 0 ? PredictionDriver.INCREASE : PredictionDriver.DECREASE,
-                    string(driver.get("detail"))));
+                    string(driver.get("detail")),
+                    // The SHAP fix, when the model sent one. Kept whole rather than
+                    // re-typed: it is the model's measurement and the panel reads it as is.
+                    driver.get("fix") instanceof Map<?, ?> fix ? (Map<String, Object>) fix : null));
         }
         return drivers;
     }

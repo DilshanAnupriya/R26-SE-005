@@ -148,8 +148,13 @@ export function PredictionMeta({ prediction }: { prediction: PredictionEnvelope 
   );
 }
 
-/** The Fibonacci ladder story points are reported on. */
-const FIB = [1, 2, 3, 5, 8, 13, 21];
+/**
+ * The deck story points are reported on — the Planning Poker deck SprintIQ uses
+ * everywhere: the model's training scale, 1 to 13, with the cards either side of it. Past
+ * 13 the number is an extrapolation for a story bigger than anything in the training
+ * data, and the explanation says so.
+ */
+const FIB = [0, 0.5, 1, 2, 3, 5, 8, 13, 20, 40, 100];
 
 /** Two decimals, without the trailing zeros that make 8.00 look like a measurement. */
 function trim(value: number): string {

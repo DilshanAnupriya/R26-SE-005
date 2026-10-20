@@ -123,7 +123,7 @@ class ExplainabilityEngine:
         if self.shap_explainer is not None:
             try:
                 explanation["shap_explanation"] = self._explain_with_shap(
-                    developer_id, dev_features
+                    developer_id, dev_features, task_profile, skill_match_score
                 )
             except Exception as e:
                 logger.warning(f"Could not generate SHAP explanation: {e}")
@@ -395,21 +395,94 @@ class ExplainabilityEngine:
 
         return concerns[:3]  # Top 3 concerns
 
-    def _explain_with_shap(self, dev_id: str, dev_features: pd.DataFrame) -> Dict:
+    def _explain_with_shap(
+        self,
+        dev_id: str,
+        dev_features: pd.DataFrame,
+        task_profile: Optional[Dict] = None,
+        skill_match_score: float = 0.5
+    ) -> Optional[Dict]:
         """
-        Use SHAP to explain which features most influenced the prediction.
+        Use SHAP (TreeExplainer) to explain which features most influenced the prediction.
+        Constructs a complete task-developer candidate vector so explanations reflect
+        actual task characteristics and developer proficiencies rather than zero-filled defaults.
         """
         if self.shap_explainer is None:
             return None
 
         try:
             # Get single developer row
-            dev_row = dev_features[dev_features['dev_id'] == dev_id]
-            if dev_row.empty:
+            dev_row_df = dev_features[dev_features['dev_id'] == dev_id]
+            if dev_row_df.empty:
                 return None
+            dev_dict = dev_row_df.iloc[0].to_dict()
 
-            # Align to model features
-            dev_row_aligned = dev_row.reindex(columns=self.feature_columns, fill_value=0)
+            task = task_profile or {}
+            sp = float(task.get("storyPoints", task.get("story_points", 3.0)))
+            raw_type = str(task.get("taskType", task.get("task_type", ""))).lower()
+            raw_domain = str(task.get("domain", "")).lower()
+
+            priority_map = {
+                "blocker": 1, "critical": 2, "major": 3, "minor": 4, "trivial": 5,
+                "high": 2, "medium": 3, "low": 4, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5
+            }
+            p_raw = str(task.get("priority", task.get("priority_id", "3"))).lower()
+            priority_id = float(priority_map.get(p_raw, 3))
+            depended_on = int(task.get("dependedOn", task.get("depended_on", 0)))
+            is_blocked = 1.0 if (task.get("is_blocked") or task.get("isBlocked") or task.get("blocked") or depended_on > 0) else 0.0
+
+            curr_tasks = float(dev_dict.get("current_tasks", 0))
+            curr_workload = float(dev_dict.get("current_workload", 0.0))
+            hist_vel = float(dev_dict.get("historical_velocity_avg", dev_dict.get("velocity", 12.0)))
+            prior_comp = float(dev_dict.get("prior_completed_tasks", dev_dict.get("completed_tasks", 15)))
+            prior_rate = float(dev_dict.get("prior_completed_rate", dev_dict.get("completed_rate", 0.78)))
+
+            init_sp = float(task.get("initialStoryPoints", task.get("initial_story_points", sp)))
+            scope_creep = float(task.get("scopeCreep", task.get("scope_creep", sp - init_sp)))
+            scope_creep_ratio = float(scope_creep / max(1.0, init_sp))
+            sprint_len = float(task.get("sprintLength", task.get("sprint_len", 14.0)))
+            sprint_devs = float(task.get("sprintDevs", task.get("sprint_devs", max(1, len(dev_features)))))
+            sprint_total_issues = float(task.get("sprintTotalIssues", task.get("sprint_total_issues", 40.0)))
+            comment_count = float(task.get("commentCount", task.get("comment_count", 0)))
+            issue_link_count = float(task.get("issueLinkCount", task.get("issue_link_count", 0)))
+            summary_len = float(max(10, len(str(task.get("title", task.get("name", task.get("task_type", "task")))))))
+
+            type_bug = 1.0 if ("bug" in raw_type or "defect" in raw_type) else 0.0
+
+            row_data = {
+                "story_points": sp,
+                "initial_story_points": init_sp,
+                "has_story_points": 1.0 if sp > 0 else 0.0,
+                "scope_creep": scope_creep,
+                "scope_creep_ratio": scope_creep_ratio,
+                "priority_id": priority_id,
+                "is_blocked": is_blocked,
+                "dependency_count": float(task.get("dependency_count", task.get("dependencyCount", depended_on))),
+                "issue_link_count": issue_link_count,
+                "comment_count": comment_count,
+                "summary_char_length": summary_len,
+                "sprint_len": sprint_len,
+                "sprint_devs": sprint_devs,
+                "sprint_total_issues": sprint_total_issues,
+                "dev_prior_completed_tasks": prior_comp,
+                "dev_prior_completed_rate": prior_rate,
+                "dev_historical_velocity_avg": hist_vel,
+                "dev_domain_familiarity": float(skill_match_score),
+                "dev_sprint_task_load": curr_tasks,
+                "dev_sprint_story_point_load": curr_workload,
+                "dev_load_ratio": float(curr_workload / max(1.0, hist_vel)),
+                "is_cold_start_dev": 1.0 if prior_comp == 0 else 0.0,
+                "task_type_Bug": type_bug,
+                "task_type_Improvement": 1.0 if "improve" in raw_type else 0.0,
+                "task_type_Story": 1.0 if not type_bug and "improve" not in raw_type else 0.0,
+                "task_domain_backend": 1.0 if ("backend" in raw_domain or "backend" in raw_type or "core" in raw_type) else 0.0,
+                "task_domain_database": 1.0 if ("database" in raw_domain or "db" in raw_domain or "db" in raw_type) else 0.0,
+                "task_domain_devops": 1.0 if ("devops" in raw_domain or "devops" in raw_type or "ci" in raw_type) else 0.0,
+                "task_domain_frontend": 1.0 if ("frontend" in raw_domain or "frontend" in raw_type or "ui" in raw_type) else 0.0,
+            }
+
+            # Align to model feature columns
+            dev_row_aligned = pd.DataFrame([row_data]).reindex(columns=self.feature_columns, fill_value=0.0)
 
             # Get SHAP values
             shap_values = self.shap_explainer.shap_values(dev_row_aligned)

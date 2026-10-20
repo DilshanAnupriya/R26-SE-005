@@ -7,6 +7,10 @@ import { ApiError } from "@/lib/api/errors";
 import type { RiskType } from "@/lib/api/ai-schemas";
 import { queryKeys } from "@/lib/api/query-keys";
 import { riskApi, type ImpactDirection, type RequirementChangeType } from "./api";
+import { RISK_MODELS } from "./risk-models";
+
+/** How often an open risk view re-reads the gauges — the sprint watch runs every minute. */
+export const RISK_REFRESH_MS = 60_000;
 
 export function useSprintRisk(sprintId: string | undefined) {
   const { api, status } = useSession();
@@ -14,6 +18,9 @@ export function useSprintRisk(sprintId: string | undefined) {
     queryKey: queryKeys.ai.risk(sprintId ?? ""),
     queryFn: () => riskApi.latest(api, sprintId!),
     enabled: status === "authenticated" && Boolean(sprintId),
+    // The sprint watch moves these on its own, every minute, as tasks cross half their
+    // estimate. Polling while the view is open is what makes that visible without a reload.
+    refetchInterval: RISK_REFRESH_MS,
   });
 }
 
@@ -29,6 +36,12 @@ export function useSprintRisk(sprintId: string | undefined) {
  * still on offer, retiring what the model has since read for itself — so a step list
  * left on the old cache showed ticks and prices belonging to the previous scoring,
  * beside a gauge that had already moved past them.</p>
+ *
+ * <p>The response is only written straight into the cache when all three models answered.
+ * A model that could not be scored this time — the ai-service is down, or collaboration
+ * has nothing to read — comes back null, and caching that blanked the overview even
+ * though the previous scoring is still stored. Refetching `latest` instead keeps the
+ * newest stored figure for each model, which is also what a reload would show.</p>
  */
 export function useAssessSprintRisk(sprintId: string | undefined) {
   const { api } = useSession();
@@ -37,11 +50,22 @@ export function useAssessSprintRisk(sprintId: string | undefined) {
   return useMutation({
     mutationFn: () => riskApi.assess(api, sprintId!),
     onSuccess: (result) => {
-      queryClient.setQueryData(queryKeys.ai.risk(result.sprintId), result);
+      const answered = RISK_MODELS.filter((model) => result[model.key] != null).length;
+      if (answered === RISK_MODELS.length) {
+        queryClient.setQueryData(queryKeys.ai.risk(result.sprintId), result);
+      } else {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.ai.risk(result.sprintId) });
+      }
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskTrend(result.sprintId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskAdjustments(result.sprintId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.ai.riskSteps(result.sprintId) });
-      toast.success("Sprint reassessed.");
+      if (answered === 0) {
+        toast.error(
+          "The risk models did not answer, so nothing was re-scored. Showing the last assessment.",
+        );
+      } else {
+        toast.success("Sprint reassessed.");
+      }
     },
     onError: (error) => {
       toast.error(error instanceof ApiError ? error.message : "Could not assess that sprint.");
@@ -64,6 +88,7 @@ export function useRiskAdjustments(sprintId: string | undefined) {
     queryKey: queryKeys.ai.riskAdjustments(sprintId ?? ""),
     queryFn: () => riskApi.adjustments(api, sprintId!),
     enabled: status === "authenticated" && Boolean(sprintId),
+    refetchInterval: RISK_REFRESH_MS,
   });
 }
 

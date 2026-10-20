@@ -1,0 +1,18 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07090e">
+<meta name="author" content="R26-SE-005 · SLIIT Faculty of Computing">
+<link rel="icon" href="{{root}}assets/img/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="{{root}}assets/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{root}}assets/css/core.css">
+<link rel="stylesheet" href="{{root}}assets/css/components.css">
+<script>
+  (function () {
+    var d = document.documentElement, t = null;
+    d.classList.remove("no-js"); d.classList.add("js");
+    try { t = localStorage.getItem("siq-theme"); } catch (e) {}
+    if (t !== "night") t = "day";
+    d.setAttribute("data-theme", t);
+    d.setAttribute("data-light", t);
+  })();
+</script>

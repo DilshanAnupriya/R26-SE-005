@@ -210,6 +210,24 @@ describe("EstimatePanel", () => {
     expect(screen.getByText(/model said 6\.67 — a low 8/)).toBeInTheDocument();
   });
 
+  it("places an estimate past 13 on the wider deck", () => {
+    // A story bigger than anything in the training data is extrapolated onto 20, 40 or
+    // 100. Its neighbours are 13 and 40, so 20.6 is just rounded, not "a high 20".
+    estimateData = suggestionFor(STORY_B, 20, PREDICTION_A, { rawValue: 20.63 });
+
+    render(<EstimatePanel story={story()} />);
+
+    expect(screen.getByText(/model said 20\.63 — rounded down to 20/)).toBeInTheDocument();
+  });
+
+  it("places a half-point estimate on the bottom card", () => {
+    estimateData = suggestionFor(STORY_B, 0.5, PREDICTION_A, { rawValue: 0.6 });
+
+    render(<EstimatePanel story={story()} />);
+
+    expect(screen.getByText(/model said 0\.6 — rounded down to 0\.5/)).toBeInTheDocument();
+  });
+
   // ------------------------------------------------------ the project's context
 
   it("names the team context the estimate was scored against", () => {

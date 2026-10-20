@@ -46,6 +46,18 @@ public class TaskService {
     /** How deep subtasks may nest. One level of subtask is a checklist; five is a second backlog. */
     private static final int MAX_SUBTASK_DEPTH = 1;
 
+    /**
+     * A story card's estimate on the board, at an hour a point.
+     *
+     * <p>Multiplied before it is rounded: {@code intValue() * 60} truncated the points
+     * first, so a half-point story — a card on the Planning Poker deck — showed as zero
+     * minutes of work.</p>
+     */
+    static int storyPointMinutes(java.math.BigDecimal points) {
+        return points.multiply(java.math.BigDecimal.valueOf(60))
+                .setScale(0, java.math.RoundingMode.HALF_UP).intValue();
+    }
+
     private final TaskRepository taskRepository;
     private final ProjectLookupService projectLookup;
     private final ItemKeyService itemKeyService;
@@ -147,9 +159,12 @@ public class TaskService {
                 .runningSince(Instant.now())
                 .build();
         task.setOrganizationId(TenantContext.requireOrganizationId());
+        task.stampFirstAssignment(Instant.now());
         task = taskRepository.save(task);
 
         activityService.recordCreated(target(task), "%s created".formatted(task.getItemKey()));
+        // Added to a sprint with nobody on it: charged to collaboration until somebody is.
+        riskReporter.ownershipChanged(task);
 
         if (request.assigneeId() != null) {
             notifications.notify(new NotificationService.Notify(request.assigneeId(),
@@ -164,6 +179,7 @@ public class TaskService {
     @Transactional
     public TaskResponse update(UUID taskId, UpdateTaskRequest request) {
         Task task = require(taskId);
+        UUID previousSprintId = task.getSprintId();
         ChangeSet changes = new ChangeSet();
 
         changes.apply("title", task.getTitle(), trim(request.title()), task::setTitle);
@@ -198,6 +214,10 @@ public class TaskService {
         }
         task = taskRepository.save(task);
         activityService.recordChanges(target(task), changes);
+        // A new estimate re-weighs an unowned task's charge, and an extension gives back
+        // the time an owned one lost waiting; a sprint move takes the charge with it.
+        riskReporter.leftSprint(task, previousSprintId);
+        riskReporter.ownershipChanged(task);
         return toResponse(task);
     }
 
@@ -216,7 +236,13 @@ public class TaskService {
                     case IN_REVIEW -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_REVIEW;
                     case DONE -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.DONE;
                     case CANCELLED -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.CANCELLED;
-                    case BLOCKED -> story.getStatus();
+                    // A blocked story stays where it was — unless it was finished. Blocked
+                    // work is not done work, so a card dragged from Done to Blocked is a
+                    // reopen like any other move out of Done, and the card still shows in
+                    // Blocked through the flag set below.
+                    case BLOCKED -> story.getStatus().isTerminal()
+                            ? com.sprintiq.pms.modules.backlog.domain.StoryStatus.IN_PROGRESS
+                            : story.getStatus();
                     default -> com.sprintiq.pms.modules.backlog.domain.StoryStatus.BACKLOG;
                 };
                 if (request.status() == TaskStatus.BLOCKED) {
@@ -235,9 +261,22 @@ public class TaskService {
                             "%s moved from %s to %s".formatted(story.getItemKey(), previous, newStatus));
                 }
 
-                int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+                int estimateMins = story.getStoryPoints() != null ? storyPointMinutes(story.getStoryPoints()) : 0;
                 var assignee = story.getAssigneeId() == null ? null
                         : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
+
+                // A story card is a card on the board like any other, and dragging it into
+                // Blocked is the same news about the sprint. This branch used to charge
+                // nothing, so a sprint planned as stories alone never moved on a block.
+                riskReporter.blockChanged(story.getSprintId(), story.getId(), story.getItemKey(),
+                        estimateMins > 0 ? estimateMins : null,
+                        story.isBlocked() && !story.getStatus().isTerminal());
+                // Taken back out of Done: work the sprint thought was paid for, again.
+                if (newStatus.isReopenFrom(previous)) {
+                    riskReporter.storyReopened(story.getSprintId(), story.getId(),
+                            story.getItemKey(), estimateMins > 0 ? estimateMins : null,
+                            story.getReopenedCount());
+                }
 
                 realtime.projectEvent(story.getProjectId(), "task.status_changed",
                         java.util.Map.of("taskId", String.valueOf(story.getId()), "status", request.status().name()));
@@ -348,6 +387,11 @@ public class TaskService {
         Task task = require(taskId);
         CommentThreadReader.ThreadStats thread =
                 threadStatsFor(List.of(taskId)).get(taskId);
+        // Every comment, reply and deletion on the task lands here, so this is where the
+        // discussion credit is re-read from the thread — added or withdrawn to match it.
+        riskReporter.discussionChanged(task,
+                thread == null ? 0 : thread.commentCount(),
+                thread == null ? 0 : thread.replyCount());
         if (thread == null || thread.oldestUnansweredAt() == null) {
             // Somebody answered, or the comment was deleted. Withdraw the charge — a
             // risk adjustment that can only ever go up stops describing the sprint and
@@ -385,7 +429,7 @@ public class TaskService {
                 com.sprintiq.pms.modules.backlog.domain.Story story = optStory.get();
                 UUID previous = story.getAssigneeId();
                 if (Objects.equals(previous, request.assigneeId())) {
-                    int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+                    int estimateMins = story.getStoryPoints() != null ? storyPointMinutes(story.getStoryPoints()) : 0;
                     var assignee = story.getAssigneeId() == null ? null
                             : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
                     return toStoryTaskResponse(story, assignee, estimateMins);
@@ -423,7 +467,7 @@ public class TaskService {
                 payload.put("assigneeId", request.assigneeId() != null ? request.assigneeId().toString() : null);
                 realtime.projectEvent(story.getProjectId(), "task.assigned", payload);
 
-                int estimateMins = story.getStoryPoints() != null ? story.getStoryPoints().intValue() * 60 : 0;
+                int estimateMins = story.getStoryPoints() != null ? storyPointMinutes(story.getStoryPoints()) : 0;
                 var assignee = story.getAssigneeId() == null ? null
                         : userService.summariesFor(List.of(story.getAssigneeId())).get(story.getAssigneeId());
                 return toStoryTaskResponse(story, assignee, estimateMins);
@@ -446,7 +490,11 @@ public class TaskService {
         if (request.predictionId() != null) {
             task.setAiPredictionId(request.predictionId());
         }
+        task.stampFirstAssignment(Instant.now());
         task = taskRepository.save(task);
+        // Owned now — or not any more. Either way the collaboration charge is re-judged:
+        // an owner gives back the share of the charge matching the estimate still left.
+        riskReporter.ownershipChanged(task);
 
         activityService.recordChange(target(task),
                 request.assigneeId() == null ? ActivityAction.UNASSIGNED : ActivityAction.ASSIGNED,
@@ -566,6 +614,8 @@ public class TaskService {
 
         activityService.record(target(task), ActivityAction.BLOCKED,
                 "%s blocked: %s".formatted(task.getItemKey(), request.reason().trim()));
+        // Blocked from the detail page is as blocked as dragged into the column.
+        riskReporter.blockChanged(task);
         return toResponse(task);
     }
 
@@ -585,6 +635,7 @@ public class TaskService {
 
         activityService.record(target(task), ActivityAction.UNBLOCKED,
                 "%s unblocked".formatted(task.getItemKey()));
+        riskReporter.blockChanged(task);
         return toResponse(task);
     }
 

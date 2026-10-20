@@ -1,0 +1,93 @@
+# ABOUT SPRINTIQ
+
+This is a description of the SprintIQ product: what each page is for and how its parts
+fit together. Use it to answer questions about how the system works, where something
+lives, or what a feature does. It is a description of the product, not data about this
+organisation: it contains no figures, and any number you quote still has to come from
+the data you were given or a tool you called.
+
+If a question is about a feature this guide does not mention, say you are not sure it
+exists rather than describing one.
+
+## WHAT SPRINTIQ IS
+
+SprintIQ is an agile project management product with four machine-learning models built
+in. Work is organised as organisation > projects > epics > user stories > tasks and
+subtasks, planned in sprints. Every model prediction comes with a value, uncertainty
+bounds, ranked drivers and a plain-language explanation, and can be accepted, overridden
+or compared; that choice is recorded as feedback and in the audit trail.
+
+## THE FOUR MODELS
+
+- M1, estimation. Suggests story points for a story and predicts a sprint's velocity,
+  then judges the sprint's commitment against that prediction. Shown in the story
+  estimate panel on the project page and in sprint planning.
+- M2, sprint risk. Three classifiers: over-budget risk (well calibrated), requirement-
+  change risk (weak: misses more high-change sprints than it catches) and communication
+  and collaboration risk (reads comments, blocked tasks and reopened work). A weighted
+  overall figure combines them. The board keeps adjusting the score between assessments:
+  blocked or reopened cards, tasks past their estimate, unanswered comments and logged
+  requirement changes add points, and fixing them takes the points back.
+- M3, resource allocation. Ranks team members for a task by fit, consistency, learning
+  rate and current load. It scores fit for one item; it is not a performance review.
+- M4, cost. Forecasts a sprint's cost against its budget, at planning time and again
+  mid-sprint. Forecasts are typically 23-29% off, so the bounds matter.
+
+## PAGES (left-hand navigation)
+
+- Home. Dashboard of projects still in play, their health and risk at a glance.
+- My Work. The tasks, stories and sprint assignments of the signed-in user, across all
+  projects.
+- Projects. Every project in the organisation with its explained health. Opening one
+  shows the project overview and backlog, where a story can be selected and sized with
+  the M1 estimate panel beside it. Each project also has a Sprints page, a Board and a
+  Sprint risk page that bands every sprint in the project by overall risk.
+- Roadmap. What the organisation intends to build, by project lane, and how far through
+  it the work actually is.
+- Goals & OKRs. Objectives with key results measured by numbers, not status colours.
+- Timeline. Delivery against dates, built from epics, sprints and milestones.
+  Requirement changes can be logged from here.
+- Calendar. Everything already dated: sprint boundaries, milestones, due dates, targets.
+- Board. A kanban board per project and sprint, with columns from the project's workflow
+  states and their WIP limits. Each task card runs a work clock: it counts down against
+  the estimate, pauses when the card is in Done and resumes if it is pulled back out
+  (a reopen, which the risk model counts as rework).
+- Backlog & Sprints. Pick a project, then plan and run sprints on one screen. A sprint's
+  commitment freezes when it starts; work added afterwards is recorded as scope creep and
+  work removed as scope reduction. Closing a sprint measures delivery against the frozen
+  commitment and sends unfinished items to the backlog, the next sprint or a chosen one.
+  Burndown comes from daily snapshots.
+- Reports. Delivery analytics in tabs: Velocity, Cycle time, Lead time, Flow (cumulative
+  flow) and People. Each tab loads its own report when opened.
+- Risk Analysis. The M2 page for one sprint: Overview (four gauges, drivers, board
+  findings, Assess now), Trend (risk over the sprint, day by day), Requirement changes
+  (the register of logged changes) and Compare sprints (two to five side by side).
+- Resource Allocation. The M3 page: allocation suggestions for tasks, the developers and
+  their profiles, and sprint-level allocation.
+- What-If Simulator. Try allocations before committing to them and see the effect.
+- Sprint Cost. The M4 page: cost forecasts against budget and the cost trend.
+- Copilot. A conversational assistant that can look things up across every project,
+  sprint and work item and call all four models. It can propose changes (accept an
+  estimate, assign a task, move a story to a sprint) as cards that a person must confirm;
+  it never changes anything on its own. Conversations are saved and private.
+- AI Assistant (AI insights). One project's velocity prediction, cost forecast, the three
+  risk models, estimation coverage, and a chat about the current sprint.
+- Automation. Not built yet: the page says so.
+- Team. Who is carrying what: each person's load as a bar against 100%, with
+  over-allocation shown rather than clipped.
+- Documents. Specs, notes and decisions kept beside the work, with every edit kept.
+- Notifications. Things that happened to the user or to work they own, plus delivery
+  preferences.
+- Settings (Administration). Team members and invitations, AI models (the model registry
+  with usage and acceptance), Capabilities (switching each AI feature on or off for the
+  workspace), Recycle bin, and the Audit trail for those allowed to read it.
+
+## ACCESS AND PRIVACY
+
+- What a person can see and do depends on their role's permissions. An assistant sees
+  only what the signed-in user can see.
+- An administrator can switch individual AI capabilities off in Settings > Capabilities;
+  a switched-off model's panels disappear and the page says which are off.
+- The chat assistants are the only parts of SprintIQ that send data to an external AI
+  provider, and they are off unless an API key is configured. The four models run
+  inside SprintIQ.

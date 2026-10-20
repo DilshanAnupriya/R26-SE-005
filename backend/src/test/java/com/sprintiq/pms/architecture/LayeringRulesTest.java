@@ -130,6 +130,23 @@ class LayeringRulesTest {
         rule.check(classes);
     }
 
+    /**
+     * Nothing depends on the Copilot.
+     *
+     * <p>The Copilot is allowed to reach into every module's published services — that is
+     * its job — which only stays safe if the arrows point one way. A delivery module that
+     * called back into it would make a story save depend on an LLM module, and a cycle
+     * through the tool registry would be one injection away.</p>
+     */
+    @Test
+    @DisplayName("the Copilot is a leaf: no other module depends on it")
+    void copilotIsALeaf() {
+        ArchRule rule = noClasses().that().resideOutsideOfPackage("..modules.copilot..")
+                .should().dependOnClassesThat().resideInAPackage("..modules.copilot..")
+                .because("the Copilot orchestrates other modules; they must not depend on it");
+        rule.check(classes);
+    }
+
     @Test
     @DisplayName("services are annotated and transactional boundaries live in the application layer")
     void servicesLiveInApplicationLayer() {

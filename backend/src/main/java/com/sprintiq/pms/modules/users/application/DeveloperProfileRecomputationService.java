@@ -295,6 +295,9 @@ public class DeveloperProfileRecomputationService {
                 if (match) {
                     dev.setConsistency(profile.getConsistencyScore().doubleValue());
                     dev.setLearning_rate(profile.getLearningRate().doubleValue());
+                    if (profile.getAvgVelocity() != null) {
+                        dev.setBase_velocity(profile.getAvgVelocity().doubleValue());
+                    }
                     optimizerDeveloperRepository.save(dev);
                     log.debug("Synchronized metrics to OptimizerDeveloper id={} for user {}", dev.getId(), userId);
                     break;

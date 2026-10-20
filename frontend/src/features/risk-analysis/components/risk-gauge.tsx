@@ -27,6 +27,18 @@ export function asPercent(score: number | null | undefined): number | null {
 }
 
 /**
+ * A model's own figure as text, keeping "barely any" apart from "none".
+ *
+ * <p>A fine-tuned classifier that is sure a sprint is Low gives High a fraction of a
+ * percent. Rounded, that reads "0%", which looks like the model never answered.
+ * Anything above nought that rounds away is written "<1" instead.</p>
+ */
+export function modelPercentLabel(score: number | null | undefined): string {
+  if (score == null) return "—";
+  return score > 0 && score < 0.005 ? "<1" : String(Math.round(score * 100));
+}
+
+/**
  * A three-quarter arc, drawn as SVG.
  *
  * <p>Hand-drawn for the same reason the rest of the charts here are: it is one fixed

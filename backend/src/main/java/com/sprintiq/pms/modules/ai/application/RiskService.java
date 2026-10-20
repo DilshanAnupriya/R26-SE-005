@@ -494,17 +494,28 @@ public class RiskService {
         // Collaboration is the one model that can decline before it is called. Three of
         // its five readings are healthiest at zero, so an untouched sprint assembles a
         // perfectly well-formed vector that the model reads as a well-run team — a
-        // confident all-clear for a sprint nobody has started. Returning null instead
-        // puts the panel in its "nothing to read yet" state, which is the true
-        // statement, and costs nothing rather than billing for the inference.
+        // confident all-clear for a sprint nobody has started. So the model is not asked.
+        // The sprint is scored at a baseline of nought instead of left unscored: an
+        // unscored gauge had nothing for the board's own readings to sit on, so a task
+        // added with nobody assigned charged the ledger and moved no figure at all.
         CollaborationFeatureSource.SprintCollaboration signals = null;
         if (riskType == RiskType.COMMUNICATION_COLLABORATION) {
             Window window = collaborationWindow(sprint);
             signals = collaboration.collaborationFor(sprint.sprintId(), window.start(), window.end());
             if (!signals.hasSignal()) {
-                return null;
+                return baselineZero(RiskType.COMMUNICATION_COLLABORATION, sprint, ledger,
+                        "Nothing to read about how the team is collaborating yet, so the model "
+                        + "was not asked. What the board records — unassigned work, silent "
+                        + "tasks, unanswered questions — moves this from nought.");
             }
         }
+
+        // Requirement change has no such gate, on purpose. It was held at nought until a
+        // change was logged, and then the model's whole planning-column reading (50-70%)
+        // arrived at once, so one extra acceptance criterion looked like a 60-point jump.
+        // Scored from the first assessment, the sprint shows the model's reading from the
+        // start; tasks are not among its inputs, and a logged change adds its own weight
+        // plus whatever the model actually moves.
 
         // A switch expression rather than a statement, so a fourth risk type is a
         // compile error here instead of a model that silently scores on the wrong
@@ -545,6 +556,16 @@ public class RiskService {
                 .build();
         assessment.setOrganizationId(TenantContext.requireOrganizationId());
 
+        // Re-scoring must not undo what the board has done to this risk since the last
+        // scoring. Most of it is never seen by the models — they read pre-sprint columns —
+        // so letting the new cutoff absorb it put the gauge straight back where it was
+        // before the card moved. Done only here, once the model has actually answered: a
+        // scoring that fails writes no new cutoff and has nothing to carry anything past.
+        adjustmentService.carryThroughScoring(sprint.sprintId(), riskType,
+                assessments.findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprint.sprintId(), riskType)
+                        .map(RiskAssessment::getCreatedAt)
+                        .orElse(null));
+
         RiskAssessment saved = assessments.save(assessment);
 
         // Measured against the scoring that has just been written, so everything the
@@ -555,6 +576,48 @@ public class RiskService {
 
         return new Scored(RiskAssessmentResponse.from(saved, overlay),
                 prediction.getStatus() == PredictionStatus.DEGRADED);
+    }
+
+    /**
+     * An assessment of nought, for a model with nothing yet to read — a team with no
+     * collaboration on record.
+     *
+     * <p>Written as a real assessment rather than left blank, so the gauge says 0% —
+     * which is the finding — instead of "not scored", the board's own readings have a
+     * figure to move, and the overall weighs the calm picture in rather than
+     * renormalising it away. No model is called, so there is no prediction behind it;
+     * everything that reads one already tolerates its absence.</p>
+     *
+     * <p>Like any scoring it carries the board's entries through: the new row is the new
+     * cutoff, and without the carry it would absorb the very charge — an unassigned task,
+     * say — it was written to put on show.</p>
+     */
+    private Scored baselineZero(RiskType riskType,
+                                SprintFeatureSource.SprintFeatures sprint,
+                                SprintRiskAdjustmentService.Ledger ledger,
+                                String explanation) {
+        RiskAssessment assessment = RiskAssessment.builder()
+                .projectId(sprint.projectId())
+                .sprintId(sprint.sprintId())
+                .riskType(riskType)
+                .riskScore(BigDecimal.ZERO)
+                .riskLabel(false)
+                .severity(severityOf(BigDecimal.ZERO))
+                .drivers(new ArrayList<>())
+                .mitigations(new ArrayList<>())
+                .explanation(explanation)
+                .build();
+        assessment.setOrganizationId(TenantContext.requireOrganizationId());
+        adjustmentService.carryThroughScoring(sprint.sprintId(), riskType,
+                assessments.findFirstBySprintIdAndRiskTypeOrderByCreatedAtDesc(sprint.sprintId(), riskType)
+                        .map(RiskAssessment::getCreatedAt)
+                        .orElse(null));
+        RiskAssessment saved = assessments.save(assessment);
+        // Re-read: the carry has just marked entries the ledger passed in still reads as
+        // absorbable, and the response has to agree with the next `latest`.
+        return new Scored(RiskAssessmentResponse.from(saved,
+                adjustmentService.ledgerFor(sprint.sprintId()).netSince(riskType, saved.getCreatedAt())),
+                false);
     }
 
     /**

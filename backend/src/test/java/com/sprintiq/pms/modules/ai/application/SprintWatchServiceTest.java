@@ -85,7 +85,7 @@ class SprintWatchServiceTest {
 
         service.watch(SPRINT);
 
-        verify(adjustments).recordOnce(eq(SPRINT), eq(RiskType.COMMUNICATION_COLLABORATION),
+        verify(adjustments).revise(eq(SPRINT), eq(RiskType.COMMUNICATION_COLLABORATION),
                 eq(SprintWatchService.KEY_TASK_SILENT + TASK), any(), any());
     }
 
@@ -98,7 +98,7 @@ class SprintWatchServiceTest {
         service.watch(SPRINT);
 
         verify(adjustments).clear(SPRINT, SprintWatchService.KEY_TASK_SILENT + TASK);
-        verify(adjustments, never()).recordOnce(any(), eq(RiskType.COMMUNICATION_COLLABORATION),
+        verify(adjustments, never()).revise(any(), eq(RiskType.COMMUNICATION_COLLABORATION),
                 eq(SprintWatchService.KEY_TASK_SILENT + TASK), any(), any());
     }
 
@@ -110,6 +110,7 @@ class SprintWatchServiceTest {
         service.watch(SPRINT);
 
         verify(adjustments, never()).recordOnce(any(), any(), any(), any(), any());
+        verify(adjustments, never()).revise(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -142,9 +143,9 @@ class SprintWatchServiceTest {
 
         service.watch(SPRINT);
 
-        verify(adjustments).recordOnce(eq(SPRINT), eq(RiskType.COMMUNICATION_COLLABORATION),
+        verify(adjustments).revise(eq(SPRINT), eq(RiskType.COMMUNICATION_COLLABORATION),
                 eq(SprintWatchService.KEY_NOT_STARTED_HALF + TASK), any(), any());
-        verify(adjustments).recordOnce(eq(SPRINT), eq(RiskType.OVER_BUDGET),
+        verify(adjustments).revise(eq(SPRINT), eq(RiskType.OVER_BUDGET),
                 eq(SprintWatchService.KEY_NOT_STARTED_HALF + TASK + ":budget"), any(), any());
     }
 
@@ -177,10 +178,54 @@ class SprintWatchServiceTest {
                 eq(SprintWatchService.KEY_NOT_DONE_OVERDUE + TASK), any(), any());
     }
 
+    /** A ledger already holding the sweep's silence charge for {@link #TASK}. */
+    private void givenSilenceAlreadyCharged(BigDecimal delta) {
+        com.sprintiq.pms.modules.ai.domain.SprintRiskAdjustment entry =
+                com.sprintiq.pms.modules.ai.domain.SprintRiskAdjustment.builder()
+                        .sprintId(SPRINT)
+                        .riskType(RiskType.COMMUNICATION_COLLABORATION)
+                        .delta(delta)
+                        .reason("silent")
+                        .sourceKey(SprintWatchService.KEY_TASK_SILENT + TASK)
+                        .build();
+        when(adjustments.ledgerFor(SPRINT)).thenReturn(
+                new SprintRiskAdjustmentService.Ledger(List.of(entry)));
+    }
+
+    @Test
+    @DisplayName("finishing a silent task halves its charge rather than clearing it")
+    void finishingSilentTaskKeepsHalf() {
+        givenTask(task("DONE", Instant.now().minus(Duration.ofHours(6)), 0, null));
+        givenSilenceAlreadyCharged(BigDecimal.valueOf(6));
+
+        service.watch(SPRINT);
+
+        ArgumentCaptor<BigDecimal> delta = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(adjustments).revise(eq(SPRINT), eq(RiskType.COMMUNICATION_COLLABORATION),
+                eq(SprintWatchService.KEY_TASK_SILENT + TASK), delta.capture(), any());
+        // An 8-hour task is charged 6; done, 3 of it stays.
+        assertThat(delta.getValue()).isEqualByComparingTo(BigDecimal.valueOf(3));
+        verify(adjustments, never()).clear(SPRINT, SprintWatchService.KEY_TASK_SILENT + TASK);
+    }
+
+    @Test
+    @DisplayName("a finished task that was discussed owes nothing for silence")
+    void finishedAndDiscussedIsCleared() {
+        givenTask(task("DONE", Instant.now().minus(Duration.ofHours(6)), 1, Instant.now()));
+        givenSilenceAlreadyCharged(BigDecimal.valueOf(6));
+
+        service.watch(SPRINT);
+
+        verify(adjustments).clear(SPRINT, SprintWatchService.KEY_TASK_SILENT + TASK);
+        verify(adjustments, never()).revise(any(), eq(RiskType.COMMUNICATION_COLLABORATION),
+                eq(SprintWatchService.KEY_TASK_SILENT + TASK), any(), any());
+    }
+
     @Test
     @DisplayName("finishing a task clears every penalty against it")
     void finishingClearsEverything() {
-        // Late, silent and long overdue — but done. Nothing should still be charged.
+        // Late, silent and long overdue — but done, and never charged for its silence
+        // (the ledger is empty), so nothing should still be charged.
         givenTask(task("DONE", Instant.now().minus(Duration.ofHours(40)), 0, null));
 
         service.watch(SPRINT);
@@ -188,6 +233,7 @@ class SprintWatchServiceTest {
         verify(adjustments).clear(SPRINT, SprintWatchService.KEY_TASK_SILENT + TASK);
         verify(adjustments).clear(SPRINT, SprintWatchService.KEY_NOT_DONE_OVERDUE + TASK);
         verify(adjustments, never()).recordOnce(any(), any(), any(), any(), any());
+        verify(adjustments, never()).revise(any(), any(), any(), any(), any());
     }
 
     @Nested
@@ -308,6 +354,7 @@ class SprintWatchServiceTest {
         service.watch(SPRINT);
 
         verify(adjustments, never()).recordOnce(any(), any(), any(), any(), any());
+        verify(adjustments, never()).revise(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -320,8 +367,60 @@ class SprintWatchServiceTest {
         ArgumentCaptor<BigDecimal> deltas = ArgumentCaptor.forClass(BigDecimal.class);
         verify(adjustments, org.mockito.Mockito.atLeastOnce())
                 .recordOnce(any(), any(), any(), deltas.capture(), any());
+        verify(adjustments, org.mockito.Mockito.atLeastOnce())
+                .revise(any(), any(), any(), deltas.capture(), any());
+        // The weighted half-time charges are capped at 10 however large the task.
         assertThat(deltas.getAllValues())
-                .allSatisfy(d -> assertThat(d).isLessThanOrEqualTo(BigDecimal.valueOf(5)));
+                .allSatisfy(d -> assertThat(d).isLessThanOrEqualTo(BigDecimal.valueOf(10)));
+    }
+
+    @Nested
+    @DisplayName("half-time charges are weighted by the task")
+    class Weighted {
+
+        private BigDecimal charged(int estimateMinutes, String status, long comments,
+                                   RiskType type, String key) {
+            Instant created = Instant.now().minus(Duration.ofMinutes(estimateMinutes * 3L / 4));
+            givenTask(new WatchedTask(TASK, "Wire up the export", status, estimateMinutes,
+                    created, comments, comments > 0 ? Instant.now() : null));
+            service.watch(SPRINT);
+            ArgumentCaptor<BigDecimal> delta = ArgumentCaptor.forClass(BigDecimal.class);
+            verify(adjustments).revise(eq(SPRINT), eq(type), eq(key), delta.capture(), any());
+            org.mockito.Mockito.reset(adjustments);
+            return delta.getValue();
+        }
+
+        @Test
+        @DisplayName("a 30-minute task is charged at its 15-minute mark")
+        void thirtyMinuteTaskAtFifteen() {
+            // 22 minutes in: past the 15-minute half-time, short of the 30-minute deadline.
+            BigDecimal silent = charged(30, "IN_PROGRESS", 0, RiskType.COMMUNICATION_COLLABORATION,
+                    SprintWatchService.KEY_TASK_SILENT + TASK);
+            assertThat(silent).isEqualByComparingTo(BigDecimal.valueOf(3));
+        }
+
+        @Test
+        @DisplayName("a bigger task left unstarted costs over-budget more")
+        void scalesWithTheEstimate() {
+            String key = SprintWatchService.KEY_NOT_STARTED_HALF + TASK + ":budget";
+            BigDecimal oneHour = charged(60, "TODO", 1, RiskType.OVER_BUDGET, key);
+            BigDecimal oneDay = charged(480, "TODO", 1, RiskType.OVER_BUDGET, key);
+            BigDecimal twoDays = charged(960, "TODO", 1, RiskType.OVER_BUDGET, key);
+
+            assertThat(oneHour).isEqualByComparingTo(BigDecimal.valueOf(3));
+            assertThat(oneDay).isEqualByComparingTo(BigDecimal.valueOf(6));
+            assertThat(twoDays).isEqualByComparingTo(BigDecimal.valueOf(10));
+        }
+
+        @Test
+        @DisplayName("a bigger silent task costs collaboration more")
+        void silenceScalesToo() {
+            String key = SprintWatchService.KEY_TASK_SILENT + TASK;
+            BigDecimal small = charged(60, "IN_PROGRESS", 0, RiskType.COMMUNICATION_COLLABORATION, key);
+            BigDecimal oneDay = charged(480, "IN_PROGRESS", 0, RiskType.COMMUNICATION_COLLABORATION, key);
+
+            assertThat(oneDay).isGreaterThan(small);
+        }
     }
 
     /**

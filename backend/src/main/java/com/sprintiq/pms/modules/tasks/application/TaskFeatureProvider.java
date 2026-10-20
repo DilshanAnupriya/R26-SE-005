@@ -48,6 +48,7 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
     private final TaskRepository taskRepository;
     private final TimeTrackingService timeTracking;
     private final LabelService labelService;
+    private final TaskRiskReporter riskReporter;
 
     // -------------------------------------------------------------------- effort
 
@@ -101,6 +102,14 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
     @Transactional(readOnly = true)
     public long sprintTaskCount(UUID sprintId) {
         return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).size();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long sprintUnestimatedTaskCount(UUID sprintId) {
+        return taskRepository.findBySprintIdAndDeletedAtIsNull(sprintId).stream()
+                .filter(task -> task.getEstimateMinutes() == null || task.getEstimateMinutes() <= 0)
+                .count();
     }
 
     @Override
@@ -296,12 +305,24 @@ public class TaskFeatureProvider implements EffortFeatureSource, WorkItemFeature
     @Transactional
     public void moveStoryTasksToSprint(UUID storyId, UUID sprintId) {
         List<Task> tasks = taskRepository.findByStoryIdAndDeletedAtIsNullOrderByRankAsc(storyId);
+        Map<UUID, UUID> previousSprint = new java.util.HashMap<>();
         List<Task> moved = tasks.stream()
                 .filter(task -> !java.util.Objects.equals(task.getSprintId(), sprintId))
-                .peek(task -> task.setSprintId(sprintId))
+                .peek(task -> {
+                    if (task.getSprintId() != null) {
+                        previousSprint.put(task.getId(), task.getSprintId());
+                    }
+                    task.setSprintId(sprintId);
+                })
                 .toList();
         if (!moved.isEmpty()) {
             taskRepository.saveAll(moved);
+            // Tasks arriving with the story bring their ownership with them: an unassigned
+            // one is charged to the sprint it lands in, and lifted off the one it left.
+            moved.forEach(task -> {
+                riskReporter.leftSprint(task, previousSprint.get(task.getId()));
+                riskReporter.ownershipChanged(task);
+            });
         }
     }
 }

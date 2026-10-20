@@ -182,6 +182,71 @@ public class SprintRiskAdjustmentService {
     }
 
     /**
+     * A board state the models cannot re-read, held under one key until it ends.
+     *
+     * <p>For a reading like "this card is blocked": the over-budget models score from
+     * pre-sprint columns, so no re-assessment ever sees an in-sprint block, and an entry
+     * folded away by the next Assess handed the sprint back the score it had before the
+     * card moved. Standing is the only way the charge stays on screen while the card does.
+     * The caller withdraws it with {@link #clear} when the state ends.</p>
+     *
+     * <p>Unlike {@link #restateStanding}, an unchanged value keeps its row and its date —
+     * the same card reported blocked twice is still the block that began the first time.</p>
+     */
+    @Transactional
+    public void reviseStanding(UUID sprintId, RiskType riskType, String sourceKey,
+                               BigDecimal delta, String reason) {
+        if (sprintId == null || sourceKey == null || delta == null) {
+            return;
+        }
+        SprintRiskAdjustment existing =
+                adjustments.findBySprintIdAndSourceKey(sprintId, sourceKey).orElse(null);
+        if (existing != null && existing.isSurvivesScoring() && existing.getDelta() != null
+                && existing.getDelta().compareTo(delta) == 0) {
+            existing.setReason(reason);
+            adjustments.save(existing);
+            return;
+        }
+        restateStanding(sprintId, riskType, sourceKey, delta, reason);
+    }
+
+    /**
+     * Keeps everything the board has moved this risk by through the scoring about to run.
+     *
+     * <p>Called by {@link RiskService} just before it writes a fresh assessment. Every
+     * entry still counting against {@code riskType} — written after {@code cutoff}, the
+     * previous scoring — is marked to survive the next one, so pressing Assess re-scores
+     * the model without throwing away what the board has added or taken off since. Before
+     * this, the new assessment moved the cutoff past them and the gauge fell straight back
+     * to the model's figure: a blocked card, a reopen or an on-time credit all appeared to
+     * be undone by the button.</p>
+     *
+     * <p>Only what is counting now. Entries an earlier scoring already folded away stay
+     * folded away, so the first Assess after this change does not revive old history. An
+     * entry carried forward still goes when its condition ends — a keyed reading is
+     * {@link #clear}ed or {@link #revise}d as before — so the overlay keeps describing
+     * the board rather than growing for ever.</p>
+     *
+     * @param cutoff when this risk was last scored, or {@code null} if it never was
+     */
+    @Transactional
+    public void carryThroughScoring(UUID sprintId, RiskType riskType, java.time.Instant cutoff) {
+        if (sprintId == null || riskType == null) {
+            return;
+        }
+        List<SprintRiskAdjustment> counting = adjustments.findBySprintIdOrderByCreatedAtDesc(sprintId)
+                .stream()
+                .filter(entry -> entry.getRiskType() == riskType && !entry.isSurvivesScoring())
+                .filter(entry -> cutoff == null || entry.getCreatedAt().isAfter(cutoff))
+                .toList();
+        if (counting.isEmpty()) {
+            return;
+        }
+        counting.forEach(entry -> entry.setSurvivesScoring(true));
+        adjustments.saveAll(counting);
+    }
+
+    /**
      * Revalues an entry in place, leaving the date it was made alone.
      *
      * <p>For a claim that is still the same claim, made when it was made, where only
@@ -272,6 +337,30 @@ public class SprintRiskAdjustmentService {
                     continue;
                 }
                 if (since != null && !entry.getCreatedAt().isAfter(since)) {
+                    continue;
+                }
+                total = total.add(entry.getDelta());
+            }
+            return softCap(total);
+        }
+
+        /**
+         * The same net as {@link #netSince}, as it stood at {@code until}.
+         *
+         * <p>For a past day on the trend chart. Entries recorded after that day's reading
+         * are left out, so this afternoon's blocker is never backdated onto last Tuesday,
+         * while what the board had recorded by then still counts — as it did on the
+         * gauges that day.</p>
+         */
+        public BigDecimal netBetween(RiskType riskType, java.time.Instant since,
+                                     java.time.Instant until) {
+            BigDecimal total = BigDecimal.ZERO;
+            for (SprintRiskAdjustment entry : entries) {
+                if (entry.getRiskType() != riskType || entry.getCreatedAt().isAfter(until)) {
+                    continue;
+                }
+                if (!entry.isSurvivesScoring() && since != null
+                        && !entry.getCreatedAt().isAfter(since)) {
                     continue;
                 }
                 total = total.add(entry.getDelta());

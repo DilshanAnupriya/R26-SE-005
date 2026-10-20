@@ -11,14 +11,15 @@ import { cn } from "@/lib/utils";
 /**
  * Openers, so the box is not a blank prompt.
  *
- * <p>Each is answerable from the brief the server sends — the drivers, the weights, the
- * ledger. A suggestion the advisor has to decline teaches the reader the feature is
+ * <p>Each is answerable from what the server sends — the sprint's brief or the guide to
+ * SprintIQ. A suggestion the advisor has to decline teaches the reader the feature is
  * broken on their first use of it.</p>
  */
 const OPENERS = [
   "Why is the overall risk what it is?",
   "Which finding should we clear first?",
-  "How much of this is the board versus the model?",
+  "What can SprintIQ's four AI models do?",
+  "How do I plan and start a sprint?",
 ] as const;
 
 /**
@@ -92,10 +93,10 @@ export function RiskAdvisorChat({ risk }: { risk: SprintRisk }) {
         <Bot className="size-4 text-primary" aria-hidden />
         <div className="min-w-0">
           <h2 id="advisor-heading" className="text-sm font-medium">
-            Ask about this risk
+            Ask the AI Assistant
           </h2>
           <p className="text-xs text-muted-foreground">
-            Answers come from this sprint&apos;s scores, drivers and board findings
+            About this sprint&apos;s risk and cost, or anything in SprintIQ
             {model ? ` · ${model}` : ""}
           </p>
         </div>
@@ -111,8 +112,9 @@ export function RiskAdvisorChat({ risk }: { risk: SprintRisk }) {
         {turns.length === 0 && !notice ? (
           <div className="space-y-2 py-1">
             <p className="text-xs text-muted-foreground">
-              The advisor reads the figures above — it cannot see anything else about
-              your project, and it will say so rather than guess.
+              Ask about the figures above, or how any part of SprintIQ works. For other
+              sprints, tasks or projects it will point you to the page that has them
+              rather than guess.
             </p>
             <div className="flex flex-wrap gap-1.5">
               {OPENERS.map((opener) => (
@@ -157,7 +159,7 @@ export function RiskAdvisorChat({ risk }: { risk: SprintRisk }) {
         {ask.isPending ? (
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" aria-hidden />
-            Reading the sprint&apos;s figures…
+            Thinking…
           </p>
         ) : null}
 
@@ -182,10 +184,10 @@ export function RiskAdvisorChat({ risk }: { risk: SprintRisk }) {
                 send(draft);
               }
             }}
-            placeholder="Ask why a score is what it is, or what to do first…"
+            placeholder="Ask about this sprint's risk, or anything about SprintIQ…"
             rows={1}
             className="max-h-32 min-h-9 resize-none text-sm"
-            aria-label="Your question about this sprint's risk"
+            aria-label="Your question for the AI Assistant"
             disabled={ask.isPending}
           />
           <Button
@@ -198,7 +200,7 @@ export function RiskAdvisorChat({ risk }: { risk: SprintRisk }) {
           </Button>
         </div>
         <p className="mt-1.5 text-[11px] text-muted-foreground">
-          This sends the sprint&apos;s risk summary to an external provider.
+          This sends the sprint&apos;s risk and cost summary to an external provider.
         </p>
       </div>
     </section>

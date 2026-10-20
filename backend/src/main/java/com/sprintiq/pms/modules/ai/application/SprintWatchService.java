@@ -59,11 +59,31 @@ public class SprintWatchService {
 
     // Deliberately small. These are nudges accumulated across many tasks, not verdicts:
     // one quiet task should tint a sprint, and a dozen should colour it.
-    private static final BigDecimal DELTA_TASK_SILENT = BigDecimal.valueOf(3);
     private static final BigDecimal DELTA_COMMENT_UNANSWERED = BigDecimal.valueOf(4);
-    private static final BigDecimal DELTA_NOT_STARTED_COLLAB = BigDecimal.valueOf(2);
-    private static final BigDecimal DELTA_NOT_STARTED_BUDGET = BigDecimal.valueOf(3);
     private static final BigDecimal DELTA_OVERDUE_BUDGET = BigDecimal.valueOf(5);
+
+    /*
+     * The two half-time rules are weighted by the task, through the same
+     * {@link TaskRiskWeight} the board's blocked charge uses: a day's work nobody has
+     * started is not the same news as half an hour's. Each base is what a one-day task
+     * pays; anything up to half a day weighs 0.5, which keeps a small task at the flat
+     * charge these rules used to make (3, 3 and 2).
+     */
+    private static final BigDecimal SILENT_BASE = BigDecimal.valueOf(6);
+    private static final BigDecimal SILENT_CAP = BigDecimal.valueOf(10);
+
+    /**
+     * What a silent task still costs once it is finished, as a share of its charge.
+     *
+     * <p>Finishing earns back half: the work got done. The other half stays, because it
+     * was done with nobody discussing it, and that is the collaboration gap the charge
+     * recorded. A comment on the task still clears it entirely.</p>
+     */
+    private static final BigDecimal SILENT_DONE_SHARE = new BigDecimal("0.5");
+    private static final BigDecimal NOT_STARTED_BUDGET_BASE = BigDecimal.valueOf(6);
+    private static final BigDecimal NOT_STARTED_BUDGET_CAP = BigDecimal.valueOf(10);
+    private static final BigDecimal NOT_STARTED_COLLAB_BASE = BigDecimal.valueOf(4);
+    private static final BigDecimal NOT_STARTED_COLLAB_CAP = BigDecimal.valueOf(6);
 
     /**
      * A story's overrun, in risk points: one per half hour past its budget.
@@ -89,11 +109,13 @@ public class SprintWatchService {
     private final AppProperties properties;
 
     /**
-     * Every fifteen minutes: frequent enough that the number tracks the board, rare
-     * enough that it is not a load generator. Each rule is idempotent, so running more
-     * often changes nothing except how quickly a penalty appears or clears.
+     * Every minute. The half-time rules have to land close to the half-time mark itself:
+     * a thirty-minute task is due its charge fifteen minutes after it was added, and the
+     * fifteen-minute sweep this used to be could notice that as late as the deadline. Each
+     * rule is idempotent and an unchanged reading writes nothing, so running more often
+     * changes only how quickly a penalty appears or clears.
      */
-    @Scheduled(fixedDelayString = "${app.ai.watch-interval-ms:900000}",
+    @Scheduled(fixedDelayString = "${app.ai.watch-interval-ms:60000}",
                initialDelayString = "${app.ai.watch-initial-delay-ms:60000}")
     public void sweep() {
         List<SprintFeatureSource.ActiveSprint> active;
@@ -141,8 +163,9 @@ public class SprintWatchService {
         }
 
         Instant now = Instant.now();
+        java.util.Set<String> silentCharged = chargedKeys(sprintId, KEY_TASK_SILENT);
         for (WatchedTask task : tasks) {
-            silentTask(sprintId, task, now);
+            silentTask(sprintId, task, now, silentCharged);
             unansweredComment(sprintId, task, now);
             notStartedByHalfTime(sprintId, task, now);
             overdue(sprintId, task, now);
@@ -287,22 +310,47 @@ public class SprintWatchService {
      * A task half its estimate old that nobody has commented on once.
      *
      * <p>Cleared as soon as anyone says anything — the condition is "nobody has spoken",
-     * and one comment ends it.</p>
+     * and one comment ends it. Finishing the task without a word only halves it (see
+     * {@link #SILENT_DONE_SHARE}); a task finished before it was ever charged owes
+     * nothing.</p>
      */
-    private void silentTask(java.util.UUID sprintId, WatchedTask task, Instant now) {
+    private void silentTask(java.util.UUID sprintId, WatchedTask task, Instant now,
+                            java.util.Set<String> charged) {
         String key = KEY_TASK_SILENT + task.taskId();
         Instant halfTime = task.halfTimeMark();
 
-        if (task.commentCount() > 0 || task.isFinished() || halfTime == null) {
+        if (task.commentCount() > 0 || halfTime == null) {
             adjustments.clear(sprintId, key);
+            return;
+        }
+        BigDecimal charge = TaskRiskWeight.charge(task.estimateMinutes(), SILENT_BASE, SILENT_CAP);
+        if (task.isFinished()) {
+            // Only a task the rule had already charged keeps a residual. Its half-time mark
+            // keeps moving with the wall clock after it is done, so reading that instead
+            // would bill a task finished well inside its estimate.
+            if (!charged.contains(key)) {
+                adjustments.clear(sprintId, key);
+                return;
+            }
+            adjustments.revise(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
+                    charge.multiply(SILENT_DONE_SHARE).setScale(2, java.math.RoundingMode.HALF_UP),
+                    "\"" + task.title() + "\" finished with no discussion on it");
             return;
         }
         if (now.isBefore(halfTime)) {
             return;
         }
-        adjustments.recordOnce(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
-                DELTA_TASK_SILENT,
+        // Revised rather than recorded once, so re-estimating the task re-prices it.
+        adjustments.revise(sprintId, RiskType.COMMUNICATION_COLLABORATION, key, charge,
                 "No discussion on \"" + task.title() + "\" past half its estimate");
+    }
+
+    /** The source keys under this prefix the sprint's ledger currently holds. */
+    private java.util.Set<String> chargedKeys(java.util.UUID sprintId, String prefix) {
+        return adjustments.ledgerFor(sprintId).entries().stream()
+                .map(entry -> entry.getSourceKey())
+                .filter(key -> key != null && key.startsWith(prefix))
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     /**
@@ -354,11 +402,13 @@ public class SprintWatchService {
         if (now.isBefore(halfTime)) {
             return;
         }
-        adjustments.recordOnce(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
-                DELTA_NOT_STARTED_COLLAB,
+        adjustments.revise(sprintId, RiskType.COMMUNICATION_COLLABORATION, key,
+                TaskRiskWeight.charge(task.estimateMinutes(),
+                        NOT_STARTED_COLLAB_BASE, NOT_STARTED_COLLAB_CAP),
                 "\"" + task.title() + "\" not started at half its estimate");
-        adjustments.recordOnce(sprintId, RiskType.OVER_BUDGET, budgetKey,
-                DELTA_NOT_STARTED_BUDGET,
+        adjustments.revise(sprintId, RiskType.OVER_BUDGET, budgetKey,
+                TaskRiskWeight.charge(task.estimateMinutes(),
+                        NOT_STARTED_BUDGET_BASE, NOT_STARTED_BUDGET_CAP),
                 "\"" + task.title() + "\" not started at half its estimate");
     }
 

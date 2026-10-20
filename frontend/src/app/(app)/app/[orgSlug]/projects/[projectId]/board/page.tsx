@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Plus, Radio } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +11,9 @@ import { useProjectRealtime, useRealtime } from "@/components/realtime-provider"
 import { AddTaskDialog } from "@/features/board/components/add-task-dialog";
 import { KanbanBoard } from "@/features/board/components/kanban-board";
 import { TaskDetailDialog } from "@/features/board/components/task-detail-dialog";
+import { UnassignedAlert } from "@/features/board/components/unassigned-alert";
 import {
   useAssignTask,
-  useCountReopen,
   useMoveTask,
   useReopenTask,
   useReportOverdue,
@@ -21,7 +21,6 @@ import {
   useTaskBoard,
 } from "@/features/board/hooks";
 import type { Task } from "@/lib/api/delivery-schemas";
-import { isBoardTask } from "@/features/board/api";
 import { useProject } from "@/features/projects/hooks";
 import { useSprints } from "@/features/sprints/hooks";
 import { useMembers } from "@/features/organizations/hooks";
@@ -34,7 +33,9 @@ export default function BoardPage({
   params: Promise<{ orgSlug: string; projectId: string }>;
 }) {
   const { orgSlug, projectId } = use(params);
-  const [sprintFilter, setSprintFilter] = useState<string>("");
+  // Null until somebody picks from the dropdown; "" is their explicit "All work". The two
+  // must differ, or choosing All work would be overridden by the default straight away.
+  const [chosenSprint, setChosenSprint] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [addTaskOpen, setAddTaskOpen] = useState(false);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
@@ -43,20 +44,14 @@ export default function BoardPage({
   const sprints = useSprints(projectId);
   const members = useMembers();
 
-  useEffect(() => {
-    if (!sprintFilter && sprints.data?.content) {
-      const active = sprints.data.content.find((s) => s.status === "ACTIVE");
-      if (active) {
-        setSprintFilter(active.id);
-      }
-    }
-  }, [sprints.data, sprintFilter]);
+  const sprintFilter = chosenSprint ?? defaultSprintId(sprints.data?.content ?? []);
 
-  const board = useTaskBoard(projectId, sprintFilter || undefined);
+  // Held back until the sprints are known, so the board opens on the right sprint instead
+  // of flashing every sprint's work and then narrowing.
+  const board = useTaskBoard(sprints.isPending ? undefined : projectId, sprintFilter || undefined);
   const move = useMoveTask(projectId);
   const assign = useAssignTask(projectId);
   const reopen = useReopenTask(projectId);
-  const countReopen = useCountReopen(projectId);
   const reportOverdue = useReportOverdue();
   const reportUnanswered = useReportUnansweredComment();
   const { connected } = useRealtime();
@@ -72,16 +67,13 @@ export default function BoardPage({
       : null) ?? null;
 
   /**
-   * Opening a card counts as a reopen — the work was taken as settled and somebody is
-   * handling it again — so the sprint's over-budget and collaboration risk hear about it.
-   * Fired here, once per click, rather than from inside the dialog: a dialog that
-   * reported on mount would charge the sprint again on every re-render.
+   * Opening a card only shows it. A reopen is a card taken back out of Done — a drag or
+   * the Reopen button — and the server counts and charges that on the move itself.
+   * Counting every open as one charged the sprint for rework whenever somebody read a
+   * card, finished or not.
    */
   function openTask(task: Task) {
     setDetailTaskId(task.id);
-    if (isBoardTask(task)) {
-      countReopen.mutate({ taskId: task.id });
-    }
   }
 
   // Someone else's drag or assignment updates this board without a refresh.
@@ -104,6 +96,12 @@ export default function BoardPage({
         </div>
 
         <div className="flex items-center gap-3">
+          <UnassignedAlert
+            tasks={board.data?.columns.flatMap((column) => column.tasks) ?? []}
+            members={memberList}
+            onAssign={(taskId, assigneeId) => assign.mutate({ taskId, assigneeId })}
+            disabled={assign.isPending}
+          />
           <Badge variant={connected ? "secondary" : "outline"} className="gap-1.5">
             <Radio
               className={connected ? "size-3 text-emerald-600" : "size-3 text-muted-foreground"}
@@ -117,7 +115,7 @@ export default function BoardPage({
             <select
               className="h-8 rounded-md border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               value={sprintFilter}
-              onChange={(event) => setSprintFilter(event.target.value)}
+              onChange={(event) => setChosenSprint(event.target.value)}
             >
               <option value="">All work</option>
               {(sprints.data?.content ?? []).map((sprint) => (
@@ -228,4 +226,17 @@ export default function BoardPage({
       />
     </div>
   );
+}
+
+/**
+ * The sprint the board opens on: the one in progress, else the next one planned, else the
+ * most recent. "All work" stays one pick away in the dropdown, but opening on it buried
+ * the current sprint under every finished and future one.
+ */
+function defaultSprintId(sprints: { id: string; status: string; sequenceNo?: number | null }[]): string {
+  const bySequence = [...sprints].sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0));
+  const active = bySequence.find((sprint) => sprint.status === "ACTIVE");
+  const next = bySequence.find((sprint) => sprint.status === "PLANNED");
+  const latest = bySequence.at(-1);
+  return (active ?? next ?? latest)?.id ?? "";
 }
