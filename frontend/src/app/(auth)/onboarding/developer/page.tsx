@@ -1,4 +1,5 @@
 "use client";
+import { backendOrigin } from "@/lib/env";
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -81,7 +82,7 @@ function DeveloperOnboardingContent() {
       }
 
       // 3. Sync to Resource Optimizer developer pool
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+      const backendUrl = backendOrigin;
       const names = user.fullName.split(" ");
       const firstName = names[0] || "Developer";
       const lastName = names.slice(1).join(" ") || "";

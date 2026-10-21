@@ -1,4 +1,5 @@
 "use client";
+import { backendOrigin } from "@/lib/env";
 
 import { useState, useEffect } from "react";
 import { getTokenStore } from "@/lib/api/token-store";
@@ -98,8 +99,8 @@ export default function SimulatorView() {
     const fetchSprintsAndDevs = async () => {
       try {
         const [sprintsRes, devsRes] = await Promise.all([
-          authFetch("http://localhost:8080/api/sprints"),
-          authFetch("http://localhost:8080/api/developers")
+          authFetch(`${backendOrigin}/api/sprints`),
+          authFetch(`${backendOrigin}/api/developers`)
         ]);
         
         const sprintsData = await sprintsRes.json();
@@ -142,7 +143,7 @@ export default function SimulatorView() {
 
     const fetchTasks = async () => {
       try {
-        const tasksRes = await authFetch(`http://localhost:8080/api/tasks/sprint/${selectedSprintId}`);
+        const tasksRes = await authFetch(`${backendOrigin}/api/tasks/sprint/${selectedSprintId}`);
         const tasksData = await tasksRes.json();
         
         if (Array.isArray(tasksData)) {
@@ -193,7 +194,7 @@ export default function SimulatorView() {
       }
 
       try {
-        const res = await authFetch("http://localhost:8080/api/simulator/calculate", {
+        const res = await authFetch(`${backendOrigin}/api/simulator/calculate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(assignmentList)
@@ -227,7 +228,7 @@ export default function SimulatorView() {
 
     setLoading(true);
     try {
-      const res = await authFetch("http://localhost:8080/api/simulator/apply", {
+      const res = await authFetch(`${backendOrigin}/api/simulator/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(assignmentList)
@@ -295,7 +296,7 @@ export default function SimulatorView() {
         currentAssignments: assignments
       };
 
-      const res = await authFetch("http://localhost:8080/api/simulator/auto-optimize", {
+      const res = await authFetch(`${backendOrigin}/api/simulator/auto-optimize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)

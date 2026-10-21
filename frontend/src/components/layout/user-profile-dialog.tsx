@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "@/components/session-provider";
 import { getTokenStore } from "@/lib/api/token-store";
 import { getActiveOrganization } from "@/lib/api/org-context";
-import { env } from "@/lib/env";
+import { backendOrigin } from "@/lib/env";
 import {
   Dialog,
   DialogContent,
@@ -78,7 +78,9 @@ async function authFetch(url: string, options: RequestInit = {}) {
 
 export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps) {
   const { user } = useSession();
-  const apiBase = env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  // The calls below spell out /api/... themselves, so they need the origin; the API
+  // URL already ends in /api/v1 and produced /api/v1/api/developers.
+  const apiBase = backendOrigin;
   
   const roleCode = user?.activeRole?.toUpperCase() || "MEMBER";
   const isOwner = roleCode === "OWNER";

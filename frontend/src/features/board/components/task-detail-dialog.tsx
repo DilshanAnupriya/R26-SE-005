@@ -1,4 +1,5 @@
 "use client";
+import { backendOrigin } from "@/lib/env";
 
 import { useState, useEffect } from "react";
 import {
@@ -189,9 +190,9 @@ export function TaskDetailDialog({
     const targetStoryId = task.storyId || task.id;
     Promise.all([
       targetStoryId
-        ? authFetch(`http://localhost:8080/api/v1/stories/${targetStoryId}`).then((r) => r.json()).catch(() => null)
+        ? authFetch(`${backendOrigin}/api/v1/stories/${targetStoryId}`).then((r) => r.json()).catch(() => null)
         : Promise.resolve(null),
-      authFetch("http://localhost:8080/api/tasks").then((r) => r.json()).catch(() => [])
+      authFetch(`${backendOrigin}/api/tasks`).then((r) => r.json()).catch(() => [])
     ])
       .then(([storyData, optTasks]: [any, any[]]) => {
         let reqFrontend = 4;

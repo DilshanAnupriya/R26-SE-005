@@ -250,6 +250,7 @@ both members' models at the first.
      { "name": "WEBSITES_PORT", "value": "8080", "slotSetting": false },
      { "name": "WEBSITES_CONTAINER_START_TIME_LIMIT", "value": "600", "slotSetting": false },
      { "name": "MANAGEMENT_HEALTH_MAIL_ENABLED", "value": "false", "slotSetting": false },
+     { "name": "APP_RATELIMIT_AUTHREQUESTSPERMINUTE", "value": "120", "slotSetting": false },
      { "name": "DB_URL", "value": "jdbc:postgresql://<neon-host>/<database>?sslmode=require", "slotSetting": false },
      { "name": "DB_USERNAME", "value": "<neon-user>", "slotSetting": false },
      { "name": "DB_PASSWORD", "value": "<neon-password>", "slotSetting": false },
@@ -276,6 +277,10 @@ both members' models at the first.
      `/actuator/health` reports `DOWN` for that reason alone (Log stream: "Mail health
      check failed"), hiding whether the database and Redis are fine. Remove it if you
      set up `MAIL_HOST`.
+   - `APP_RATELIMIT_AUTHREQUESTSPERMINUTE=120`: the backend allows 10 sign-in requests
+     a minute per address. Sign-in, sign-up and every page load's session check go
+     through the frontend's server on Vercel, so everyone shares Vercel's address and
+     the default 10 runs out within a minute ("Too many requests").
    - `AI_PROVIDER=http` makes the backend call the real models; without it, it uses
      made-up mock answers.
    - `PYTHON_API_URL` is resource allocation (M3), which reads its address from here
@@ -322,7 +327,6 @@ both members' models at the first.
 
 `NEXT_PUBLIC_*` values are built into the frontend, so after changing one on Vercel,
 **redeploy** (Deployments → ⋯ → Redeploy).
-
 ---
 
 ## Step 8 · First account, and connect each member's models
@@ -408,6 +412,7 @@ Neon, Upstash, Vercel and GitHub's container registry are free at this size.
 | Live board updates do not arrive | Web sockets are off on the backend app, or `NEXT_PUBLIC_WS_URL` is not `wss://…/ws`. |
 | The backend stops at start-up with "Migration checksum mismatch for migration version 33" (or 34) | The database was set up by an older version of SprintIQ. Point `DB_URL` at a new, empty Neon database (step 1), restart. |
 | The backend starts, but logs "Unable to connect to Redis", and `/actuator/health` says `DOWN` | Sign-in and most pages fail until this is fixed (permissions and predictions are cached in Redis). Check the five Redis settings (step 2): `REDIS_HOST` the host alone, `REDIS_PORT` `6379`, username `default`, the password from Upstash's `redis-cli` line (not the REST token), `SPRING_DATA_REDIS_SSL_ENABLED` `true`. Apply, restart. |
+| Sign-in or sign-up says "Too many requests" / "Rate limit exceeded" | The sign-in rate limit (10 a minute) is shared by everyone through Vercel. Set `APP_RATELIMIT_AUTHREQUESTSPERMINUTE` to `120` on the backend (step 6); until then, wait one minute and try once. |
 | The backend keeps restarting | Log stream. Usually `DB_URL` (must start `jdbc:postgresql://` and end `?sslmode=require`) or Redis (`SPRING_DATA_REDIS_SSL_ENABLED=true`). |
 | Estimates or risk come back "failed" or "degraded" | That model's app is down or its address is wrong. Open its `/health`, then run `point-models.py` again with the right address. |
 | Answers look made up ("against a project baseline") | `AI_PROVIDER` is not `http`. |

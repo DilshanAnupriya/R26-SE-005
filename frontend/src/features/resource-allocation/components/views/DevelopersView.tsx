@@ -1,4 +1,5 @@
 "use client";
+import { backendOrigin } from "@/lib/env";
 
 import { useState, useEffect } from "react";
 import { getTokenStore } from "@/lib/api/token-store";
@@ -212,7 +213,7 @@ export default function DevelopersView() {
       setExpandedSprintId(null);
       setHoveredSprint(null);
 
-      authFetch(`http://localhost:8080/api/developers/${selectedDev.id}/analytics`)
+      authFetch(`${backendOrigin}/api/developers/${selectedDev.id}/analytics`)
         .then((res) => {
           if (!res.ok) throw new Error("Failed to fetch analytics");
           return res.json();
@@ -232,8 +233,8 @@ export default function DevelopersView() {
 
   useEffect(() => {
     Promise.all([
-      authFetch("http://localhost:8080/api/developers").then(res => res.json()),
-      authFetch("http://localhost:8080/api/tasks").then(res => res.json()).catch(() => [])
+      authFetch(`${backendOrigin}/api/developers`).then(res => res.json()),
+      authFetch(`${backendOrigin}/api/tasks`).then(res => res.json()).catch(() => [])
     ])
       .then(([devData, taskData]: [DeveloperData[], TaskData[]]) => {
         if (Array.isArray(taskData)) {

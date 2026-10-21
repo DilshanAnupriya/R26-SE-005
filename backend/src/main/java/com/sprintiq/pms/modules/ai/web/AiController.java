@@ -76,6 +76,7 @@ public class AiController {
     public VelocityPredictionResponse predictVelocity(
             @Valid @RequestBody PredictVelocityRequest request) {
         return estimation.predictVelocity(request.sprintId());
+
     }
 
     // -------------------------------------------------------------- M2 · risk

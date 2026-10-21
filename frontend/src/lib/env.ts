@@ -30,6 +30,16 @@ if (!parsedPublic.success) {
 export const env = parsedPublic.data;
 
 /**
+ * The backend's origin (scheme, host and port), derived from `NEXT_PUBLIC_API_URL`.
+ *
+ * For the calls written with a full path — `/api/v1/...`, and the resource allocation
+ * module's `/api/...` — rather than through the ApiClient. Hard-coding
+ * `http://localhost:8080` there worked on a laptop and nowhere else: on the hosted
+ * site the browser fetched its own machine and showed "Failed to fetch".
+ */
+export const backendOrigin = new URL(env.NEXT_PUBLIC_API_URL).origin;
+
+/**
  * Server-only configuration. Route handlers reach the backend over the container
  * network, where the hostname differs from the one the browser uses — in Docker the
  * browser sees `localhost:8080` and the Next container sees `backend:8080`.

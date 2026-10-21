@@ -1,4 +1,5 @@
 "use client";
+import { backendOrigin } from "@/lib/env";
 
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
@@ -78,8 +79,8 @@ export function useTeamDevelopers() {
     queryKey: ["my-work", "team-developers"],
     queryFn: async () => {
       const [devsRes, usersRes] = await Promise.all([
-        authFetch("http://localhost:8080/api/developers").then((r) => r.json()).catch(() => []),
-        authFetch("http://localhost:8080/api/v1/users").then((r) => r.json()).catch(() => ({ content: [] }))
+        authFetch(`${backendOrigin}/api/developers`).then((r) => r.json()).catch(() => []),
+        authFetch(`${backendOrigin}/api/v1/users`).then((r) => r.json()).catch(() => ({ content: [] }))
       ]);
 
       const usersList = Array.isArray(usersRes?.content) ? usersRes.content : [];
@@ -139,7 +140,7 @@ export function useMyTasks(targetDeveloper?: TeamDeveloper | null) {
       // 1. Fetch core tasks from /api/v1/tasks
       try {
         if (targetUserId) {
-          const tasksRes = await authFetch(`http://localhost:8080/api/v1/tasks?assigneeId=${targetUserId}&size=100&sort=dueDate,asc`)
+          const tasksRes = await authFetch(`${backendOrigin}/api/v1/tasks?assigneeId=${targetUserId}&size=100&sort=dueDate,asc`)
             .then((r) => r.json())
             .catch(() => ({ content: [] }));
           const rows = tasksRes?.content || [];
@@ -172,8 +173,8 @@ export function useMyTasks(targetDeveloper?: TeamDeveloper | null) {
       // 2. Fetch assigned stories from /api/v1/stories/my
       try {
         const storiesUrl = targetUserId 
-          ? `http://localhost:8080/api/v1/stories/my?assigneeId=${targetUserId}`
-          : "http://localhost:8080/api/v1/stories/my";
+          ? `${backendOrigin}/api/v1/stories/my?assigneeId=${targetUserId}`
+          : `${backendOrigin}/api/v1/stories/my`;
         const storiesRes = await authFetch(storiesUrl).then((r) => r.json()).catch(() => []);
         if (Array.isArray(storiesRes)) {
           for (const s of storiesRes) {
@@ -204,7 +205,7 @@ export function useMyTasks(targetDeveloper?: TeamDeveloper | null) {
 
       // 3. Fetch optimizer tasks from /api/tasks
       try {
-        const optTasks = await authFetch("http://localhost:8080/api/tasks").then((r) => r.json()).catch(() => []);
+        const optTasks = await authFetch(`${backendOrigin}/api/tasks`).then((r) => r.json()).catch(() => []);
         if (Array.isArray(optTasks)) {
           for (const ot of optTasks) {
             const devObj = ot.developer;

@@ -1,3 +1,4 @@
+import { backendOrigin } from "@/lib/env";
 import { z } from "zod";
 import type { ApiClient } from "@/lib/api/client";
 import { pageResponseSchema } from "@/lib/api/schemas";
@@ -124,7 +125,7 @@ export const organizationApi = {
     }),
 
   verifyInvitation: async (token: string): Promise<InvitationDetailsResponse> => {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+    const backendUrl = backendOrigin;
     const url = `${backendUrl.replace(/\/$/, "")}/api/v1/organizations/invitations/verify?token=${encodeURIComponent(token)}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) {
@@ -135,7 +136,7 @@ export const organizationApi = {
   },
 
   acceptInvitation: async (input: { token: string; fullName: string; password: string }): Promise<{ organizationId: string }> => {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+    const backendUrl = backendOrigin;
     const url = `${backendUrl.replace(/\/$/, "")}/api/v1/organizations/invitations/accept`;
     const res = await fetch(url, {
       method: "POST",

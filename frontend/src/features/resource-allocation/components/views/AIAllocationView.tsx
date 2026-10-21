@@ -1,4 +1,5 @@
 "use client";
+import { backendOrigin } from "@/lib/env";
 
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -643,7 +644,7 @@ function DeveloperWorkloadModal({
   useEffect(() => {
     async function load() {
       try {
-        const res = await authFetch(`http://localhost:8080/api/tasks/developer/${developerId}`);
+        const res = await authFetch(`${backendOrigin}/api/tasks/developer/${developerId}`);
         const data = await res.json();
         setTasks(Array.isArray(data) ? data : []);
       } catch (err) {
@@ -1108,7 +1109,7 @@ export default function AIAllocationView() {
 
   const fetchSprints = useCallback(async () => {
     try {
-      const res = await authFetch("http://localhost:8080/api/sprints");
+      const res = await authFetch(`${backendOrigin}/api/sprints`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setSprints(data);
@@ -1134,7 +1135,7 @@ export default function AIAllocationView() {
     if (!selectedSprintId) return;
     setLoading(true);
     try {
-      const res = await authFetch(`http://localhost:8080/api/allocation/sprint/${selectedSprintId}`);
+      const res = await authFetch(`${backendOrigin}/api/allocation/sprint/${selectedSprintId}`);
       const data = await res.json();
       setTaskGroups(buildGroups(Array.isArray(data) ? data : []));
     } catch (error) {
@@ -1158,7 +1159,7 @@ export default function AIAllocationView() {
     if (!selectedSprintId) return;
     setGenerating(true);
     try {
-      await authFetch(`http://localhost:8080/api/rank/recommendations/sprint/${selectedSprintId}`, {
+      await authFetch(`${backendOrigin}/api/rank/recommendations/sprint/${selectedSprintId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -1173,7 +1174,7 @@ export default function AIAllocationView() {
   const handleApprove = async (allocationId: number, developerId: number) => {
     try {
       await authFetch(
-        `http://localhost:8080/api/allocation/assign?allocationId=${allocationId}&developerId=${developerId}`,
+        `${backendOrigin}/api/allocation/assign?allocationId=${allocationId}&developerId=${developerId}`,
         { method: "PUT" }
       );
       await fetchAllocations();
@@ -1184,7 +1185,7 @@ export default function AIAllocationView() {
 
   const handleDecline = async (allocationId: number) => {
     try {
-      await authFetch(`http://localhost:8080/api/allocation/${allocationId}/decline`, {
+      await authFetch(`${backendOrigin}/api/allocation/${allocationId}/decline`, {
         method: "PUT",
       });
       await fetchAllocations();
@@ -1197,7 +1198,7 @@ export default function AIAllocationView() {
     if (!selectedSprintId) return;
     setApprovingAll(true);
     try {
-      await authFetch(`http://localhost:8080/api/allocation/approve-all/sprint/${selectedSprintId}`, {
+      await authFetch(`${backendOrigin}/api/allocation/approve-all/sprint/${selectedSprintId}`, {
         method: "POST",
       });
       await fetchAllocations();
@@ -1212,7 +1213,7 @@ export default function AIAllocationView() {
     if (!selectedSprintId) return;
     setUnassigningAll(true);
     try {
-      await authFetch(`http://localhost:8080/api/allocation/unassign-all/sprint/${selectedSprintId}`, {
+      await authFetch(`${backendOrigin}/api/allocation/unassign-all/sprint/${selectedSprintId}`, {
         method: "POST",
       });
       await fetchAllocations();
@@ -1225,7 +1226,7 @@ export default function AIAllocationView() {
 
   const handleUnassignTask = async (taskRawId: number) => {
     try {
-      await authFetch(`http://localhost:8080/api/allocation/task/${taskRawId}/unassign`, {
+      await authFetch(`${backendOrigin}/api/allocation/task/${taskRawId}/unassign`, {
         method: "POST",
       });
       await fetchAllocations();
